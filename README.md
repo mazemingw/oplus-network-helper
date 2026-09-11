@@ -18,6 +18,53 @@ Compose and includes a separate VPN/hotspot module.
 - **网络工具 / Network utilities**：集成 iPerf 测速、Wi-Fi 信息、Ping 和 VPN/热点管理。
 - **Xposed/厂商接口 / Xposed and vendor APIs**：部分高级功能需要 root、Xposed/LSPosed 或特定厂商系统接口。
 
+## 截图 / Screenshots
+
+截图按功能模块存放在 [`docs/images`](docs/images) 中。点击图片可以查看原图。
+Screenshots are grouped by feature under [`docs/images`](docs/images). Click an
+image to open the full-size version.
+
+### HOME — 首页 / Home
+
+<p>
+  <a href="docs/images/home/home.png"><img src="docs/images/home/home.png" alt="HOME / 首页" width="260"></a>
+  <a href="docs/images/home/control-panel.png"><img src="docs/images/home/control-panel.png" alt="Network control panel / 网络控制面板" width="260"></a>
+  <a href="docs/images/home/qos-data.png"><img src="docs/images/home/qos-data.png" alt="QOS data / QOS 数据" width="260"></a>
+</p>
+
+### RADAR — 雷达 / Radar
+
+<p>
+  <a href="docs/images/radar/Screenshot_2026-09-12-04-37-58-73_0b59cd5314832a..png"><img src="docs/images/radar/Screenshot_2026-09-12-04-37-58-73_0b59cd5314832a..png" alt="Signal radar / 信号雷达" width="260"></a>
+</p>
+
+### WIFI — Wi-Fi
+
+<p>
+  <a href="docs/images/WIFI/Screenshot_2026-09-12-04-38-19-73_0b59cd5314832a..png"><img src="docs/images/WIFI/Screenshot_2026-09-12-04-38-19-73_0b59cd5314832a..png" alt="Wi-Fi overview / Wi-Fi 概览" width="260"></a>
+  <a href="docs/images/WIFI/Screenshot_2026-09-12-04-38-32-71_0b59cd5314832a..png"><img src="docs/images/WIFI/Screenshot_2026-09-12-04-38-32-71_0b59cd5314832a..png" alt="Wi-Fi details / Wi-Fi 详情" width="260"></a>
+</p>
+
+### HOTSPOT — 热点 / Hotspot
+
+<p>
+  <a href="docs/images/hotspot/Screenshot_2026-09-12-04-38-57-83_0b59cd5314832a..png"><img src="docs/images/hotspot/Screenshot_2026-09-12-04-38-57-83_0b59cd5314832a..png" alt="VPN hotspot / VPN 热点" width="260"></a>
+</p>
+
+### MENU — 菜单 / Menu
+
+<p>
+  <a href="docs/images/menu/Screenshot_2026-09-12-04-39-08-14_0b59cd5314832a..png"><img src="docs/images/menu/Screenshot_2026-09-12-04-39-08-14_0b59cd5314832a..png" alt="Menu / 菜单" width="260"></a>
+  <a href="docs/images/menu/Screenshot_2026-09-12-04-39-11-61_0b59cd5314832a..png"><img src="docs/images/menu/Screenshot_2026-09-12-04-39-11-61_0b59cd5314832a..png" alt="Menu tools / 菜单工具" width="260"></a>
+</p>
+
+### SETTINGS — 设置 / Settings
+
+<p>
+  <a href="docs/images/settings/Screenshot_2026-09-12-04-39-27-05_0b59cd5314832a..png"><img src="docs/images/settings/Screenshot_2026-09-12-04-39-27-05_0b59cd5314832a..png" alt="Settings / 设置" width="260"></a>
+  <a href="docs/images/settings/Screenshot_2026-09-12-04-39-31-15_0b59cd5314832a..png"><img src="docs/images/settings/Screenshot_2026-09-12-04-39-31-15_0b59cd5314832a..png" alt="Settings details / 设置详情" width="260"></a>
+</p>
+
 ## 构建环境 / Build requirements
 
 - Android Studio（建议稳定版） / Android Studio (stable recommended)
