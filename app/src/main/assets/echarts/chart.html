@@ -1,0 +1,69 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+  <style>
+    html, body, #chart {
+      width: 100%;
+      height: 100%;
+      margin: 0;
+      padding: 0;
+      overflow: hidden;
+      background: transparent;
+    }
+    * {
+      -webkit-tap-highlight-color: transparent;
+      box-sizing: border-box;
+    }
+  </style>
+</head>
+<body>
+  <div id="chart"></div>
+  <script src="./echarts.min.js"></script>
+  <script>
+    (function () {
+      var chart = null;
+      var pendingOption = null;
+      var root = document.getElementById('chart');
+
+      function ensureChart() {
+        if (!chart && window.echarts) {
+          chart = echarts.init(root, null, {
+            renderer: 'canvas',
+            useDirtyRect: false
+          });
+          if (pendingOption) {
+            chart.setOption(pendingOption, { notMerge: false, lazyUpdate: true });
+            pendingOption = null;
+          }
+        }
+        return chart;
+      }
+
+      window.NHChartRender = function (optionJson) {
+        try {
+          var option = typeof optionJson === 'string' ? JSON.parse(optionJson) : optionJson;
+          var instance = ensureChart();
+          if (!instance) {
+            pendingOption = option;
+            return;
+          }
+          instance.setOption(option, { notMerge: false, lazyUpdate: true });
+        } catch (e) {
+          console.error('NHChartRender failed', e);
+        }
+      };
+
+      window.addEventListener('resize', function () {
+        if (chart) chart.resize();
+      });
+
+      document.addEventListener('DOMContentLoaded', ensureChart);
+      root.addEventListener('touchstart', function (e) { e.preventDefault(); }, { passive: false });
+      root.addEventListener('mousedown', function (e) { e.preventDefault(); });
+      ensureChart();
+    })();
+  </script>
+</body>
+</html>

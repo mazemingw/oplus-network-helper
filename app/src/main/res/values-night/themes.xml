@@ -1,0 +1,7 @@
+<resources>
+    <style name="Theme.欧加网络助手" parent="android:Theme.Material.NoActionBar" >
+        <item name="android:statusBarColor">@android:color/transparent</item>
+    </style>
+
+
+</resources>

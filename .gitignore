@@ -1,0 +1,25 @@
+*.iml
+.gradle/
+local.properties
+/.idea/
+.vscode/
+.DS_Store
+**/build/
+**/release/
+**/.cxx/
+**/.kotlin/
+tmp/
+captures/
+.externalNativeBuild/
+
+# Local credentials and generated signing/configuration files
+**/*.pem
+**/*.key
+**/*.jks
+**/*.keystore
+**/google-services.json
+
+# Android/Gradle outputs
+*.apk
+*.aab
+*.bak

@@ -1,0 +1,36 @@
+<?xml version="1.0" encoding="utf-8"?>
+<paths xmlns:android="http://schemas.android.com/apk/res/android">
+    <!-- 外部缓存目录 -->
+    <external-cache-path
+        name="external_cache"
+        path="." />
+
+    <!-- 外部文件目录 -->
+    <external-files-path
+        name="external_files"
+        path="." />
+
+    <!-- 内部缓存目录 -->
+    <cache-path
+        name="internal_cache"
+        path="." />
+
+    <!-- 内部文件目录 -->
+    <files-path
+        name="internal_files"
+        path="." />
+
+    <files-path
+        name="xposed_config"
+        path="xposed_config/" />
+
+    <!-- 如果需要外部存储根目录 -->
+    <external-path
+        name="external_storage_root"
+        path="." />
+
+    <!-- 或者更具体的路径 -->
+    <external-cache-path
+        name="apk_files"
+        path="." />
+</paths>
