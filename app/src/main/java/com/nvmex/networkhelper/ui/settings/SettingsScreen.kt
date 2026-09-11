@@ -291,11 +291,20 @@ fun SettingsScreen(
                     )
 
                     SettingsEntryRow(
-                        title = stringResource(R.string.settings_links_title),
-                        subtitle = stringResource(R.string.settings_links_subtitle),
+                        title = stringResource(R.string.settings_coolapk_title),
+                        subtitle = stringResource(R.string.settings_coolapk_subtitle),
                         highlight = true,
                         onClick = {
-                            openUrl(context, "http://www.coolapk.com/u/1060215")
+                            openUrl(context, "https://www.coolapk.com/u/1060215")
+                        }
+                    )
+
+                    SettingsEntryRow(
+                        title = stringResource(R.string.settings_github_title),
+                        subtitle = stringResource(R.string.settings_github_subtitle),
+                        highlight = true,
+                        onClick = {
+                            openUrl(context, "https://github.com/mazemingw/oplus-network-helper")
                         }
                     )
 

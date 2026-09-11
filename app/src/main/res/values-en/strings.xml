@@ -95,8 +95,10 @@
     <string name="settings_usage_tutorial_subtitle">View the PDF guide</string>
     <string name="settings_join_qq_title">Join QQ Group</string>
     <string name="settings_join_qq_subtitle">Discuss issues and feedback with the community</string>
-    <string name="settings_links_title">Coolapk / GitHub</string>
-    <string name="settings_links_subtitle">View homepage and project updates</string>
+    <string name="settings_coolapk_title">Coolapk</string>
+    <string name="settings_coolapk_subtitle">Open the Coolapk profile</string>
+    <string name="settings_github_title">GitHub</string>
+    <string name="settings_github_subtitle">View source code and project updates</string>
     <string name="settings_font_size_title">Font Size</string>
     <string name="settings_font_size_current">Current: %1$s</string>
     <string name="settings_language_title">Language</string>

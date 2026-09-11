@@ -95,8 +95,10 @@
     <string name="settings_usage_tutorial_subtitle">查看 PDF 使用说明</string>
     <string name="settings_join_qq_title">加入QQ群</string>
     <string name="settings_join_qq_subtitle">和大家一起交流反馈</string>
-    <string name="settings_links_title">酷安 / Github</string>
-    <string name="settings_links_subtitle">查看主页与项目动态</string>
+    <string name="settings_coolapk_title">酷安</string>
+    <string name="settings_coolapk_subtitle">访问酷安主页</string>
+    <string name="settings_github_title">GitHub</string>
+    <string name="settings_github_subtitle">查看项目源码与更新</string>
     <string name="settings_font_size_title">字体大小</string>
     <string name="settings_font_size_current">当前：%1$s</string>
     <string name="settings_language_title">语言</string>
