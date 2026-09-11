@@ -16,22 +16,22 @@ android {
     namespace = "com.nvmex.networkhelper"
     compileSdk = 36
 
-    //明确指定 NDK 版本（与你本机安装保持一致）
+    //明确指定 NDK 版本
     ndkVersion = "26.3.11579264"
 
     defaultConfig {
         applicationId = "com.nvmex.networkhelper"
         minSdk = 29
         targetSdk = 35
-        versionCode = 43
-        versionName = "1.4.3"
+        versionCode = 45
+        versionName = "1.4.5"
 
         // Inject the AMap key locally; never commit API credentials.
         manifestPlaceholders["AMAP_API_KEY"] = project.findProperty("AMAP_API_KEY") ?: ""
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
 
-        // 开启 NDK 构建：先只编 arm64-v8a，调通后再加别的 ABI
+        // 开启 NDK 构建：先只编 arm64-v8a
         ndk {
             abiFilters += setOf("arm64-v8a")
             // 需要兼容 32 位再打开：
@@ -41,11 +41,10 @@ android {
         //  告诉 Gradle：用 CMake 构建 native 代码
         externalNativeBuild {
             cmake {
-                // 这些是常用基础参数：先别贪
                 cppFlags += listOf("-std=c++17", "-fexceptions", "-frtti")
                 cFlags += listOf("-std=c11")
 
-                // 可选：只要你后面需要传宏，就用 arguments（先空着也行）
+                // 可选需要传宏，就用 arguments
                 // arguments += listOf("-DANDROID_STL=c++_shared")
             }
         }

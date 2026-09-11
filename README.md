@@ -5,6 +5,12 @@
 面向 Android 高通/联发科设备的网络与信号分析工具。应用包名为
 `com.nvmex.networkhelper`，使用 Jetpack Compose 构建，并包含独立的 VPN/热点功能模块。
 
+## 最新版本
+
+- [v1.4.5 ARM64 安装包](https://github.com/mazemingw/oplus-network-helper/releases/tag/v1.4.5)
+- 架构：`arm64-v8a`
+- SHA-256：`624EEC9EA2FE25152A4320CD6C44758B8DA820A38DFDF0CAFDFF58E3609DED04`
+
 ## 主要功能
 
 - **双卡网络面板**：对比 SIM1/SIM2 的运营商、数据网/NR 模式、频段、频点、小区和链路信息。
@@ -26,6 +32,13 @@
   <a href="docs/images/home/home.png"><img src="docs/images/home/home.png" alt="首页" width="260"></a>
   <a href="docs/images/home/control-panel.png"><img src="docs/images/home/control-panel.png" alt="网络控制面板" width="260"></a>
   <a href="docs/images/home/qos-data.png"><img src="docs/images/home/qos-data.png" alt="QOS 数据" width="260"></a>
+</p>
+
+### LOCKBAND：锁频
+
+<p>
+  <a href="docs/images/LOCKBAND/Screenshot_2026-09-12-04-56-43-38_0b59cd5314832a..png"><img src="docs/images/LOCKBAND/Screenshot_2026-09-12-04-56-43-38_0b59cd5314832a..png" alt="锁频设置" width="260"></a>
+  <a href="docs/images/LOCKBAND/Screenshot_2026-09-12-04-56-54-70_0b59cd5314832a..png"><img src="docs/images/LOCKBAND/Screenshot_2026-09-12-04-56-54-70_0b59cd5314832a..png" alt="锁频详情" width="260"></a>
 </p>
 
 ### RADAR：雷达

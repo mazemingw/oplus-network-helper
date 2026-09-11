@@ -6,6 +6,12 @@ An Android network and signal analysis tool for Qualcomm and MediaTek devices.
 The application ID is `com.nvmex.networkhelper`. The UI is built with Jetpack
 Compose and includes a separate VPN/hotspot library module.
 
+## Latest release
+
+- [v1.4.5 ARM64 APK](https://github.com/mazemingw/oplus-network-helper/releases/tag/v1.4.5)
+- Architecture: `arm64-v8a`
+- SHA-256: `624EEC9EA2FE25152A4320CD6C44758B8DA820A38DFDF0CAFDFF58E3609DED04`
+
 ## Features
 
 - **Dual-SIM network panel**: compare the operator, data/NR mode, bands, frequency, cell and link information for SIM1 and SIM2.
@@ -28,6 +34,13 @@ image to open the full-size version.
   <a href="docs/images/home/home.png"><img src="docs/images/home/home.png" alt="Home" width="260"></a>
   <a href="docs/images/home/control-panel.png"><img src="docs/images/home/control-panel.png" alt="Network control panel" width="260"></a>
   <a href="docs/images/home/qos-data.png"><img src="docs/images/home/qos-data.png" alt="QOS data" width="260"></a>
+</p>
+
+### LOCKBAND — Band locking
+
+<p>
+  <a href="docs/images/LOCKBAND/Screenshot_2026-09-12-04-56-43-38_0b59cd5314832a..png"><img src="docs/images/LOCKBAND/Screenshot_2026-09-12-04-56-43-38_0b59cd5314832a..png" alt="Band locking settings" width="260"></a>
+  <a href="docs/images/LOCKBAND/Screenshot_2026-09-12-04-56-54-70_0b59cd5314832a..png"><img src="docs/images/LOCKBAND/Screenshot_2026-09-12-04-56-54-70_0b59cd5314832a..png" alt="Band locking details" width="260"></a>
 </p>
 
 ### RADAR — Signal radar
