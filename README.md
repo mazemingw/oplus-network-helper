@@ -96,14 +96,14 @@ Windows PowerShell：
 
 ## 配置说明
 
-本地配置、签名文件、私钥和 Firebase 配置不会提交到仓库。
-高德地图 Key 通过 Gradle 参数注入：
+本地配置文件 `local.properties`、签名文件、私钥和 Firebase 配置不会提交到仓库。
+将高德地图 Key 写入项目根目录的 `local.properties`，之后普通编译和 Release 编译都会自动读取：
 
-```powershell
-.\gradlew.bat assembleDebug -PAMAP_API_KEY=你的高德Key
+```properties
+AMAP_API_KEY=你的高德Key
 ```
 
-也可以将 `AMAP_API_KEY=你的高德Key` 写入用户级 Gradle 配置。部分功能需要 root、厂商接口或实体设备，在普通模拟器上可能不可用。
+也可以在 Gradle 命令行使用 `-PAMAP_API_KEY=...` 临时覆盖本地值。注意：Key 会被打包进 APK；请在高德开放平台限制 Key 的 Android 包名/签名 SHA-1，并避免提交 `local.properties`。部分功能需要 root、厂商接口或实体设备，在普通模拟器上可能不可用。
 
 ## 项目结构
 

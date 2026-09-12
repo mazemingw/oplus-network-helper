@@ -1,4 +1,6 @@
 
+import java.util.Properties
+
 plugins {
     alias(libs.plugins.android.application)
     alias(libs.plugins.kotlin.android)
@@ -6,6 +8,14 @@ plugins {
 
     alias(libs.plugins.hilt)
     alias(libs.plugins.kotlin.kapt)
+}
+
+// Keep local SDK/API configuration out of version control.
+val localConfig = Properties().apply {
+    val localPropertiesFile = rootProject.file("local.properties")
+    if (localPropertiesFile.isFile) {
+        localPropertiesFile.inputStream().use { load(it) }
+    }
 }
 
 
@@ -27,7 +37,9 @@ android {
         versionName = "1.4.5"
 
         // Inject the AMap key locally; never commit API credentials.
-        manifestPlaceholders["AMAP_API_KEY"] = project.findProperty("AMAP_API_KEY") ?: ""
+        manifestPlaceholders["AMAP_API_KEY"] =
+            project.findProperty("AMAP_API_KEY")?.toString()
+                ?: localConfig.getProperty("AMAP_API_KEY", "")
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
 

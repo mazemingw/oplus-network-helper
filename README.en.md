@@ -98,16 +98,20 @@ Windows PowerShell:
 
 ## Configuration
 
-Local configuration, signing files, private keys and Firebase configuration are
-excluded from the repository. Inject the AMap key at build time:
+The local `local.properties` file, signing files, private keys and Firebase
+configuration are excluded from version control. Add your AMap key to the
+project-root `local.properties`; both debug and release builds will then use it
+automatically:
 
-```powershell
-.\gradlew.bat assembleDebug -PAMAP_API_KEY=your_amap_key
+```properties
+AMAP_API_KEY=your_amap_key
 ```
 
-You may also add `AMAP_API_KEY=your_amap_key` to your user-level Gradle
-properties. Some features require root access, vendor-specific APIs or a
-physical target device and may not work on a standard emulator.
+You can temporarily override the local value with `-PAMAP_API_KEY=...` on the
+Gradle command line. Note that the key is packaged into the APK; restrict it to
+the Android package name/signing SHA-1 in the AMap console and never commit
+`local.properties`. Some features require root access, vendor-specific APIs or
+a physical target device and may not work on a standard emulator.
 
 ## Project structure
 
