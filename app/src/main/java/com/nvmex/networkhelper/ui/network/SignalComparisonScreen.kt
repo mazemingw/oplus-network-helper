@@ -48,6 +48,8 @@ import com.nvmex.networkhelper.model.network.QualityLevel
 import com.nvmex.networkhelper.ui.network.sections.NetworkQualityBadge
 import com.nvmex.networkhelper.ui.network.sections.localizedNetworkQualityText
 import com.nvmex.networkhelper.util.network.NetworkPanelWithPermissionGate
+import com.nvmex.networkhelper.util.network.comparisonDataSimStatus
+import com.nvmex.networkhelper.util.network.formatComparisonBand
 import com.nvmex.networkhelper.util.network.sections.NetworkQualityAssessment
 import com.nvmex.networkhelper.util.network.sections.assessNetworkQuality
 import com.nvmex.networkhelper.util.windows.WindowUtils
@@ -55,6 +57,7 @@ import com.nvmex.networkhelper.viewmodel.signal.NetworkPanelMultiSimViewModel
 
 private data class SignalComparisonEntry(
     val title: String,
+    val subscriptionId: Int?,
     val state: NetworkPanelUiState?
 )
 
@@ -115,11 +118,13 @@ private fun SignalComparisonContent(
 ) {
     val sims by vm.sims.collectAsState()
     val frame by vm.frame.collectAsState()
+    val dataSubId by vm.dataSubId.collectAsState()
     val states = frame.data
     val entries = (0..1).map { slotIndex ->
         val simInfo = sims.firstOrNull { it.simSlotIndex == slotIndex }
         SignalComparisonEntry(
             title = "SIM${slotIndex + 1}",
+            subscriptionId = simInfo?.subscriptionId,
             state = simInfo?.subscriptionId?.let(states::get)
         )
     }
@@ -157,6 +162,16 @@ private fun SignalComparisonContent(
                 ComparisonHeader(entries)
                 HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
                 ComparisonRow(
+                    label = stringResource(R.string.home_signal_is_data_sim),
+                    values = entries.map {
+                        when (comparisonDataSimStatus(it.subscriptionId, dataSubId)) {
+                            true -> stringResource(R.string.state_yes)
+                            false -> stringResource(R.string.state_no)
+                            null -> "-"
+                        }
+                    }
+                )
+                ComparisonRow(
                     label = stringResource(R.string.network_operator),
                     values = entries.map { displayValue(it.state?.operatorName) }
                 )
@@ -170,7 +185,7 @@ private fun SignalComparisonContent(
                 )
                 ComparisonRow(
                     label = stringResource(R.string.home_signal_band),
-                    values = entries.map { displayValue(it.state?.band) }
+                    values = entries.map { formatComparisonBand(it.state) }
                 )
                 ComparisonRow(
                     label = stringResource(R.string.home_signal_arfcn),

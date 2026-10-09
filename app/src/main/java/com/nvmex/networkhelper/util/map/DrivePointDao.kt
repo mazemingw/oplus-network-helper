@@ -11,10 +11,14 @@ interface DrivePointDao {
     @Insert(onConflict = OnConflictStrategy.IGNORE)
     suspend fun insert(p: DrivePointEntity): Long
 
+    // Room inserts the entire sampling tick in one transaction, including both SIMs.
+    @Insert(onConflict = OnConflictStrategy.ABORT)
+    suspend fun insertBatch(points: List<DrivePointEntity>)
+
     @Query("DELETE FROM drive_points WHERE sessionId = :sessionId")
     suspend fun deleteSession(sessionId: String)
 
-    @Query("SELECT * FROM drive_points WHERE sessionId = :sessionId ORDER BY ts ASC")
+    @Query("SELECT * FROM drive_points WHERE sessionId = :sessionId ORDER BY ts ASC, id ASC")
     suspend fun getBySession(sessionId: String): List<DrivePointEntity>
 
     @Query("SELECT * FROM drive_points ORDER BY ts DESC LIMIT :limit")

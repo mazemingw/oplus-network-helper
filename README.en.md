@@ -6,22 +6,34 @@ An Android network and signal analysis tool for Qualcomm and MediaTek devices.
 The application ID is `com.nvmex.networkhelper`. The UI is built with Jetpack
 Compose and includes a separate VPN/hotspot library module.
 
-## Latest release
+## Source version and downloads
 
+- Current source: `v1.5.3` (versionCode `53`). This update publishes source code without creating a Release.
 - [v1.4.5 ARM64 APK](https://github.com/mazemingw/oplus-network-helper/releases/tag/v1.4.5)
 - Architecture: `arm64-v8a`
 - SHA-256: `624EEC9EA2FE25152A4320CD6C44758B8DA820A38DFDF0CAFDFF58E3609DED04`
 
 ## Features
 
-- **Dual-SIM network panel**: compare the operator, data/NR mode, bands, frequency, cell and link information for SIM1 and SIM2.
+- **Dual-SIM network panel**: compare the operator, data/NR mode, bands, frequency, cell and link information for SIM1 and SIM2, with a data-SIM indicator and cell-change timeline.
 - **Signal quality**: display RSRP, RSRQ, SINR, RSSI, signal level and score, with historical signal charts.
-- **Drive-test map**: record location tracks and network points, with dual-SIM data and tab switching.
-- **Qualcomm QOS**: inspect global events, Paging/Mobility and NAS state diagnostics.
+- **Drive-test map**: save both SIMs at each sampling tick and switch recorded datasets with SIM tabs. Restoring a Session moves the map to its starting point. Nearby station queries support a 1–10 km radius with independent 4G/5G and optional band filters.
+- **QoS diagnostics**: inspect Qualcomm DATA/IMS QCI, AMBR and NAS information with per-SIM caches. The experimental MediaTek AT reader has not been verified on a MediaTek device.
 - **Engineer-mode tools**: access network engineering functions and clear engineer-mode files.
 - **Bands and cells**: inspect LTE/NR bands, cell parameters and carrier aggregation.
-- **Network utilities**: iPerf speed tests, Wi-Fi information, Ping and VPN/hotspot management.
+- **Network utilities**: iPerf speed tests, Wi-Fi information, Ping and VPN/hotspot management; Wi-Fi channel plots compress idle ranges and display separate 80+80 MHz segments.
+- **Updates and plugin sharing**: show download, validation and installer phases, validate APK package/version/signatures, and import standalone plugins or sharing archives that contain framework files.
 - **Xposed/vendor APIs**: some advanced features require root, Xposed/LSPosed or vendor-specific system APIs.
+
+## Drive testing and nearby stations
+
+Open **Map drawing and discovery** from the drive-map FAB (previously sector drawing settings). Configure sector geometry, sampling interval, nearby discovery, a 1–10 km radius, RAT and optional band. Automatic discovery is off by default, with a 3 km default radius; you can also request an immediate query. Results come from the backend cell-parameter database.
+
+Select all RATs, 4G or 5G independently of the band. Leave the band empty for all bands. A number such as `3` matches that band number within the selected RATs; `B3` restricts LTE and `n78` restricts NR. Conflicting RAT/prefix selections are rejected. Filtering uses channel-number ranges, so overlapping NR bands can match the same frequency.
+
+Opening the map keeps the current location. Only manually restoring a Session moves the camera to its first point. SIM tabs select each recorded dataset, including older single-SIM recordings. See the [drive-map guide (Chinese)](docs/drive-test-map.md).
+
+The Apache 2.0 backend has its own repository: [NetworkHelperBack](https://github.com/mazemingw/NetworkHelperBack). Deploy the updated backend and restart it to enable the [nearby station API](https://github.com/mazemingw/NetworkHelperBack/blob/main/nearby-api.md).
 
 ## Screenshots
 
@@ -96,6 +108,14 @@ Windows PowerShell:
 .\gradlew.bat assembleDebug
 ```
 
+Run local unit tests and build without connecting a device:
+
+```powershell
+.\gradlew.bat :app:testDebugUnitTest :app:assembleDebug
+```
+
+See the [existing compatibility verification record](docs/2026-09-18-compatibility-verification.md) and the [drive-map checks and manual test steps](docs/drive-test-map.md).
+
 ## Configuration
 
 The local `local.properties` file, signing files, private keys and Firebase
@@ -119,6 +139,7 @@ a physical target device and may not work on a standard emulator.
 app/                  Main application module
 vpnhotspot-mobile/    VPN and hotspot library module
 gradle/               Gradle wrapper and dependency versions
+docs/                 Feature guides, verification records and screenshots
 ```
 
 ## License

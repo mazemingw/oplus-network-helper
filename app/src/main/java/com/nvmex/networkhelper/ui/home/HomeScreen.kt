@@ -81,6 +81,7 @@ fun HomeScreen(
     val qosViewModel: QosViewModel = hiltViewModel()
     val currentQosBySubId by qosViewModel.currentQosBySubId.collectAsState()
     val globalEvent by qosViewModel.globalEvent.collectAsState()
+    val modemQosState by qosViewModel.modemQosState.collectAsState()
 
     LaunchedEffect(Unit) {
         updateVm.checkOnce()
@@ -322,7 +323,10 @@ fun HomeScreen(
                         overrideSubIds = playbackStates?.keys?.sorted(),
                         playbackFrameIndex = playbackSample?.playbackIndex,
                         playbackSessionKey = playbackSample?.playbackSession,
-                        showTopBar = !settings.hideHomeTopBar
+                        showTopBar = !settings.hideHomeTopBar,
+                        modemQosState = if (playbackSample == null) modemQosState else com.nvmex.networkhelper.model.network.ModemQosUiState(),
+                        onRefreshModemQos = if (playbackSample == null) qosViewModel::refreshModemQos else null,
+                        onCleanupModemDiag = if (playbackSample == null) qosViewModel::cleanupModemDiag else null
                     )
                 }
 
@@ -446,6 +450,8 @@ fun HomeScreen(
                 UpdateDialog(
                     info = s.info,
                     mandatory = s.mandatory,
+                    phase = s.phase,
+                    error = s.error,
                     downloadProgress = updateVm.downloadProgress.collectAsState().value,
                     downloadSpeed = updateVm.downloadSpeed.collectAsState().value,
                     onDismiss = { updateVm.dismissIfAllowed() },

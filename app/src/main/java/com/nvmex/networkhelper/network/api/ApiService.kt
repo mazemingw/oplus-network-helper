@@ -24,10 +24,15 @@ import com.nvmex.networkhelper.network.model.NrCellAdminUpdateReq
 import com.nvmex.networkhelper.network.model.NrCellAdminDeleteReq
 import com.nvmex.networkhelper.network.model.VersionUpdateResponse
 import retrofit2.Response
+import com.nvmex.networkhelper.network.model.NearbyCellsRequest
+import com.nvmex.networkhelper.network.model.NearbyCellsResponse
 import retrofit2.http.Body
 import retrofit2.http.POST
 
 interface ApiService {
+
+    @POST("networkhelp/cell-params/nearby")
+    suspend fun queryNearbyCells(@Body body: NearbyCellsRequest): Response<NearbyCellsResponse>
 
     @POST("networkhelp/version-updates")
     suspend fun getVersionUpdate(): Response<VersionUpdateResponse>

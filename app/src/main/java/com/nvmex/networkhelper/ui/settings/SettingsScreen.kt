@@ -377,6 +377,8 @@ fun SettingsScreen(
             UpdateDialog(
                 info = state.info,
                 mandatory = state.mandatory,
+                phase = state.phase,
+                error = state.error,
                 downloadProgress = downloadProgress,
                 downloadSpeed = downloadSpeed,
                 onDismiss = { updateVm.dismissIfAllowed() },

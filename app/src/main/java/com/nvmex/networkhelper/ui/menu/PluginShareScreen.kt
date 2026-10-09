@@ -210,11 +210,15 @@ fun PluginShareScreen(
                 )
             ) {
                 Text(
-                    stringResource(R.string.plugin_share_success),
+                    stringResource(if (ui.uploadSucceeded) R.string.plugin_share_upload_thanks else R.string.plugin_share_success),
                     color = MaterialTheme.colorScheme.onPrimaryContainer,
                         modifier = Modifier.padding(12.dp)
                     )
                 }
+            }
+
+            Button(onClick = { vm.inspectLocalPlugin() }, enabled = !showProgress, modifier = Modifier.fillMaxWidth()) {
+                Text(stringResource(R.string.plugin_share_inspect))
             }
 
             Button(
@@ -321,7 +325,7 @@ fun PluginShareScreen(
                 Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
                     Text(stringResource(R.string.plugin_share_version, selected.buildDisplayId))
                     Text(stringResource(R.string.plugin_share_size, selected.fileSizeBytes.toReadableSize()))
-                    Text(stringResource(R.string.plugin_share_write_to, "/data/data/com.oplus.engineernetwork/files/plugin-release.zip"))
+                    Text(stringResource(R.string.plugin_share_write_to, ui.pluginTargetPath))
                     Text(stringResource(R.string.plugin_share_continue_question))
                 }
             },

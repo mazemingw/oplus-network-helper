@@ -33,8 +33,8 @@ android {
         applicationId = "com.nvmex.networkhelper"
         minSdk = 29
         targetSdk = 35
-        versionCode = 45
-        versionName = "1.4.5"
+        versionCode = 53
+        versionName = "1.5.3"
 
         // Inject the AMap key locally; never commit API credentials.
         manifestPlaceholders["AMAP_API_KEY"] =
@@ -193,6 +193,8 @@ dependencies {
     implementation("androidx.compose.material:material-icons-extended:1.6.0")
 //    implementation("com.google.android.gms:play-services-location:21.3.0")
 //    implementation("org.jetbrains.kotlinx:kotlinx-coroutines-play-services:1.8.1")
+
+    testImplementation(libs.junit)
 }
 
 kapt {

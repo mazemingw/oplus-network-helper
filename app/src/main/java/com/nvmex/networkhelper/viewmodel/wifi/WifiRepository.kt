@@ -289,6 +289,8 @@ class WifiRepository @Inject constructor(
                 channel = channel,
                 levelDbm = level,
                 channelWidthMhz = scanResultChannelWidthMhz(sr),
+                centerFrequency0Mhz = sr.centerFreq0.takeIf { it > 0 },
+                centerFrequency1Mhz = sr.centerFreq1.takeIf { it > 0 },
                 wifiGeneration = scanResultWifiGeneration(sr),
                 ant = root?.ant ?: "-",
                 txPwrDbm = root?.txPwrDbm,

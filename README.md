@@ -5,22 +5,34 @@
 面向 Android 高通/联发科设备的网络与信号分析工具。应用包名为
 `com.nvmex.networkhelper`，使用 Jetpack Compose 构建，并包含独立的 VPN/热点功能模块。
 
-## 最新版本
+## 版本与安装包
 
+- 当前源码：`v1.5.3`（versionCode `53`）；本次提交源码，不创建 Release。
 - [v1.4.5 ARM64 安装包](https://github.com/mazemingw/oplus-network-helper/releases/tag/v1.4.5)
 - 架构：`arm64-v8a`
 - SHA-256：`624EEC9EA2FE25152A4320CD6C44758B8DA820A38DFDF0CAFDFF58E3609DED04`
 
 ## 主要功能
 
-- **双卡网络面板**：对比 SIM1/SIM2 的运营商、数据网/NR 模式、频段、频点、小区和链路信息。
+- **双卡网络面板**：对比 SIM1/SIM2 的运营商、数据网/NR 模式、频段、频点、小区和链路信息，标记数据卡并展示小区变化时间线。
 - **信号质量**：显示 RSRP、RSRQ、SINR、RSSI、信号等级和评分，并支持历史信号曲线。
-- **路测地图**：记录定位轨迹和网络打点，支持双卡数据查看与切换。
-- **高通 QOS**：查看全局事件、Paging/Mobility、NAS 状态等调试数据。
+- **路测地图**：同一采样时刻保存双卡数据，回读时用 TAB 切换数据组；仅主动恢复 Session 时定位到记录起点。支持 1–10 km 附近基站查询，并独立筛选 4G/5G 制式及 Band。
+- **QoS 诊断**：查看高通 DATA/IMS 的 QCI、AMBR、NAS 等数据及按 SIM 保存的缓存；联发科 AT 读取通道为实验功能，尚未真机验证。
 - **工程模式工具**：访问网络工程模式能力，并提供工程模式文件清理工具。
 - **频段与小区**：查看和分析 LTE/NR 频段、小区参数、载波聚合等信息。
-- **网络工具**：集成 iPerf 测速、Wi-Fi 信息、Ping 和 VPN/热点管理。
+- **网络工具**：集成 iPerf 测速、Wi-Fi 信息、Ping 和 VPN/热点管理；Wi-Fi 信道图支持空闲区间压缩和 80+80 MHz 占用展示。
+- **应用更新与插件共享**：更新下载显示下载、校验和安装阶段，检查 APK 包名、版本及签名；插件导入兼容独立插件包与包含 framework 的分享包。
 - **Xposed/厂商接口**：部分高级功能需要 root、Xposed/LSPosed 或特定厂商系统接口。
+
+## 路测与附近基站
+
+在路测地图 FAB 中打开 **地图绘制与探测参数**（原“扇区绘制参数”），可设置扇区角度/距离、采样间隔、附近基站探测开关、1–10 km 半径、制式和可选 Band。探测默认关闭，默认半径 3 km；也可点击“立即探测”。查询的是后台工参库中的基站。
+
+制式可选全部、4G 或 5G，Band 留空表示不限频段。数字（如 `3`）筛选所选制式的同号频段；`B3` 限定 4G，`n78` 限定 5G。制式与前缀冲突时会提示修改。频段按工参频点范围匹配，NR 重叠频段可能同时命中。
+
+进入地图时保留当前位置，选择“恢复 Session”后才切换到记录起点。双卡记录分别显示在 SIM TAB 中，旧单卡记录仍可读取。详见 [路测地图说明](docs/drive-test-map.md)。
+
+后台单独维护于 [NetworkHelperBack](https://github.com/mazemingw/NetworkHelperBack)，采用 Apache 2.0；新增接口需要更新后台并重启服务。协议见 [附近基站接口文档](https://github.com/mazemingw/NetworkHelperBack/blob/main/nearby-api.md)。
 
 ## 截图
 
@@ -94,6 +106,14 @@ Windows PowerShell：
 .\gradlew.bat assembleDebug
 ```
 
+本地单元测试与 Debug 构建（无需连接设备）：
+
+```powershell
+.\gradlew.bat :app:testDebugUnitTest :app:assembleDebug
+```
+
+兼容修复的既有验证记录见 [2026-09-18 说明](docs/2026-09-18-compatibility-verification.md)；本次路测检查与手工测试步骤见 [路测地图说明](docs/drive-test-map.md)。
+
 ## 配置说明
 
 本地配置文件 `local.properties`、签名文件、私钥和 Firebase 配置不会提交到仓库。
@@ -111,6 +131,7 @@ AMAP_API_KEY=你的高德Key
 app/                  主应用模块
 vpnhotspot-mobile/    VPN/热点库模块
 gradle/               Gradle wrapper 与依赖版本
+docs/                 功能说明、验证记录与截图
 ```
 
 ## 许可证

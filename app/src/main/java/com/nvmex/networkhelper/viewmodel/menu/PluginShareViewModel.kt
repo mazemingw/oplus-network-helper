@@ -10,6 +10,8 @@ import com.nvmex.networkhelper.network.model.PluginOssSignReq
 import com.nvmex.networkhelper.network.model.PluginOssSignResp
 import com.nvmex.networkhelper.network.model.PluginUploadReportReq
 import com.nvmex.networkhelper.util.shell.SuShellRunner
+import com.nvmex.networkhelper.util.menu.PluginArchive
+import com.nvmex.networkhelper.util.menu.PluginInstallCommand
 import dagger.hilt.android.lifecycle.HiltViewModel
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.Dispatchers
@@ -35,7 +37,6 @@ import java.security.MessageDigest
 import java.util.Locale
 import java.util.zip.ZipEntry
 import java.util.zip.ZipOutputStream
-import java.util.zip.ZipInputStream
 import javax.inject.Inject
 import kotlin.math.max
 
@@ -47,9 +48,44 @@ class PluginShareViewModel @Inject constructor(
 ) : ViewModel() {
 
     private val maxSharePackageBytes = 200L * 1024L * 1024L
-    private val su = SuShellRunner()
-    private val engineerFilesDir = "/data/data/com.oplus.engineernetwork/files"
-    private val targetPluginPath = "$engineerFilesDir/plugin-release.zip"
+    private val su = SuShellRunner(mountMaster = true)
+    private var engineerFilesDir = "/data/user/0/com.oplus.engineernetwork/files"
+    private val targetPluginPath get() = "$engineerFilesDir/plugin-release.zip"
+
+    private fun resolveEngineerFilesDir() {
+        val user = su.execSu("cmd activity get-current-user", 3000).out.trim().toIntOrNull()
+            ?: error("无法确定当前 Android 用户")
+        engineerFilesDir = "/data/user/$user/com.oplus.engineernetwork/files"
+        val probe = su.execSu("test -d '/data/user/$user/com.oplus.engineernetwork'", 3000)
+        check(probe.code == 0) { "Root 无法访问当前用户的工程模式目录（未安装、挂载隔离或权限受限）" }
+        _ui.update { it.copy(pluginTargetPath = targetPluginPath) }
+    }
+
+    /** Read/validate locally, without signing or uploading anything. */
+    fun inspectLocalPlugin() {
+        if (_ui.value.isBusy) return
+        _ui.update { it.copy(isBusy = true, error = null, success = false, uploadSucceeded = false, stage = "检测本机插件...") }
+        viewModelScope.launch(Dispatchers.IO) {
+            try {
+                check(su.hasSu(3000)) { "Root 不可用" }
+                resolveEngineerFilesDir()
+                val plugin = locatePluginFile() ?: error("未找到插件：$targetPluginPath")
+                val copy = File(appContext.cacheDir, "plugin-release-inspect.zip")
+                check(copyPluginToCache(plugin.path, copy)) { "插件复制失败" }
+                PluginArchive.validate(copy)
+                _ui.update { it.copy(stage = "校验 framework 上传打包...") }
+                val packageFile = File(appContext.cacheDir, "plugin-inspect-framework-share.zip")
+                val packageResult = buildPluginSharePackage(copy, packageFile)
+                check(packageResult.ok) { packageResult.error ?: "framework 打包失败" }
+                _ui.update { it.copy(hasSu = true, pluginExists = true, pluginSizeBytes = plugin.sizeBytes,
+                    pluginSourcePath = plugin.path, brand = readProp("ro.product.brand"), model = readProp("ro.product.model"),
+                    buildDisplayId = readProp("ro.build.display.id"), packageSizeBytes = packageFile.length(),
+                    stage = "插件读取及上传包校验成功（未上传）", success = true) }
+            } catch (error: Exception) {
+                _ui.update { it.copy(error = error.message, stage = "插件检测失败", pluginExists = false) }
+            } finally { _ui.update { it.copy(isBusy = false) } }
+        }
+    }
 
     private val _ui = MutableStateFlow(PluginShareUiState())
     val ui: StateFlow<PluginShareUiState> = _ui.asStateFlow()
@@ -86,6 +122,9 @@ class PluginShareViewModel @Inject constructor(
                 )
             }
 
+            try { resolveEngineerFilesDir() } catch (error: Exception) {
+                _ui.update { it.copy(isBusy = false, error = error.message) }; return@launch
+            }
             val plugin = locatePluginFile()
             if (plugin == null || plugin.sizeBytes <= 0L) {
                 _ui.update {
@@ -204,6 +243,7 @@ class PluginShareViewModel @Inject constructor(
                         progress = 1f,
                         speedBps = upload.avgSpeedBps,
                         success = true,
+                        uploadSucceeded = true,
                         stage = "上传完成",
                         error = null
                     )
@@ -232,6 +272,7 @@ class PluginShareViewModel @Inject constructor(
                     isBusy = true,
                     error = null,
                     success = false,
+                    uploadSucceeded = false,
                     progress = 0f,
                     speedBps = 0.0,
                     stage = "检查 SU...",
@@ -251,6 +292,9 @@ class PluginShareViewModel @Inject constructor(
                 return@launch
             }
 
+            try { resolveEngineerFilesDir() } catch (error: Exception) {
+                _ui.update { it.copy(isBusy = false, error = error.message) }; return@launch
+            }
             val model = readProp("ro.product.model")
             val brand = readProp("ro.product.brand")
             val buildId = readProp("ro.build.display.id")
@@ -354,7 +398,8 @@ class PluginShareViewModel @Inject constructor(
                     isBusy = true,
                     success = false,
                     error = null,
-                    stage = "正在清除工程模式..."
+                    stage = "正在清除工程模式...",
+                    uploadSucceeded = false
                 )
             }
 
@@ -371,6 +416,9 @@ class PluginShareViewModel @Inject constructor(
             }
 
             // Keep the app-owned files directory and its ownership; remove only its children.
+            try { resolveEngineerFilesDir() } catch (error: Exception) {
+                _ui.update { it.copy(isBusy = false, error = error.message) }; return@launch
+            }
             val clearCommand =
                 "if [ ! -e '$engineerFilesDir' ]; then exit 0; fi; " +
                         "if [ ! -d '$engineerFilesDir' ]; then echo 'target is not a directory' >&2; exit 2; fi; " +
@@ -423,7 +471,8 @@ class PluginShareViewModel @Inject constructor(
                     success = false,
                     progress = 0f,
                     speedBps = 0.0,
-                    stage = "下载插件中..."
+                    stage = "下载插件中...",
+                    uploadSucceeded = false
                 )
             }
 
@@ -442,26 +491,22 @@ class PluginShareViewModel @Inject constructor(
             }
 
             _ui.update { it.copy(stage = "写入工程模式目录...") }
-            val pluginFile = prepareDownloadedPluginForWrite(localFile)
-            if (pluginFile == null) {
-                _ui.update {
-                    it.copy(
-                        isBusy = false,
-                        isDownloading = false,
-                        error = "下载包中未找到 plugin-release.zip",
-                        stage = "写入失败"
-                    )
-                }
+            try { resolveEngineerFilesDir() } catch (error: Exception) {
+                _ui.update { it.copy(isBusy = false, isDownloading = false, error = error.message) }; return@launch
+            }
+            val pluginFile = runCatching {
+                PluginArchive.prepare(localFile, File(appContext.cacheDir, "plugin-release-download-extracted.zip"))
+            }.getOrElse { error ->
+                _ui.update { it.copy(isBusy = false, isDownloading = false, error = error.message, stage = "解压校验失败") }
                 return@launch
             }
-
             val writeOk = writeDownloadedPlugin(pluginFile)
             if (!writeOk) {
                 _ui.update {
                     it.copy(
                         isBusy = false,
                         isDownloading = false,
-                        error = "写入插件目录失败：$targetPluginPath",
+                        error = it.error ?: "写入插件目录失败：$targetPluginPath",
                         stage = "写入失败"
                     )
                 }
@@ -493,9 +538,7 @@ class PluginShareViewModel @Inject constructor(
 
     private fun locatePluginFile(): PluginFileMeta? {
         val candidates = listOf(
-            "/data/data/com.oplus.engineernetwork/files/plugin-release.zip",
-            "/data/user/0/com.oplus.engineernetwork/files/plugin-release.zip",
-            "/data/user_de/0/com.oplus.engineernetwork/files/plugin-release.zip"
+            targetPluginPath
         )
 
         candidates.forEach { p ->
@@ -511,28 +554,28 @@ class PluginShareViewModel @Inject constructor(
     }
 
     private fun findPluginPathByRoot(): String? {
-        val cmd = "(find /data/user /data/data /data_mirror/data_ce  -maxdepth 8 -type f -name 'plugin-release.zip' 2>/dev/null | head -n 1)"
+        val cmd = "find '$engineerFilesDir' -maxdepth 4 -type f -name 'plugin-release.zip' 2>/dev/null | head -n 1"
         val result = su.execSu(cmd, timeoutMs = 12000)
         if (result.code != 0) return null
         return result.out.trim().lineSequence().firstOrNull()?.trim().takeUnless { it.isNullOrBlank() }
     }
 
     private fun queryFileSize(path: String): Long {
-        val cmd = "if [ -f '$path' ]; then (stat -c %s '$path' 2>/dev/null || ls -nl '$path' 2>/dev/null | awk '{print \\$5}' || wc -c < '$path'); else echo -1; fi"
+        val cmd = "if [ -f '$path' ]; then wc -c < '$path'; else echo -1; fi"
         val result = su.execSu(cmd, timeoutMs = 6000)
         if (result.code != 0) return -1L
-        val first = result.out.trim().lineSequence().firstOrNull()?.trim().orEmpty()
+        val first = result.out.trim().lineSequence().map(String::trim).lastOrNull { it.toLongOrNull() != null }.orEmpty()
         return first.toLongOrNull() ?: -1L
     }
 
     private fun copyPluginToCache(srcPath: String, target: File): Boolean {
         runCatching { if (target.exists()) target.delete() }
 
-        val cpCmd = "cp '$srcPath' '${target.absolutePath}' && chmod 644 '${target.absolutePath}'"
+        val cpCmd = "cp '$srcPath' '${target.absolutePath}' && chown ${android.os.Process.myUid()}:${android.os.Process.myUid()} '${target.absolutePath}' && chmod 600 '${target.absolutePath}' && restorecon -F '${target.absolutePath}'"
         val cpResult = su.execSu(cpCmd, timeoutMs = 20000)
         if (cpResult.code == 0 && target.exists() && target.length() > 0L) return true
 
-        val catCmd = "cat '$srcPath' > '${target.absolutePath}' && chmod 644 '${target.absolutePath}'"
+        val catCmd = "cat '$srcPath' > '${target.absolutePath}' && chown ${android.os.Process.myUid()}:${android.os.Process.myUid()} '${target.absolutePath}' && chmod 600 '${target.absolutePath}' && restorecon -F '${target.absolutePath}'"
         val catResult = su.execSu(catCmd, timeoutMs = 25000)
         return catResult.code == 0 && target.exists() && target.length() > 0L
     }
@@ -540,13 +583,13 @@ class PluginShareViewModel @Inject constructor(
     private fun buildPluginSharePackage(pluginZip: File, targetZip: File): PackageMetrics {
         return runCatching {
             if (targetZip.exists()) targetZip.delete()
-            val payloadRoot = File(appContext.cacheDir, "plugin_share_payload")
-            if (payloadRoot.exists()) payloadRoot.deleteRecursively()
+            // A unique payload avoids accidentally including stale framework from an old ROM.
+            val payloadRoot = File(appContext.cacheDir, "plugin_share_payload_${System.nanoTime()}")
             payloadRoot.mkdirs()
 
             val frameworkParent = File(payloadRoot, "system_ext").apply { mkdirs() }
             val copyFrameworkCmd =
-                "cp -a /system_ext/framework '${frameworkParent.absolutePath}/' && chmod -R u+rwX '${payloadRoot.absolutePath}'"
+                "cp -a /system_ext/framework '${frameworkParent.absolutePath}/' && chown -R ${android.os.Process.myUid()}:${android.os.Process.myUid()} '${payloadRoot.absolutePath}' && chmod -R u+rwX '${payloadRoot.absolutePath}' && restorecon -RF '${payloadRoot.absolutePath}'"
             val frameworkCopy = su.execSu(copyFrameworkCmd, timeoutMs = 45000)
             val frameworkDir = File(frameworkParent, "framework")
             if (frameworkCopy.code != 0 || !frameworkDir.exists()) {
@@ -573,6 +616,7 @@ class PluginShareViewModel @Inject constructor(
                     }
             }
 
+            payloadRoot.deleteRecursively()
             PackageMetrics(ok = targetZip.length() > 0L, fileSizeBytes = targetZip.length(), error = null)
         }.getOrElse { e ->
             PackageMetrics(ok = false, fileSizeBytes = 0L, error = e.message ?: "package_exception")
@@ -582,14 +626,14 @@ class PluginShareViewModel @Inject constructor(
     private fun downloadFileWithProgress(url: String, target: File): DownloadMetrics {
         runCatching { if (target.exists()) target.delete() }
 
-        val request = Request.Builder().url(url).get().build()
         val startAt = System.currentTimeMillis()
         var downloaded = 0L
         var speed = 0.0
         var lastUiAt = 0L
 
         return runCatching {
-            okHttp.newCall(request).execute().use { resp ->
+            val request = Request.Builder().url(url).get().build()
+            okHttp.newBuilder().callTimeout(120, java.util.concurrent.TimeUnit.SECONDS).build().newCall(request).execute().use { resp ->
                 if (!resp.isSuccessful) {
                     val body = resp.body?.string().orEmpty().take(300)
                     return DownloadMetrics(
@@ -602,6 +646,7 @@ class PluginShareViewModel @Inject constructor(
                 }
                 val body = resp.body ?: throw IOException("empty_response_body")
                 val contentLen = body.contentLength()
+                require(contentLen <= maxSharePackageBytes) { "下载包超过 200 MiB 限制" }
                 body.byteStream().use { input ->
                     target.outputStream().use { out ->
                         val buffer = ByteArray(DEFAULT_BUFFER_SIZE)
@@ -610,6 +655,7 @@ class PluginShareViewModel @Inject constructor(
                             if (read <= 0) break
                             out.write(buffer, 0, read)
                             downloaded += read
+                            require(downloaded <= maxSharePackageBytes) { "下载包超过 200 MiB 限制" }
 
                             val now = System.currentTimeMillis()
                             val elapsedMs = max(1L, now - startAt)
@@ -632,6 +678,7 @@ class PluginShareViewModel @Inject constructor(
                 }
 
                 val duration = max(1L, System.currentTimeMillis() - startAt)
+                require(contentLen < 0 || downloaded == contentLen) { "下载不完整，请重试" }
                 val avgSpeed = downloaded * 1000.0 / duration.toDouble()
                 DownloadMetrics(
                     ok = downloaded > 0L && target.exists() && target.length() > 0L,
@@ -642,6 +689,7 @@ class PluginShareViewModel @Inject constructor(
                 )
             }
         }.getOrElse { e ->
+            target.delete()
             val duration = max(1L, System.currentTimeMillis() - startAt)
             val avgSpeed = downloaded * 1000.0 / duration.toDouble()
             DownloadMetrics(
@@ -656,65 +704,10 @@ class PluginShareViewModel @Inject constructor(
 
     private fun writeDownloadedPlugin(srcFile: File): Boolean {
         if (!srcFile.exists() || srcFile.length() <= 0L) return false
-        val targetDir = File(targetPluginPath).parent ?: "/data/data/com.oplus.engineernetwork/files"
-
-        val cpCmd = "mkdir -p '$targetDir' && cp '${srcFile.absolutePath}' '$targetPluginPath' && chmod 644 '$targetPluginPath'"
-        val cpResult = su.execSu(cpCmd, timeoutMs = 30000)
-        if (cpResult.code == 0 && queryFileSize(targetPluginPath) > 0L) return true
-
-        val catCmd = "mkdir -p '$targetDir' && cat '${srcFile.absolutePath}' > '$targetPluginPath' && chmod 644 '$targetPluginPath'"
-        val catResult = su.execSu(catCmd, timeoutMs = 30000)
-        return catResult.code == 0 && queryFileSize(targetPluginPath) > 0L
-    }
-
-    private fun prepareDownloadedPluginForWrite(downloadedFile: File): File? {
-        if (!downloadedFile.exists() || downloadedFile.length() <= 0L) return null
-
-        val extracted = File(appContext.cacheDir, "plugin-release-download-extracted.zip")
-        runCatching { if (extracted.exists()) extracted.delete() }
-
-        val extractedOk = runCatching {
-            ZipInputStream(downloadedFile.inputStream().buffered()).use { zip ->
-                while (true) {
-                    val entry = zip.nextEntry ?: break
-                    val normalized = entry.name.replace('\\', '/').trim('/')
-                    val isPluginEntry = !entry.isDirectory &&
-                            normalized.substringAfterLast('/') == "plugin-release.zip"
-                    if (isPluginEntry) {
-                        extracted.outputStream().use { out ->
-                            zip.copyTo(out)
-                        }
-                        zip.closeEntry()
-                        return@runCatching extracted.exists() && extracted.length() > 0L
-                    }
-                    zip.closeEntry()
-                }
-                false
-            }
-        }.getOrDefault(false)
-
-        return when {
-            extractedOk -> extracted
-            downloadedFile.name == "plugin-release.zip" -> downloadedFile
-            else -> downloadedFile.takeIf { looksLikeStandalonePluginZip(it) }
-        }
-    }
-
-    private fun looksLikeStandalonePluginZip(file: File): Boolean {
-        return runCatching {
-            ZipInputStream(file.inputStream().buffered()).use { zip ->
-                var sawEntry = false
-                while (true) {
-                    val entry = zip.nextEntry ?: break
-                    sawEntry = true
-                    val normalized = entry.name.replace('\\', '/').trim('/')
-                    if (normalized.startsWith("system_ext/")) return@runCatching false
-                    if (normalized.substringAfterLast('/') == "plugin-release.zip") return@runCatching false
-                    zip.closeEntry()
-                }
-                sawEntry
-            }
-        }.getOrDefault(false)
+        val cmd = PluginInstallCommand.build(srcFile.absolutePath, srcFile.length(), targetPluginPath)
+        val result = su.execSu(cmd, timeoutMs = 30000)
+        if (result.code != 0) _ui.update { it.copy(error = result.err.trim().ifBlank { result.out.trim() }.take(400)) }
+        return result.code == 0 && queryFileSize(targetPluginPath) == srcFile.length()
     }
 
     private fun md5Hex(file: File): String {
@@ -856,6 +849,7 @@ data class PluginShareUiState(
     val pluginSizeBytes: Long = 0L,
     val packageSizeBytes: Long = 0L,
     val pluginSourcePath: String = "",
+    val pluginTargetPath: String = "/data/user/0/com.oplus.engineernetwork/files/plugin-release.zip",
     val requestId: String? = null,
     val ossObjectKey: String? = null,
     val isBusy: Boolean = false,
@@ -864,6 +858,7 @@ data class PluginShareUiState(
     val progress: Float = 0f,
     val speedBps: Double = 0.0,
     val success: Boolean = false,
+    val uploadSucceeded: Boolean = false,
     val stage: String = "就绪",
     val error: String? = null,
     val downloadCandidates: List<PluginDownloadCandidateItem> = emptyList(),

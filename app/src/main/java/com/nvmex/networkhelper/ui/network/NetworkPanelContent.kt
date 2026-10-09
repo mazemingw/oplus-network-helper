@@ -18,19 +18,32 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.IntrinsicSize
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.FlowRow
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Call
+import androidx.compose.material.icons.filled.CellTower
+import androidx.compose.material.icons.filled.ExpandLess
+import androidx.compose.material.icons.filled.ExpandMore
+import androidx.compose.material.icons.filled.SwapVert
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.material3.Card
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
@@ -39,7 +52,8 @@ import androidx.compose.material3.LocalContentColor
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
-import androidx.compose.material3.VerticalDivider
+import androidx.compose.material3.Surface
+import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
@@ -52,21 +66,37 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.luminance
+import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.input.nestedscroll.NestedScrollConnection
+import androidx.compose.ui.input.nestedscroll.NestedScrollSource
+import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.Velocity
 import androidx.hilt.navigation.compose.hiltViewModel
 import com.nvmex.networkhelper.R
 import com.nvmex.networkhelper.model.menu.LteCellQueryBody
 import com.nvmex.networkhelper.model.network.NetworkPanelUiState
+import com.nvmex.networkhelper.model.network.CellTimelinePoint
+import com.nvmex.networkhelper.model.network.ModemQosInfo
+import com.nvmex.networkhelper.util.network.formatQosAmbrMbps
+import com.nvmex.networkhelper.util.network.formatQosRateMbps
+import com.nvmex.networkhelper.model.network.ModemQosSessions
+import com.nvmex.networkhelper.model.network.ModemMmInfo
 import com.nvmex.networkhelper.model.network.NrCaCarrier
 import com.nvmex.networkhelper.model.network.QualityLevel
+import com.nvmex.networkhelper.model.network.upsertCellTimeline
 import com.nvmex.networkhelper.network.model.NrQueryReq
 import com.nvmex.networkhelper.ui.base.PanelDivider
+import com.nvmex.networkhelper.ui.home.BandColorRegistry
 import com.nvmex.networkhelper.ui.map.AmapMapActivity
 import com.nvmex.networkhelper.ui.network.sections.CaChip
 import com.nvmex.networkhelper.ui.network.sections.FollowRecordDialog
@@ -94,14 +124,32 @@ import java.util.Locale
 fun NetworkPanelContent(
     modifier: Modifier = Modifier,
     s: NetworkPanelUiState,
+    liveCellTimeline: List<CellTimelinePoint>,
+    onRecordCellTimeline: (CellTimelinePoint) -> Unit,
     showNrBandwidth: Boolean = true,
     onBandHelp: (() -> Unit)? = null,
     playbackFrameIndex: Int? = null,
-    playbackSessionKey: Int? = null
+    playbackSessionKey: Int? = null,
+    showModemQos: Boolean = false,
+    modemQosSessions: ModemQosSessions? = null,
+    modemMmInfo: ModemMmInfo? = null,
+    modemQosCollectorReady: Boolean = false,
+    modemQosRefreshing: Boolean = false,
+    modemQosBusy: Boolean = false,
+    isDefaultDataSim: Boolean = true,
+    modemQosError: String? = null,
+    onRefreshModemQos: (() -> Unit)? = null,
+    modemQosCleaning: Boolean = false,
+    modemQosNotice: String? = null,
+    modemDiagCleanupOutput: String? = null,
+    onCleanupModemDiag: (() -> Unit)? = null
 ) {
     // =========================
     // =========================
     val isNsa = remember(s.nrMode) { s.nrMode.startsWith("NSA") }
+    val modemQosSource = ModemQosInfo.Source.forNetwork(s.dataNetworkTypeRaw, s.nrMode, s.dataNetworkType)
+    val modemData = modemQosSessions?.dataFor(modemQosSource)
+    val modemIms = modemQosSessions?.imsFor(modemQosSource)
     var showLteAnchor by rememberSaveable(s.subId) { mutableStateOf(false) }
 
     val displayState = remember(s, isNsa, showLteAnchor) {
@@ -257,7 +305,9 @@ fun NetworkPanelContent(
     var showHelpDialog by rememberSaveable { mutableStateOf(false) }
     var showSignalNetworkRaw by rememberSaveable(s.subId) { mutableStateOf(false) }
     var showLinkRateBytes by rememberSaveable(s.subId) { mutableStateOf(false) }
-    var cellTimeline by remember(s.subId) { mutableStateOf(emptyList<CellTimelinePoint>()) }
+    var showModemQosDetails by rememberSaveable(s.subId) { mutableStateOf(false) }
+    var showNonDataQosConfirm by rememberSaveable(s.subId) { mutableStateOf(false) }
+    var playbackCellTimeline by remember(s.subId) { mutableStateOf(emptyList<CellTimelinePoint>()) }
     var lastTimelinePlaybackFrameIndex by remember(s.subId) { mutableStateOf(-1) }
     var lastTimelinePlaybackSession by remember(s.subId) { mutableStateOf(Int.MIN_VALUE) }
     val (settings, _) = rememberAppSettings()
@@ -273,6 +323,7 @@ fun NetworkPanelContent(
         displayState.tac,
         displayState.pci,
         displayState.ci,
+        displayState.band,
         displayState.rsrp,
         displayState.rsrq,
         displayState.sinr,
@@ -291,6 +342,7 @@ fun NetworkPanelContent(
             tac = displayState.tac,
             pci = displayState.pci,
             ci = displayState.ci,
+            band = displayState.band,
             rsrp = if (useNrSignal) displayState.ssRsrp else displayState.rsrp,
             rsrq = if (useNrSignal) displayState.ssRsrq else displayState.rsrq,
             sinr = if (useNrSignal) displayState.ssSinr else displayState.sinr
@@ -299,21 +351,23 @@ fun NetworkPanelContent(
         if (playbackFrameIndex != null) {
             val session = playbackSessionKey ?: 0
             if (lastTimelinePlaybackSession != session) {
-                cellTimeline = emptyList()
+                playbackCellTimeline = emptyList()
                 lastTimelinePlaybackFrameIndex = -1
                 lastTimelinePlaybackSession = session
             }
 
             when {
                 lastTimelinePlaybackFrameIndex < 0 -> {
-                    cellTimeline = (cellTimeline + point).takeLast(20)
+                    playbackCellTimeline = upsertCellTimeline(playbackCellTimeline, point)
                 }
                 playbackFrameIndex > lastTimelinePlaybackFrameIndex -> {
-                    cellTimeline = (cellTimeline + point).takeLast(20)
+                    playbackCellTimeline = upsertCellTimeline(playbackCellTimeline, point)
                 }
                 playbackFrameIndex < lastTimelinePlaybackFrameIndex -> {
                     val removeCount = lastTimelinePlaybackFrameIndex - playbackFrameIndex
-                    cellTimeline = cellTimeline.dropLast(removeCount.coerceAtMost(cellTimeline.size))
+                    playbackCellTimeline = playbackCellTimeline.dropLast(
+                        removeCount.coerceAtMost(playbackCellTimeline.size)
+                    )
                 }
                 else -> Unit
             }
@@ -322,15 +376,15 @@ fun NetworkPanelContent(
         }
 
         if (lastTimelinePlaybackSession != Int.MIN_VALUE) {
-            cellTimeline = emptyList()
+            playbackCellTimeline = emptyList()
             lastTimelinePlaybackFrameIndex = -1
             lastTimelinePlaybackSession = Int.MIN_VALUE
         }
 
-        val last = cellTimeline.lastOrNull()
-        if (last?.sameCell(point) == true && point.ts - last.ts < 1000L) return@LaunchedEffect
-        cellTimeline = (cellTimeline + point).takeLast(20)
+        onRecordCellTimeline(point)
     }
+
+    val cellTimeline = if (playbackFrameIndex != null) playbackCellTimeline else liveCellTimeline
 
     Column(
         modifier = modifier.fillMaxWidth(),
@@ -442,6 +496,34 @@ fun NetworkPanelContent(
                 formatLinkRate(displayState, showLinkRateBytes),
                 onClick = { showLinkRateBytes = !showLinkRateBytes }
             )
+            if (showModemQos) {
+                val modemQosClick = { showModemQosDetails = true }
+                KeyValueRow(
+                    modemQosSource?.let { stringResource(R.string.network_qci_generation, it.generation) }
+                        ?: stringResource(R.string.network_qci),
+                    "",
+                    onClick = modemQosClick,
+                    valueContent = {
+                        ModemQciValue(
+                            ims = modemIms,
+                            data = modemData,
+                            currentSource = modemQosSource,
+                            ready = modemQosCollectorReady,
+                            refreshing = modemQosRefreshing
+                        )
+                    }
+                )
+                KeyValueRow(
+                    stringResource(R.string.network_ims_ambr),
+                    formatModemAmbr(modemIms, modemQosRefreshing),
+                    onClick = modemQosClick
+                )
+                KeyValueRow(
+                    stringResource(R.string.network_data_ambr),
+                    formatModemAmbr(modemData, modemQosRefreshing),
+                    onClick = modemQosClick
+                )
+            }
 
             PanelDivider()
 
@@ -822,6 +904,45 @@ fun NetworkPanelContent(
             )
         }
     }
+
+
+    if (showModemQosDetails) {
+        ModemQosDetailsDialog(
+            sessions = modemQosSessions,
+            mm = modemMmInfo.takeIf { modemQosSource == ModemQosInfo.Source.NR_5GSM },
+            currentSource = modemQosSource,
+            error = modemQosError,
+            refreshing = modemQosRefreshing,
+            cleaning = modemQosCleaning,
+            notice = modemQosNotice,
+            cleanupOutput = modemDiagCleanupOutput,
+            canRefresh = !modemQosBusy && !modemQosCleaning && onRefreshModemQos != null,
+            canCleanup = !modemQosBusy && !modemQosCleaning && onCleanupModemDiag != null,
+            onCleanup = { onCleanupModemDiag?.invoke() },
+            onRefresh = {
+                if (isDefaultDataSim) onRefreshModemQos?.invoke()
+                else showNonDataQosConfirm = true
+            },
+            onDismiss = { showModemQosDetails = false }
+        )
+    }
+    if (showNonDataQosConfirm) {
+        AlertDialog(
+            onDismissRequest = { showNonDataQosConfirm = false },
+            text = { Text(stringResource(R.string.network_qos_non_data_confirm)) },
+            confirmButton = {
+                TextButton(onClick = {
+                    showNonDataQosConfirm = false
+                    onRefreshModemQos?.invoke()
+                }) { Text(stringResource(R.string.action_ok)) }
+            },
+            dismissButton = {
+                TextButton(onClick = { showNonDataQosConfirm = false }) {
+                    Text(stringResource(R.string.action_cancel))
+                }
+            }
+        )
+    }
 }
 
 
@@ -832,7 +953,8 @@ fun KeyValueRow(
     k: String,
     v: String,
     onClick: (() -> Unit)? = null,
-    valueColor: Color? = null
+    valueColor: Color? = null,
+    valueContent: (@Composable () -> Unit)? = null
 ) {
     val labelWidth = 128.dp
 
@@ -850,7 +972,9 @@ fun KeyValueRow(
             overflow = TextOverflow.Ellipsis
         )
 
-        Text(
+        if (valueContent != null) {
+            Box(Modifier.weight(1f), contentAlignment = Alignment.CenterEnd) { valueContent() }
+        } else Text(
             text = v,
             modifier = Modifier.weight(1f),
             style = MaterialTheme.typography.bodyMedium,
@@ -860,6 +984,193 @@ fun KeyValueRow(
             maxLines = 3,
             overflow = TextOverflow.Ellipsis
         )
+    }
+}
+
+@Composable
+private fun ModemQosDetailsDialog(
+    sessions: ModemQosSessions?,
+    mm: ModemMmInfo?,
+    currentSource: ModemQosInfo.Source?,
+    error: String?,
+    refreshing: Boolean,
+    canRefresh: Boolean,
+    cleaning: Boolean,
+    notice: String?,
+    cleanupOutput: String?,
+    canCleanup: Boolean,
+    onCleanup: () -> Unit,
+    onRefresh: () -> Unit,
+    onDismiss: () -> Unit
+) {
+    val context = LocalContext.current
+    val title = stringResource(R.string.network_qos_details_title)
+    val cleanupTitle = stringResource(R.string.network_qos_cleanup_result)
+    val detailListState = rememberLazyListState()
+    LaunchedEffect(currentSource) {
+        when (currentSource) {
+            ModemQosInfo.Source.LTE_ESM -> detailListState.scrollToItem(1)
+            ModemQosInfo.Source.NR_5GSM -> detailListState.scrollToItem(2)
+            null -> Unit
+        }
+    }
+    fun sessionFields(info: ModemQosInfo?) = listOf(
+        "DNN" to (info?.dnn?.uppercase(Locale.ROOT) ?: "-"),
+        "LOG" to (info?.logCode?.let { "0x${it.toString(16).uppercase(Locale.ROOT)}" } ?: if (info != null) "AT" else "-"),
+        "QCI / 5QI" to (info?.qci?.toString() ?: "-"),
+        "5QI / QFI" to "${info?.fiveQi ?: "-"} / ${info?.qfi ?: "-"}",
+        "AMBR DL" to (info?.downlinkAmbrKbps?.let(::formatQosRateMbps) ?: "-"),
+        "AMBR UL" to (info?.uplinkAmbrKbps?.let(::formatQosRateMbps) ?: "-")
+    )
+    val data = sessions?.dataFor(currentSource)
+    val ims = sessions?.imsFor(currentSource)
+    val status = stringResource(when {
+        cleaning -> R.string.network_qos_cleaning
+        error != null -> R.string.network_qos_status_failed
+        refreshing && data != null && ims != null -> R.string.network_qos_status_received
+        refreshing -> R.string.network_qos_reading
+        data != null && ims != null -> R.string.network_qos_status_success
+        data != null -> R.string.network_qos_status_data_only
+        ims != null -> R.string.network_qos_status_ims_only
+        else -> R.string.network_qos_status_unread
+    })
+    fun sessionBlock(label: String, info: ModemQosInfo?): String = buildString {
+        appendLine("$label${if (info != null && info.source == currentSource && info.sessionKind == ModemQosInfo.SessionKind.DATA) " *" else ""}")
+        appendLine("DNN: ${info?.dnn?.uppercase(Locale.ROOT) ?: "-"}")
+        appendLine("LOG: ${info?.logCode?.let { "0x${it.toString(16).uppercase(Locale.ROOT)}" } ?: if (info != null) "AT" else "-"}")
+        appendLine("QCI: ${info?.qci ?: "-"}")
+        appendLine("5QI / QFI: ${info?.fiveQi ?: "-"} / ${info?.qfi ?: "-"}")
+        appendLine("AMBR DL: ${info?.downlinkAmbrKbps?.let(::formatQosRateMbps) ?: "-"}")
+        append("AMBR UL: ${info?.uplinkAmbrKbps?.let(::formatQosRateMbps) ?: "-"}")
+    }
+
+    val detail = buildString {
+        appendLine("MM LOG: ${mm?.let { "0x${it.logCode.toString(16).uppercase(Locale.ROOT)}" } ?: "-"}")
+        appendLine("MM STATE: ${mm?.mmState ?: "-"}")
+        appendLine("MM SUB STATE: ${mm?.mmSubState ?: "-"}")
+        appendLine("5G TMSI: ${mm?.fiveGTmsi ?: "-"}")
+        appendLine()
+        appendLine(sessionBlock("DATA (4G)", sessions?.lteData))
+        appendLine()
+        append(sessionBlock("DATA (5G)", sessions?.nrData))
+        appendLine()
+        appendLine()
+        appendLine(sessionBlock("IMS (4G)", sessions?.lteIms))
+        appendLine()
+        append(sessionBlock("IMS (5G)", sessions?.nrIms))
+    }
+    val copyText = buildString {
+        appendLine(title)
+        appendLine(status)
+        appendLine()
+        append(detail)
+        error?.let { appendLine(); appendLine(); append(it) }
+        notice?.let { appendLine(); appendLine(); append(it) }
+        cleanupOutput?.let {
+            appendLine()
+            appendLine()
+            appendLine(cleanupTitle)
+            append(it)
+        }
+    }
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text(title) },
+        text = {
+            Column(
+                modifier = Modifier.fillMaxWidth(),
+                verticalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                Surface(
+                    modifier = Modifier.fillMaxWidth(), shape = RoundedCornerShape(10.dp),
+                    color = if (error != null) MaterialTheme.colorScheme.errorContainer else MaterialTheme.colorScheme.primaryContainer
+                ) {
+                    Text(status, modifier = Modifier.padding(12.dp), style = MaterialTheme.typography.titleSmall,
+                        fontWeight = FontWeight.Bold)
+                }
+                if (refreshing || cleaning) LinearProgressIndicator(modifier = Modifier.fillMaxWidth())
+                LazyColumn(
+                    modifier = Modifier.height(360.dp),
+                    state = detailListState,
+                    verticalArrangement = Arrangement.spacedBy(12.dp)
+                ) {
+                    item { QosPropertyTable("5G MM", listOf(
+                        "MM LOG" to (mm?.let { "0x${it.logCode.toString(16).uppercase(Locale.ROOT)}" } ?: "-"),
+                        "MM STATE" to (mm?.mmState?.toString() ?: "-"),
+                        "MM SUB STATE" to (mm?.mmSubState?.toString() ?: "-"),
+                        "5G TMSI" to (mm?.fiveGTmsi ?: "-")
+                    )) }
+                    item { QosPropertyTable("4G · DATA", sessionFields(sessions?.lteData), Icons.Default.SwapVert) }
+                    item { QosPropertyTable("5G · DATA", sessionFields(sessions?.nrData), Icons.Default.SwapVert) }
+                    item { QosPropertyTable("IMS · 4G", sessionFields(sessions?.lteIms), Icons.Default.Call) }
+                    item { QosPropertyTable("IMS · 5G", sessionFields(sessions?.nrIms), Icons.Default.Call) }
+                    error?.let { item { Text(it, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall) } }
+                    notice?.let { item { Text(it, style = MaterialTheme.typography.bodySmall) } }
+                    cleanupOutput?.let { item {
+                        HorizontalDivider()
+                        Text(cleanupTitle)
+                        Text(it, style = MaterialTheme.typography.bodySmall, fontFamily = FontFamily.Monospace)
+                    } }
+                }
+            }
+        },
+        confirmButton = {
+            Column(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalAlignment = Alignment.End,
+                verticalArrangement = Arrangement.spacedBy(12.dp)
+            ) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween
+                ) {
+                    TextButton(onClick = { copyNetworkFieldToClipboard(context, title, copyText) }) {
+                        Text(stringResource(R.string.network_qos_copy))
+                    }
+                    TextButton(onClick = onCleanup, enabled = canCleanup) {
+                        Text(stringResource(if (cleaning) R.string.network_qos_cleaning else R.string.network_qos_cleanup_diag))
+                    }
+                    TextButton(onClick = onRefresh, enabled = canRefresh) {
+                        Text(
+                            if (refreshing) stringResource(R.string.network_qos_reading)
+                            else stringResource(R.string.network_qos_refresh_sessions)
+                        )
+                    }
+                }
+                TextButton(onClick = onDismiss) {
+                    Text(stringResource(R.string.action_close))
+                }
+            }
+        }
+    )
+}
+
+@Composable
+private fun QosPropertyTable(title: String, fields: List<Pair<String, String>>, icon: ImageVector? = null) {
+    Column(
+        modifier = Modifier.fillMaxWidth().border(1.dp, MaterialTheme.colorScheme.outlineVariant, RoundedCornerShape(8.dp))
+            .clip(RoundedCornerShape(8.dp))
+    ) {
+        Row(
+            modifier = Modifier.fillMaxWidth().background(MaterialTheme.colorScheme.surfaceContainerHigh).padding(8.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(6.dp)
+        ) {
+            icon?.let {
+                Icon(it, contentDescription = null, modifier = Modifier.size(18.dp), tint = MaterialTheme.colorScheme.primary)
+            }
+            Text(title, style = MaterialTheme.typography.labelLarge, fontWeight = FontWeight.Bold)
+        }
+        fields.forEachIndexed { index, (attribute, value) ->
+            if (index > 0) HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f))
+            Row(modifier = Modifier.fillMaxWidth().padding(8.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                Text(attribute, modifier = Modifier.weight(0.4f), style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant)
+                Text(value, modifier = Modifier.weight(0.6f), style = MaterialTheme.typography.bodySmall,
+                    textAlign = TextAlign.End, fontWeight = FontWeight.SemiBold)
+            }
+        }
     }
 }
 
@@ -918,33 +1229,31 @@ private fun formatCellType(cellType: String, arfcn: Int?): String {
     return "$cellType 高铁专网"
 }
 
-private data class CellTimelinePoint(
-    val ts: Long,
-    val cellType: String,
-    val tac: String,
-    val pci: String,
-    val ci: String,
-    val rsrp: String,
-    val rsrq: String,
-    val sinr: String
-) {
-    fun sameCell(other: CellTimelinePoint): Boolean {
-        return cellType == other.cellType &&
-                tac == other.tac &&
-                pci == other.pci &&
-                ci == other.ci
-    }
-}
-
 @Composable
 private fun CellTimelinePanel(
     points: List<CellTimelinePoint>,
     hideSensitive: Boolean
 ) {
+    val visible = remember(points) { points.takeLast(20) }
+    val listState = rememberLazyListState()
     var expanded by rememberSaveable { mutableStateOf(false) }
-    val visible = remember(points, expanded) {
-        val count = if (expanded) 20 else 5
-        points.takeLast(count).asReversed()
+    val containListScroll = remember {
+        object : NestedScrollConnection {
+            override fun onPostScroll(
+                consumed: Offset,
+                available: Offset,
+                source: NestedScrollSource
+            ): Offset = if (source == NestedScrollSource.UserInput) {
+                Offset(0f, available.y)
+            } else Offset.Zero
+
+            override suspend fun onPostFling(consumed: Velocity, available: Velocity): Velocity =
+                Velocity(0f, available.y)
+        }
+    }
+
+    LaunchedEffect(expanded, visible.size, visible.lastOrNull()?.ts) {
+        if (expanded && visible.isNotEmpty()) listState.scrollToItem(visible.lastIndex)
     }
 
     Card(
@@ -953,8 +1262,8 @@ private fun CellTimelinePanel(
         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant)
     ) {
         Column(
-            modifier = Modifier.padding(12.dp),
-            verticalArrangement = Arrangement.spacedBy(0.dp)
+            modifier = Modifier.padding(horizontal = 12.dp, vertical = 10.dp),
+            verticalArrangement = Arrangement.spacedBy(6.dp)
         ) {
             Row(
                 modifier = Modifier.fillMaxWidth(),
@@ -962,20 +1271,17 @@ private fun CellTimelinePanel(
                 horizontalArrangement = Arrangement.SpaceBetween
             ) {
                 Text(stringResource(R.string.network_cell_timeline), fontWeight = FontWeight.SemiBold)
-                if (points.size > 5) {
-                    TextButton(onClick = { expanded = !expanded }) {
-                        Text(
-                            if (expanded) {
-                                stringResource(R.string.action_collapse)
-                            } else {
-                                stringResource(R.string.action_expand)
-                            }
+                if (visible.size > 5) {
+                    IconButton(onClick = { expanded = !expanded }, modifier = Modifier.size(32.dp)) {
+                        Icon(
+                            imageVector = if (expanded) Icons.Default.ExpandLess else Icons.Default.ExpandMore,
+                            contentDescription = stringResource(
+                                if (expanded) R.string.action_collapse else R.string.action_expand
+                            )
                         )
                     }
                 }
             }
-
-            Spacer(Modifier.height(6.dp))
 
             if (visible.isEmpty()) {
                 Text(
@@ -984,16 +1290,38 @@ private fun CellTimelinePanel(
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
             } else {
-                visible.forEachIndexed { idx, p ->
-                    TimelineRow(
-                        point = p,
-                        hideSensitive = hideSensitive
-                    )
-                    if (idx != visible.lastIndex) {
-                        HorizontalDivider(
-                            modifier = Modifier.padding(vertical = 1.dp),
-                            color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.55f)
-                        )
+                TimelineHeader(visible.last().cellType)
+                if (expanded && visible.size > 5) {
+                    LazyColumn(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height((visible.size.coerceAtMost(8) * 42).dp)
+                            .nestedScroll(containListScroll),
+                        state = listState,
+                        verticalArrangement = Arrangement.spacedBy(5.dp),
+                        contentPadding = PaddingValues(bottom = 2.dp)
+                    ) {
+                        items(
+                            count = visible.size,
+                            key = { index -> timelinePointKey(visible[index]) }
+                        ) { index ->
+                            TimelineRow(
+                                point = visible[index],
+                                hideSensitive = hideSensitive,
+                                isCurrent = index == visible.lastIndex
+                            )
+                        }
+                    }
+                } else {
+                    val collapsed = visible.takeLast(5)
+                    Column(verticalArrangement = Arrangement.spacedBy(5.dp)) {
+                        collapsed.forEach { point ->
+                            TimelineRow(
+                                point = point,
+                                hideSensitive = hideSensitive,
+                                isCurrent = point.sameCell(visible.last())
+                            )
+                        }
                     }
                 }
             }
@@ -1001,161 +1329,113 @@ private fun CellTimelinePanel(
     }
 }
 
+private fun timelinePointKey(point: CellTimelinePoint): String =
+    "${point.cellType}-${point.tac}-${point.pci}-${point.ci}"
+
 @Composable
 private fun TimelineRow(
     point: CellTimelinePoint,
-    hideSensitive: Boolean
+    hideSensitive: Boolean,
+    isCurrent: Boolean
 ) {
     val tac = if (hideSensitive) "***" else point.tac
     val pci = if (hideSensitive) "***" else point.pci
     val ci = if (hideSensitive) "***" else point.ci
-    val cellIdLabel = if (point.cellType == "LTE") "ECI" else "NCI"
-    val dividerColor = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.75f)
-    val shape = RoundedCornerShape(8.dp)
+    val band = timelineBandLabel(point)
+    val accent = timelineCellColor(point)
+    val shape = RoundedCornerShape(9.dp)
+    val borderColor = accent.copy(alpha = if (isCurrent) 0.95f else 0.18f)
+    val backgroundColor = accent.copy(alpha = if (isCurrent) 0.18f else 0.035f)
 
-    Column(
+    Row(
         modifier = Modifier
             .fillMaxWidth()
             .clip(shape)
-            .background(MaterialTheme.colorScheme.surface.copy(alpha = 0.34f))
-            .border(1.dp, dividerColor, shape)
+            .background(backgroundColor)
+            .border(if (isCurrent) 2.dp else 1.dp, borderColor, shape)
+            .padding(horizontal = 8.dp, vertical = 7.dp),
+        verticalAlignment = Alignment.CenterVertically
     ) {
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .height(IntrinsicSize.Min)
-        ) {
-            TimelineCellValue("TAC", tac, Modifier.weight(1f))
-            TimelineGridDivider(dividerColor)
-            TimelineCellValue("PCI", pci, Modifier.weight(1f))
-            TimelineGridDivider(dividerColor)
-            TimelineCellValue(cellIdLabel, ci, Modifier.weight(1.25f), maxLines = 2)
-        }
-
-        HorizontalDivider(color = dividerColor)
-
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .height(IntrinsicSize.Min)
-        ) {
-            TimelineSignalValue(
-                label = "RSRP",
-                valueText = point.rsrp,
-                fraction = fractionFromDbm(point.rsrp, min = -140.0, max = -70.0),
-                modifier = Modifier.weight(1f)
-            )
-            TimelineGridDivider(dividerColor)
-            TimelineSignalValue(
-                label = "RSRQ",
-                valueText = point.rsrq,
-                fraction = fractionFromDb(point.rsrq, min = -20.0, max = -3.0),
-                modifier = Modifier.weight(1f)
-            )
-            TimelineGridDivider(dividerColor)
-            TimelineSignalValue(
-                label = "SINR",
-                valueText = point.sinr,
-                fraction = fractionFromDb(point.sinr, min = -10.0, max = 30.0),
-                modifier = Modifier.weight(1f)
-            )
+        Icon(
+            imageVector = Icons.Default.CellTower,
+            contentDescription = null,
+            tint = accent.copy(alpha = if (isCurrent) 1f else 0.55f),
+            modifier = Modifier.size(20.dp)
+        )
+        Spacer(Modifier.width(8.dp))
+        TimelineValue(tac, Modifier.width(58.dp))
+        TimelineValue(pci, Modifier.width(44.dp))
+        TimelineValue(ci, Modifier.weight(1f))
+        TimelineValue(
+            band,
+            Modifier.width(42.dp),
+            accent.copy(alpha = if (isCurrent) 1f else 0.72f)
+        )
+        Box(modifier = Modifier.width(43.dp), contentAlignment = Alignment.CenterEnd) {
+            if (isCurrent) {
+                Surface(
+                    color = accent,
+                    shape = RoundedCornerShape(999.dp),
+                    shadowElevation = 3.dp
+                ) {
+                    Text(
+                        text = stringResource(R.string.network_cell_timeline_current),
+                        modifier = Modifier.padding(horizontal = 7.dp, vertical = 2.dp),
+                        style = MaterialTheme.typography.labelSmall,
+                        color = if (accent.luminance() > 0.48f) Color.Black else Color.White,
+                        fontWeight = FontWeight.Bold,
+                        maxLines = 1
+                    )
+                }
+            }
         }
     }
 }
 
 @Composable
-private fun TimelineGridDivider(color: Color) {
-    VerticalDivider(
-        modifier = Modifier.fillMaxHeight(),
-        color = color
+private fun TimelineHeader(cellType: String) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 8.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Spacer(Modifier.width(28.dp))
+        TimelineHeaderText("TAC", Modifier.width(58.dp))
+        TimelineHeaderText("PCI", Modifier.width(44.dp))
+        TimelineHeaderText(if (cellType.equals("LTE", ignoreCase = true)) "ECI" else "NCI", Modifier.weight(1f))
+        TimelineHeaderText(stringResource(R.string.network_cell_timeline_band), Modifier.width(42.dp))
+        Spacer(Modifier.width(43.dp))
+    }
+}
+
+@Composable
+private fun TimelineHeaderText(text: String, modifier: Modifier) {
+    Text(text, modifier, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant, fontWeight = FontWeight.SemiBold)
+}
+
+@Composable
+private fun TimelineValue(value: String, modifier: Modifier, color: Color? = null) {
+    Text(
+        value,
+        modifier,
+        style = MaterialTheme.typography.labelSmall,
+        fontWeight = FontWeight.SemiBold,
+        maxLines = 1,
+        overflow = TextOverflow.Ellipsis,
+        color = color ?: LocalContentColor.current
     )
 }
 
-@Composable
-private fun TimelineCellValue(
-    label: String,
-    value: String,
-    modifier: Modifier,
-    maxLines: Int = 1
-) {
-    Column(
-        modifier = modifier.padding(horizontal = 7.dp, vertical = 5.dp),
-        verticalArrangement = Arrangement.spacedBy(1.dp)
-    ) {
-        Text(
-            text = label,
-            style = MaterialTheme.typography.labelSmall,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-            fontWeight = FontWeight.SemiBold,
-            maxLines = 1,
-            overflow = TextOverflow.Ellipsis
-        )
-        Text(
-            text = value,
-            style = MaterialTheme.typography.labelSmall,
-            fontWeight = FontWeight.SemiBold,
-            maxLines = maxLines,
-            overflow = TextOverflow.Ellipsis,
-            color = MaterialTheme.colorScheme.onSurface
-        )
-    }
-}
+private fun timelineCellColor(point: CellTimelinePoint): Color =
+    BandColorRegistry.colorOf(timelineBandLabel(point))
 
-@Composable
-private fun TimelineSignalValue(
-    label: String,
-    valueText: String,
-    fraction: Float,
-    modifier: Modifier
-) {
-    val target = fraction.coerceIn(0f, 1f)
-    Column(
-        modifier = modifier.padding(horizontal = 7.dp, vertical = 5.dp),
-        verticalArrangement = Arrangement.spacedBy(3.dp)
-    ) {
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.SpaceBetween,
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            Text(
-                text = label,
-                style = MaterialTheme.typography.labelSmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                fontWeight = FontWeight.SemiBold,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis
-            )
-            Text(
-                text = valueText.takeIf { it.isNotBlank() } ?: "-",
-                style = MaterialTheme.typography.labelSmall,
-                fontWeight = FontWeight.SemiBold,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis
-            )
-        }
-        Box(
-            modifier = Modifier
-                .fillMaxWidth()
-                .height(5.dp)
-                .clip(RoundedCornerShape(999.dp))
-                .background(MaterialTheme.colorScheme.surface.copy(alpha = 0.7f))
-        ) {
-            Box(
-                modifier = Modifier
-                    .fillMaxHeight()
-                    .fillMaxWidth(target)
-                    .clip(RoundedCornerShape(999.dp))
-                    .background(
-                        if (valueText == "-" || valueText.isBlank()) {
-                            MaterialTheme.colorScheme.onSurface.copy(alpha = 0.25f)
-                        } else {
-                            qualityColor(target)
-                        }
-                    )
-            )
-        }
-    }
+private fun timelineBandLabel(point: CellTimelinePoint): String {
+    val raw = point.band.trim().uppercase(Locale.ROOT)
+    if (raw.isBlank() || raw == "-") return "-"
+    if (raw.startsWith("B") || raw.startsWith("N")) return raw
+    val prefix = if (point.cellType.equals("LTE", ignoreCase = true)) "B" else "N"
+    return prefix + raw
 }
 
 private fun isNrAdvancedOverride(overrideType: Int?): Boolean {
@@ -1186,6 +1466,47 @@ private fun formatLinkRate(s: NetworkPanelUiState, asBytesPerSecond: Boolean): S
         up != null && unit != null -> "- / ${up.first} $unit"
         else -> "-"
     }
+}
+
+@Composable
+@OptIn(ExperimentalLayoutApi::class)
+private fun ModemQciValue(
+    ims: ModemQosInfo?, data: ModemQosInfo?, currentSource: ModemQosInfo.Source?,
+    ready: Boolean, refreshing: Boolean
+) {
+    if (refreshing || (ims == null && data == null)) {
+        Text(
+            when {
+                refreshing -> stringResource(R.string.network_qos_reading)
+                ready -> stringResource(R.string.network_qos_tap_to_read)
+                else -> "-"
+            }, style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.SemiBold
+        )
+        return
+    }
+    fun qosClass(info: ModemQosInfo?): String = info?.qci?.toString()
+        ?: info?.fiveQi?.let { "5QI $it" } ?: "-"
+    val imsGeneration = if (ims != null && ims.source != currentSource) " (${ims.source.generation})" else ""
+    val dataName = data?.dnn?.substringBefore('.')?.uppercase(Locale.ROOT) ?: "DATA"
+    FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp, Alignment.End)) {
+        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(3.dp)) {
+            Icon(Icons.Default.Call, contentDescription = "IMS", modifier = Modifier.size(15.dp))
+            Text("IMS:${qosClass(ims)}$imsGeneration", style = MaterialTheme.typography.bodyMedium,
+                fontWeight = FontWeight.SemiBold)
+        }
+        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(3.dp)) {
+            Icon(Icons.Default.SwapVert, contentDescription = "DATA", modifier = Modifier.size(15.dp))
+            Text("$dataName:${qosClass(data)}", style = MaterialTheme.typography.bodyMedium,
+                fontWeight = FontWeight.SemiBold)
+        }
+    }
+}
+
+@Composable
+private fun formatModemAmbr(info: ModemQosInfo?, refreshing: Boolean): String {
+    if (refreshing) return stringResource(R.string.network_qos_reading)
+    info ?: return "-"
+    return formatQosAmbrMbps(info.uplinkAmbrKbps, info.downlinkAmbrKbps)
 }
 
 private fun formatKbpsAsBytesPerSecondValue(kbps: Int): Pair<String, String> {

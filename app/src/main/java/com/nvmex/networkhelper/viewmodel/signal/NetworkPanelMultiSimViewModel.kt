@@ -6,13 +6,17 @@ import android.telephony.SubscriptionInfo
 import android.telephony.SubscriptionManager
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
+import com.nvmex.networkhelper.model.network.CellTimelinePoint
 import com.nvmex.networkhelper.model.network.NetworkPanelUiState
+import com.nvmex.networkhelper.model.network.upsertCellTimeline
 import com.nvmex.networkhelper.util.network.NetworkPanelRepositoryMultiSim
 import com.nvmex.networkhelper.util.network.TelephonySnapshotterMultiSim
 import com.nvmex.networkhelper.util.network.observeDefaultDataSubId
 import com.nvmex.networkhelper.xposed.translator.NrcaTranslator
 import kotlinx.coroutines.flow.SharingStarted
+import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.stateIn
 
@@ -37,6 +41,21 @@ class NetworkPanelMultiSimViewModel(app: Application) : AndroidViewModel(app) {
     private val nrCaTracker = BroadcastNrCaTracker(app)
     private val lteCaTracker = BroadcastLteCaTracker(app)
     private val nrCaHoldBySubId = mutableMapOf<Int, HeldNrCa>()
+    private val _cellTimelineBySubId = MutableStateFlow<Map<Int, List<CellTimelinePoint>>>(emptyMap())
+
+    /**
+     * UI-independent recent-cell history. Keeping it in the navigation-scoped ViewModel means
+     * switching bottom-bar destinations cannot erase it when HOME leaves composition.
+     */
+    val cellTimelineBySubId: StateFlow<Map<Int, List<CellTimelinePoint>>> =
+        _cellTimelineBySubId.asStateFlow()
+
+    fun recordCellTimeline(subId: Int, point: CellTimelinePoint) {
+        val current = _cellTimelineBySubId.value
+        val updated = upsertCellTimeline(current[subId].orEmpty(), point)
+        if (updated == current[subId]) return
+        _cellTimelineBySubId.value = current + (subId to updated)
+    }
 
     val sims: StateFlow<List<SubscriptionInfo>> = repo.observeSims()
         .stateIn(viewModelScope, SharingStarted.Eagerly, emptyList())

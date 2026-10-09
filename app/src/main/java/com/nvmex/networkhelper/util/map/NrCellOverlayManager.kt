@@ -29,7 +29,8 @@ class NrCellOverlayManager(
     private val api: ApiService,
     private val localRepository: CellParamLocalRepository,
     private val scope: CoroutineScope,
-    private val serverCoord: ServerCoord = ServerCoord.WGS84
+    private val serverCoord: ServerCoord = ServerCoord.WGS84,
+    private val maxHistoryMarkers: Int = 300
 ) {
     sealed interface QueryResult {
         data class Rendered(
@@ -59,7 +60,6 @@ class NrCellOverlayManager(
     private val treatZeroAzimuthAsMissing: Boolean = true
     private val stationMergeDistanceMeters: Double = 180.0
 
-    private val maxHistoryMarkers: Int = 300
     private val keepHistory: Boolean = true
 
     private var lastStableKey: String? = null
@@ -87,6 +87,23 @@ class NrCellOverlayManager(
     fun updateSectorDrawConfig(angleDeg: Float, radiusMeters: Double) {
         sectorAngleDeg = angleDeg.coerceIn(20f, 180f)
         sectorRadiusMeters = radiusMeters.coerceIn(50.0, 2000.0)
+    }
+
+    fun renderNearbyCells(rows: List<NrCellParamItem>): Int {
+        clear()
+        rows.filter { it.latitude != null && it.longitude != null }
+            .groupBy {
+                "${it.nr_tac}|${kotlin.math.round(it.latitude!! * 10000)}|" +
+                    kotlin.math.round(it.longitude!! * 10000)
+            }.forEach { (key, cells) ->
+                val anchor = cells.first()
+                renderOneStation(
+                    stationKey = "nearby|$key", anchorRow = anchor, rows = cells,
+                    requestTac = anchor.nr_tac, requestArfcn = anchor.nr_arfcn,
+                    requestPci = anchor.nr_pci, headerMatch = "nearby"
+                )
+            }
+        return historyMap.size
     }
 
     fun clear() {

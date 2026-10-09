@@ -13,5 +13,7 @@ data class WifiChannelSample(
     val ueCount: Int? = null,
     val busyPercent: Int? = null,
     val beamforming: String = "-",
-    val roaming: String = "-"
+    val roaming: String = "-",
+    val centerFrequency0Mhz: Int? = null,
+    val centerFrequency1Mhz: Int? = null
 )

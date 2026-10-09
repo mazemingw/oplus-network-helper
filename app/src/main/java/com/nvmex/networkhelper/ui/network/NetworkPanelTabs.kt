@@ -43,8 +43,10 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.nvmex.networkhelper.R
 import com.nvmex.networkhelper.model.network.NetworkPanelUiState
+import com.nvmex.networkhelper.model.network.ModemQosUiState
 import com.nvmex.networkhelper.ui.home.RealSignalIndicator
 import com.nvmex.networkhelper.ui.settings.rememberAppSettings
+import com.nvmex.networkhelper.util.network.SocVendorDetector
 import com.nvmex.networkhelper.viewmodel.signal.NetworkPanelMultiSimViewModel
 import kotlinx.coroutines.launch
 
@@ -64,10 +66,14 @@ fun NetworkPanelTabs(
     overrideSubIds: List<Int>? = null,
     playbackFrameIndex: Int? = null,
     playbackSessionKey: Int? = null,
-    showTopBar: Boolean = true
+    showTopBar: Boolean = true,
+    modemQosState: ModemQosUiState = ModemQosUiState(),
+    onRefreshModemQos: ((Int) -> Unit)? = null,
+    onCleanupModemDiag: (() -> Unit)? = null
 ) {
     val sims by vm.sims.collectAsState()
     val frame by vm.frame.collectAsState()
+    val cellTimelineBySubId by vm.cellTimelineBySubId.collectAsState()
     val liveStates = frame.data
     val dds by vm.dataSubId.collectAsState()
 
@@ -86,6 +92,7 @@ fun NetworkPanelTabs(
     )
     val scope = rememberCoroutineScope()
     val (settings, _) = rememberAppSettings()
+    val isQualcommPlatform = remember { SocVendorDetector.isQualcomm() }
 
     LaunchedEffect(safeIndex) {
         if (pagerState.currentPage != safeIndex) {
@@ -155,7 +162,15 @@ fun NetworkPanelTabs(
                 ) {
                     panelSubIds.forEachIndexed { idx, subId ->
                         val simInfo = sims.firstOrNull { it.subscriptionId == subId }
-                        val title = simInfo?.let { "SIM${it.simSlotIndex + 1}" } ?: "SIM${idx + 1}"
+                        val simTitle = simInfo?.let { "SIM${it.simSlotIndex + 1}" } ?: "SIM${idx + 1}"
+                        val networkState = states[subId]
+                        val generation = when {
+                            networkState?.nrMode?.startsWith("NSA", ignoreCase = true) == true -> "5G"
+                            networkState?.dataNetworkType.equals("NR", ignoreCase = true) -> "5G"
+                            networkState?.dataNetworkType.equals("LTE", ignoreCase = true) -> "4G"
+                            else -> null
+                        }
+                        val title = generation?.let { "$simTitle $it" } ?: simTitle
                         val isDataSim = subId == dds
                         Tab(
                             selected = idx == pagerState.currentPage,
@@ -252,10 +267,25 @@ fun NetworkPanelTabs(
             NetworkPanelContent(
                 modifier = Modifier.fillMaxWidth(),
                 s = s,
+                liveCellTimeline = cellTimelineBySubId[subId].orEmpty(),
+                onRecordCellTimeline = { point -> vm.recordCellTimeline(subId, point) },
                 showNrBandwidth = subId == dds || overrideStates != null,
                 onBandHelp = onShowBandHelp,
                 playbackFrameIndex = playbackFrameIndex,
-                playbackSessionKey = playbackSessionKey
+                playbackSessionKey = playbackSessionKey,
+                showModemQos = overrideStates == null && isQualcommPlatform,
+                modemQosSessions = modemQosState.valuesBySubId[subId],
+                modemMmInfo = modemQosState.mmBySubId[subId],
+                modemQosCollectorReady = modemQosState.collectorReady,
+                modemQosRefreshing = modemQosState.refreshingSubId == subId,
+                modemQosBusy = modemQosState.refreshing,
+                isDefaultDataSim = subId == dds,
+                modemQosError = modemQosState.errorBySubId[subId] ?: modemQosState.lastError,
+                modemQosCleaning = modemQosState.cleaning,
+                modemQosNotice = modemQosState.noticeBySubId[subId] ?: modemQosState.lastNotice,
+                modemDiagCleanupOutput = modemQosState.cleanupOutput,
+                onRefreshModemQos = onRefreshModemQos?.let { refresh -> { refresh(subId) } },
+                onCleanupModemDiag = onCleanupModemDiag
             )
         }
     }

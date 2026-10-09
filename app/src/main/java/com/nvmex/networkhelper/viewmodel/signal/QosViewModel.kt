@@ -7,6 +7,8 @@ import androidx.lifecycle.viewModelScope
 import com.nvmex.networkhelper.R
 import com.nvmex.networkhelper.model.network.GlobalQosEvent
 import com.nvmex.networkhelper.model.network.QosData
+import com.nvmex.networkhelper.util.network.ModemQosRepository
+import com.nvmex.networkhelper.util.network.SocVendorDetector
 import dagger.hilt.android.lifecycle.HiltViewModel
 import dagger.hilt.android.qualifiers.ApplicationContext
 import jakarta.inject.Inject
@@ -75,7 +77,8 @@ data class QosDisplayData(
 
 @HiltViewModel
 class QosViewModel @Inject constructor(
-    @ApplicationContext private val appContext: Context
+    @ApplicationContext private val appContext: Context,
+    private val modemQosRepository: ModemQosRepository
 ) : ViewModel() {
 
     companion object {
@@ -83,6 +86,9 @@ class QosViewModel @Inject constructor(
     }
 
     private val receiver = QosDataReceiver()
+    private val qualcommQosEnabled = SocVendorDetector.isQualcomm()
+
+    val modemQosState = modemQosRepository.state
 
     private val _currentQosBySubId = MutableStateFlow<Map<Int, QosData>>(emptyMap())
     val currentQosBySubId: StateFlow<Map<Int, QosData>> = _currentQosBySubId.asStateFlow()
@@ -101,11 +107,22 @@ class QosViewModel @Inject constructor(
 
     init {
         receiver.register(appContext, this)
+        if (qualcommQosEnabled) modemQosRepository.acquire()
     }
 
     override fun onCleared() {
         receiver.unregister(appContext)
+        if (qualcommQosEnabled) modemQosRepository.release()
         super.onCleared()
+    }
+
+    /** Both radios re-register, but completion and results belong to the selected SIM. */
+    fun refreshModemQos(subId: Int) {
+        if (qualcommQosEnabled) modemQosRepository.refreshSession(subId)
+    }
+
+    fun cleanupModemDiag() {
+        if (qualcommQosEnabled) modemQosRepository.cleanupDiag()
     }
 
     fun updateQosData(subId: Int, data: QosData) {

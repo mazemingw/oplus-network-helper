@@ -24,6 +24,7 @@ import androidx.compose.material3.TextButton
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.outlined.HelpOutline
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -47,6 +48,8 @@ import androidx.compose.ui.unit.dp
 import com.nvmex.networkhelper.R
 import com.nvmex.networkhelper.model.wifi.WifiChannelSample
 import com.nvmex.networkhelper.model.wifi.WifiUiModel
+import com.nvmex.networkhelper.util.wifi.WifiChannelAxis
+import com.nvmex.networkhelper.util.wifi.occupiedChannelSegments
 import kotlin.math.max
 
 private enum class WifiBandFilter(
@@ -101,6 +104,10 @@ fun WifiChannelPanel(
     var showAll by rememberSaveable { mutableStateOf(true) }
     var showTableHelp by rememberSaveable { mutableStateOf(false) }
     val selectedBand = remember(selectedBandName) { WifiBandFilter.valueOf(selectedBandName) }
+    val connectedBand = if (ui.isWifiConnected) WifiBandFilter.entries.firstOrNull { it.supports(ui.frequencyMhz ?: 0) } else null
+    LaunchedEffect(ui.isWifiConnected, connectedBand, ui.bssid) {
+        connectedBand?.let { selectedBandName = it.name }
+    }
     val allSamples = remember(ui.nearbyChannels, selectedBand) {
         ui.nearbyChannels
             .asSequence()
@@ -238,8 +245,8 @@ private fun WifiChannelChart(
 
     Canvas(modifier = modifier) {
         data class LabelAnchor(val sample: WifiChannelSample, val x: Float, val y: Float, val color: Color)
-        val axisChannels = buildAdaptiveAxisChannels(samples, band)
-        val channelIndexMap = axisChannels.withIndex().associate { it.value to it.index }
+        val axis = WifiChannelAxis.build(band.channelPool, samples.flatMap { it.occupiedChannelSegments() })
+        val axisChannels = axis.ticks
 
         val width = size.width
         val height = size.height
@@ -256,9 +263,7 @@ private fun WifiChannelChart(
         val plotHeight = (plotBottom - plotTop).coerceAtLeast(1f)
 
         fun xByChannel(channel: Int): Float {
-            val idx = channelIndexMap[channel] ?: 0
-            val steps = max(axisChannels.size - 1, 1)
-            return plotLeft + plotWidth * (idx.toFloat() / steps)
+            return plotLeft + plotWidth * axis.position(channel.toFloat())
         }
 
         fun yByDbm(levelDbm: Int): Float {
@@ -285,7 +290,7 @@ private fun WifiChannelChart(
             )
         }
 
-        val tickChannels = chooseTickChannels(axisChannels, maxTicks = 8)
+        val tickChannels = axis.ticks
 
         val textPaint = android.graphics.Paint().apply {
             isAntiAlias = true
@@ -309,22 +314,25 @@ private fun WifiChannelChart(
                 textPaint
             )
         }
+        axis.omissions.forEach { position ->
+            drawContext.canvas.nativeCanvas.drawText("…", plotLeft + plotWidth * position, height - 2.dp.toPx(), textPaint)
+        }
 
         val labelAnchors = mutableListOf<LabelAnchor>()
 
-        samples.forEachIndexed { index, ap ->
-            val centerX = xByChannel(ap.channel)
+        samples.flatMap { ap -> ap.occupiedChannelSegments().map { ap to it } }.forEachIndexed { index, (ap, segment) ->
+            val centerX = xByChannel(segment.first)
             val centerY = yByDbm(ap.levelDbm)
 
-            val steps = max(axisChannels.size - 1, 1)
-            val stepPx = plotWidth / steps
-            val widthMhz = (ap.channelWidthMhz ?: 20).coerceAtLeast(20)
-            val spanInSteps = (widthMhz / 20f).coerceAtLeast(1f)
-            val xRadius = (stepPx * spanInSteps * 0.52f).coerceAtLeast(8.dp.toPx())
+            val widthMhz = segment.second
+            val halfChannels = widthMhz / 10f
+            val leftX = plotLeft + plotWidth * axis.position(segment.first - halfChannels)
+            val rightX = plotLeft + plotWidth * axis.position(segment.first + halfChannels)
 
             val path = Path().apply {
-                moveTo(centerX - xRadius, plotBottom)
-                quadraticTo(centerX, centerY, centerX + xRadius, plotBottom)
+                moveTo(leftX, plotBottom)
+                quadraticTo(leftX, centerY, centerX, centerY)
+                quadraticTo(rightX, centerY, rightX, plotBottom)
                 close()
             }
 

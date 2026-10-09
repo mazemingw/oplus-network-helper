@@ -14,17 +14,15 @@ import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.Divider
 import androidx.compose.material3.LinearProgressIndicator
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.remember
-import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import com.nvmex.networkhelper.R
+import com.nvmex.networkhelper.model.home.UpdatePhase
 import com.nvmex.networkhelper.network.model.VersionUpdateResponse
 import java.time.ZoneId
 
@@ -34,12 +32,13 @@ fun UpdateDialog(
     mandatory: Boolean,
     downloadProgress: Int,
     downloadSpeed: Int,
+    phase: UpdatePhase,
+    error: String?,
     onDismiss: () -> Unit,
     onSkipThisVersion: () -> Unit,
     onUpdate: () -> Unit,
 ) {
-    // ✅ 防抖锁
-    var updateLocked by remember { mutableStateOf(false) }
+    val updateLocked = phase.isBusy
 
     AlertDialog(
         onDismissRequest = {
@@ -70,16 +69,24 @@ fun UpdateDialog(
 
                     Text(info.updateContent)
 
-                    if (downloadProgress > 0) {
+                    error?.let { Text(it, color = MaterialTheme.colorScheme.error) }
+                    when (phase) {
+                        UpdatePhase.VERIFYING -> Text(stringResource(R.string.update_verifying))
+                        UpdatePhase.OPENING_INSTALLER -> Text(stringResource(R.string.update_opening_installer))
+                        UpdatePhase.READY_TO_INSTALL -> Text(stringResource(R.string.update_ready_to_install))
+                        UpdatePhase.AWAITING_PERMISSION -> Text(stringResource(R.string.update_permission_hint))
+                        UpdatePhase.INSTALLER_LAUNCHED -> Text(stringResource(R.string.update_installer_launched))
+                        else -> Unit
+                    }
+                    if (phase == UpdatePhase.DOWNLOADING) {
                         Spacer(Modifier.height(6.dp))
 
-                        Text(stringResource(R.string.update_download_progress, downloadProgress))
+                        Text(if (downloadProgress < 0) stringResource(R.string.update_download_unknown_size)
+                            else stringResource(R.string.update_download_progress, downloadProgress))
                         Text(stringResource(R.string.update_download_speed, downloadSpeed))
 
-                        LinearProgressIndicator(
-                            progress = downloadProgress / 100f,
-                            modifier = Modifier.fillMaxWidth()
-                        )
+                        if (downloadProgress < 0) LinearProgressIndicator(modifier = Modifier.fillMaxWidth())
+                        else LinearProgressIndicator(progress = { downloadProgress / 100f }, modifier = Modifier.fillMaxWidth())
                     }
                 }
             }
@@ -89,13 +96,19 @@ fun UpdateDialog(
                 enabled = !updateLocked, // ✅ 直接禁用
                 onClick = {
                     if (updateLocked) return@Button
-                    updateLocked = true
                     onUpdate()
                 }
             ) {
                 Text(
                     when {
-                        updateLocked -> stringResource(R.string.state_processing)
+                        phase == UpdatePhase.DOWNLOADING -> stringResource(R.string.update_downloading)
+                        phase == UpdatePhase.VERIFYING -> stringResource(R.string.update_verifying)
+                        phase == UpdatePhase.OPENING_INSTALLER -> stringResource(R.string.update_opening_installer)
+                        phase == UpdatePhase.SIGNATURE_MISMATCH -> stringResource(R.string.update_continue_install)
+                        error != null -> stringResource(R.string.update_retry)
+                        phase == UpdatePhase.AWAITING_PERMISSION -> stringResource(R.string.update_continue_install)
+                        phase == UpdatePhase.INSTALLER_LAUNCHED -> stringResource(R.string.update_reopen_installer)
+                        phase == UpdatePhase.READY_TO_INSTALL -> stringResource(R.string.update_continue_install)
                         mandatory -> stringResource(R.string.update_action_now)
                         else -> stringResource(R.string.update_action_update)
                     }

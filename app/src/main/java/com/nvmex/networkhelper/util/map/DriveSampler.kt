@@ -47,7 +47,7 @@ class DriveSampler(
 
     // ===== 落盘回调（外部传进来） =====
     private val resolvePersistSessionId: (() -> String?)? = null,
-    private val onPersist: (suspend (DrivePoint, String) -> Unit)? = null,
+    private val onPersist: (suspend (List<DrivePoint>, String) -> Unit)? = null,
     private val persistEnabled: () -> Boolean = { true }
 ) {
 
@@ -55,6 +55,9 @@ class DriveSampler(
     private var sampleIntervalMs: Long = intervalMs.coerceAtLeast(1000L)
 
     private var job: Job? = null
+    private val writes = DrivePointWriteQueue<DrivePoint>(scope) { points, sid ->
+        onPersist?.invoke(points, sid)
+    }
     private val lastCellKeyBySlot = HashMap<Int, String>()
     private val pointsBySlot = HashMap<Int, MutableList<DrivePoint>>()
     private var visibleSimSlot: Int = 0
@@ -64,7 +67,6 @@ class DriveSampler(
 
     // FIFO：控制数量
     private val markerQueue = ArrayDeque<Marker>(1024)
-    private val markerQueueBySlot = HashMap<Int, ArrayDeque<Marker>>()
 
     val isRunning: Boolean get() = job?.isActive == true
 
@@ -91,11 +93,12 @@ class DriveSampler(
         job = null
     }
 
+    suspend fun awaitPersistence(): Throwable? = writes.awaitIdle()
+
     fun clear() {
         markerQueue.forEach { runCatching { it.remove() } }
         markerQueue.clear()
         marker2Point.clear()
-        markerQueueBySlot.clear()
         pointsBySlot.clear()
         lastCellKeyBySlot.clear()
     }
@@ -112,28 +115,33 @@ class DriveSampler(
         markerQueue.forEach { runCatching { it.remove() } }
         markerQueue.clear()
         marker2Point.clear()
-        markerQueueBySlot.clear()
     }
 
     fun renderHistory(points: List<DrivePoint>, clearExisting: Boolean = false) {
         if (clearExisting) clear()
         points.groupBy { it.simSlot }.forEach { (slot, slotPoints) ->
             pointsBySlot.getOrPut(slot) { mutableListOf() }.apply {
-                clear(); addAll(slotPoints.sortedBy { it.ts })
+                clear(); addAll(slotPoints.sortedBy { it.ts }.takeLast(maxMarkers))
             }
         }
+        clearVisibleMarkers()
         pointsBySlot[visibleSimSlot].orEmpty().forEach { addMarkerForPoint(it) }
     }
 
     private fun sampleOnce() {
         val ll = getLatLng() ?: return
-        val snapshotsNow = snapshots().ifEmpty { mapOf(0 to NetworkPanelUiState()) }
-        snapshotsNow.toSortedMap().forEach { (simSlot, s) ->
-            sampleOnce(simSlot, s, ll)
+        val snapshotsNow = snapshots()
+        val ts = System.currentTimeMillis()
+        val batch = snapshotsNow.toSortedMap().map { (simSlot, s) ->
+            sampleOnce(simSlot, s, ll, ts)
+        }
+        val sid = resolvePersistSessionId?.invoke()
+        if (batch.isNotEmpty() && persistEnabled() && onPersist != null && !sid.isNullOrBlank()) {
+            writes.enqueue(batch, sid)
         }
     }
 
-    private fun sampleOnce(simSlot: Int, s: NetworkPanelUiState, ll: LatLng) {
+    private fun sampleOnce(simSlot: Int, s: NetworkPanelUiState, ll: LatLng, ts: Long): DrivePoint {
 
         // === 计算 cellKey / handover ===
         val key = DriveStyle.cellKey(s)
@@ -145,7 +153,7 @@ class DriveSampler(
 
         // ✅ handover 时触发回调（例如：查基站库并画红三角）
         if (handover) {
-            onHandover?.invoke(s)
+            runCatching { onHandover?.invoke(s) }
         }
 
         // 更新 lastCellKey：只有 key 有意义才更新，否则保持上一次，避免抖动
@@ -162,7 +170,7 @@ class DriveSampler(
 
         val p = DrivePoint(
             latLng = ll,
-            ts = System.currentTimeMillis(),
+            ts = ts,
             simSlot = simSlot,
             rsrpDbm = rsrpDbm,
             isHandover = handover,
@@ -170,16 +178,14 @@ class DriveSampler(
             snapshot = s
         )
 
-        pointsBySlot.getOrPut(simSlot) { mutableListOf() }.add(p)
-        if (simSlot == visibleSimSlot) addMarkerForPoint(p) else null
-
-        // 落盘：放 IO 线程，避免卡 UI
-        val sid = resolvePersistSessionId?.invoke()
-        if (persistEnabled() && onPersist != null && !sid.isNullOrBlank()) {
-            scope.launch(Dispatchers.IO) {
-                runCatching { onPersist.invoke(p, sid) }
-            }
+        pointsBySlot.getOrPut(simSlot) { mutableListOf() }.apply {
+            add(p)
+            if (size > maxMarkers) removeAt(0)
         }
+        // A paused/unready map must never prevent either SIM from being persisted.
+        if (simSlot == visibleSimSlot) runCatching { addMarkerForPoint(p) }
+
+        return p
     }
 
     private fun trimIfNeeded() {
@@ -209,7 +215,6 @@ class DriveSampler(
 
         marker2Point[marker] = p
         markerQueue.addLast(marker)
-        markerQueueBySlot.getOrPut(p.simSlot) { ArrayDeque() }.addLast(marker)
         trimIfNeeded()
         return marker
     }

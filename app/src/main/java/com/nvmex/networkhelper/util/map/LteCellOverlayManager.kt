@@ -36,6 +36,7 @@ class LteCellOverlayManager(
     private val cacheDao: CellOverlayCacheDao,
     private val cacheTtlMs: Long = 7L * 24 * 3600_000L,
     private val serverCoord: ServerCoord = ServerCoord.WGS84,
+    private val maxHistoryMarkers: Int = 300,
 ) {
     private val icon by lazy { makeRedTriangleIcon(56) }
 
@@ -83,7 +84,6 @@ class LteCellOverlayManager(
     private val treatZeroAzimuthAsMissing: Boolean = true
 
     // 上限：保留最近 N 个基站
-    private val maxHistoryMarkers: Int = 300
     // 是否保留历史
     private val keepHistory: Boolean = true
 
@@ -101,6 +101,24 @@ class LteCellOverlayManager(
     fun updateSectorDrawConfig(angleDeg: Float, radiusMeters: Double) {
         sectorAngleDeg = angleDeg.coerceIn(20f, 180f)
         sectorRadiusMeters = radiusMeters.coerceIn(50.0, 2000.0)
+    }
+
+    /** Nearby results have no serving-cell anchor; group using each row's own coordinates. */
+    fun renderNearbyCells(rows: List<LteCellParam>): Int {
+        clear()
+        rows.filter { it.latitude != null && it.longitude != null }
+            .groupBy {
+                "${it.enodeb_id}|${it.tac}|${kotlin.math.round(it.latitude!! * 10000)}|" +
+                    kotlin.math.round(it.longitude!! * 10000)
+            }.forEach { (key, cells) ->
+                val anchor = cells.first().asRow()
+                renderOneStation(
+                    stationKey = "nearby|$key", anchorRow = anchor, rows = cells.map { it.asRow() },
+                    requestTac = anchor.tac ?: 0, requestEarfcn = anchor.earfcn ?: 0,
+                    headerMatch = "nearby"
+                )
+            }
+        return historyMap.size
     }
 
     fun clear() {
