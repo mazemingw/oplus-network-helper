@@ -48,4 +48,7 @@ interface LteCellParamDao {
 
     @Query("SELECT COUNT(*) FROM lte_cell_params")
     suspend fun count(): Int
+
+    @Query("SELECT * FROM lte_cell_params WHERE cellName LIKE '%' || :search || '%' OR CAST(eci AS TEXT) LIKE '%' || :search || '%' ORDER BY importedAt DESC LIMIT :limit")
+    suspend fun listLegacy(search: String, limit: Int): List<LteCellParamEntity>
 }

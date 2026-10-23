@@ -1,0 +1,21 @@
+The file beijing_sample.geojson is a small adapted OpenStreetMap database extract.
+Copyright: © OpenStreetMap contributors
+License: Open Data Commons Open Database License (ODbL) 1.0
+https://opendatacommons.org/licenses/odbl/1-0/
+https://www.openstreetmap.org/copyright
+
+The GeoJSON is distributed under ODbL-1.0 separately from the application's code.
+It includes exact original OSM nodes, source way IDs, versions and timestamps.
+The source database excerpt can be regenerated using tools/fetch_map_match_fixture.py.
+The source query URL and download timestamp are recorded in the GeoJSON itself.
+No AMap tile geometry or AMap corrected output is copied into this dataset.
+
+Coverage is limited to selected ways, NOT every road/railway inside the bounding box:
+- East/West Chang'an Avenue, Beijing: original nodes within 116.38–116.41 E,
+  39.903–39.910 N.
+- Beijing Subway Line 1: selected segments in the same rectangle.
+- Beijing Subway Line 8: selected original-node segments within 116.38–116.41 E,
+  39.895–39.919 N, from complete ways returned by the same OSM API response.
+
+This is test data, with no claim of surveyed positional accuracy, current
+operational status, full-line coverage or physical-track identification.

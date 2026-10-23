@@ -10,5 +10,12 @@ data class DrivePoint(
     val rsrpDbm: Int?,              // 可能取不到
     val isHandover: Boolean,        // 是否小区切换点（方块）
     val cellKey: String,            // 用于判定切换
-    val snapshot: NetworkPanelUiState
+    val snapshot: NetworkPanelUiState,
+    val estimated: Boolean = false,
+    val accuracyMeters: Float? = null,
+    val segmentStart: Boolean = false,
+    val rawLat: Double? = null,
+    val rawLng: Double? = null,
+    val rawCoordType: String? = null,
+    val mapMatchJson: String? = null
 )

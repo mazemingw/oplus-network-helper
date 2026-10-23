@@ -46,4 +46,7 @@ interface NrCellParamDao {
 
     @Query("SELECT COUNT(*) FROM nr_cell_params")
     suspend fun count(): Int
+
+    @Query("SELECT * FROM nr_cell_params WHERE cellName LIKE '%' || :search || '%' OR gcellId LIKE '%' || :search || '%' ORDER BY importedAt DESC LIMIT :limit")
+    suspend fun listLegacy(search: String, limit: Int): List<NrCellParamEntity>
 }

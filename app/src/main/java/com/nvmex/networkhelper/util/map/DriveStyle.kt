@@ -1,10 +1,20 @@
 package com.nvmex.networkhelper.util.map
 
-import android.graphics.Color
 import com.nvmex.networkhelper.model.network.NetworkPanelUiState
 
 //路测颜色转换工具
 object DriveStyle {
+    data class SignalBand(val minimum: Int?, val color: Int, val rangeLabel: String?)
+
+    // Shared by point/track rendering and the map legend. Ranges are inclusive integer dBm.
+    val signalBands = listOf(
+        SignalBand(-80, 0xFF1E88E5.toInt(), "≥ −80"),
+        SignalBand(-90, 0xFF43A047.toInt(), "−90 ~ −81"),
+        SignalBand(-100, 0xFFF9A825.toInt(), "−100 ~ −91"),
+        SignalBand(-110, 0xFFFB8C00.toInt(), "−110 ~ −101"),
+        SignalBand(Int.MIN_VALUE, 0xFFE53935.toInt(), "< −110"),
+        SignalBand(null, 0xFF808080.toInt(), null)
+    )
 
     fun cellKey(s: NetworkPanelUiState): String {
         // LTE 用 eci，NR 用 nci（你这里都存在在 ci 字段里：NR 解析时你应该也写到 ci 了）
@@ -27,14 +37,7 @@ object DriveStyle {
     }
 
     fun colorByRsrp(rsrp: Int?): Int {
-        // 你可以按自己口味调阈值
-        return when {
-            rsrp == null -> Color.GRAY
-            rsrp >= -80  -> Color.parseColor("#1E88E5") // 好：蓝
-            rsrp >= -90  -> Color.parseColor("#43A047") // 绿
-            rsrp >= -100 -> Color.parseColor("#F9A825") // 黄
-            rsrp >= -110 -> Color.parseColor("#FB8C00") // 橙
-            else         -> Color.parseColor("#E53935") // 红：很差
-        }
+        if (rsrp == null) return signalBands.last().color
+        return signalBands.first { it.minimum != null && rsrp >= it.minimum }.color
     }
 }

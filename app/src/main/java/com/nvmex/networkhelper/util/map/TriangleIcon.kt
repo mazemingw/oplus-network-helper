@@ -5,17 +5,19 @@ import com.amap.api.maps.model.BitmapDescriptor
 import com.amap.api.maps.model.BitmapDescriptorFactory
 
 //绘制红色三角形 基站标
-fun makeRedTriangleIcon(sizePx: Int = 54): BitmapDescriptor {
+fun makeRedTriangleIcon(sizePx: Int = 54): BitmapDescriptor = makeTriangleIcon(sizePx, Color.RED)
+
+fun makeTriangleIcon(sizePx: Int = 54, color: Int): BitmapDescriptor {
     val bmp = Bitmap.createBitmap(sizePx, sizePx, Bitmap.Config.ARGB_8888)
     val canvas = Canvas(bmp)
 
     val fill = Paint(Paint.ANTI_ALIAS_FLAG).apply {
         style = Paint.Style.FILL
-        color = Color.RED
+        this.color = color
     }
     val stroke = Paint(Paint.ANTI_ALIAS_FLAG).apply {
         style = Paint.Style.STROKE
-        color = Color.WHITE
+        this.color = Color.WHITE
         strokeWidth = (sizePx * 0.08f).coerceAtLeast(2f)
     }
 

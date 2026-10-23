@@ -280,6 +280,9 @@ fun ImportCellParamsScreen(
                 .padding(16.dp),
             verticalArrangement = Arrangement.spacedBy(16.dp)
         ) {
+            OutlinedButton(onClick = {
+                context.startActivity(com.nvmex.networkhelper.ui.management.DataManagementActivity.intent(context, "local"))
+            }, modifier = Modifier.fillMaxWidth()) { Text("管理本地工参 · 列表 / 编辑 / 删除") }
             if (isCheckingPermission) {
                 Card(
                     modifier = Modifier.fillMaxWidth(),

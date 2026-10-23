@@ -4,6 +4,7 @@ import androidx.room.Dao
 import androidx.room.Insert
 import androidx.room.OnConflictStrategy
 import androidx.room.Query
+import androidx.room.Transaction
 
 @Dao
 interface DrivePointDao {
@@ -14,6 +15,52 @@ interface DrivePointDao {
     // Room inserts the entire sampling tick in one transaction, including both SIMs.
     @Insert(onConflict = OnConflictStrategy.ABORT)
     suspend fun insertBatch(points: List<DrivePointEntity>)
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun putSession(session: DriveSessionEntity)
+
+    @Insert(onConflict = OnConflictStrategy.IGNORE)
+    suspend fun insertStations(stations: List<DriveStationEntity>)
+
+    @Query("SELECT * FROM drive_stations WHERE sessionId = :sessionId ORDER BY ts ASC")
+    suspend fun getStations(sessionId: String): List<DriveStationEntity>
+
+    @Query("DELETE FROM drive_stations WHERE sessionId = :sessionId")
+    suspend fun deleteStations(sessionId: String)
+
+    @Query("SELECT * FROM drive_sessions WHERE sessionId = :sessionId")
+    suspend fun getSession(sessionId: String): DriveSessionEntity?
+
+    @Query("SELECT * FROM drive_points WHERE sessionId = :sessionId ORDER BY ts ASC, id ASC LIMIT 1")
+    suspend fun getFirstPoint(sessionId: String): DrivePointEntity?
+
+    @Query("UPDATE drive_sessions SET cityName = :city WHERE sessionId = :sessionId AND cityName = ''")
+    suspend fun setCityIfEmpty(sessionId: String, city: String)
+
+    @Query("SELECT * FROM drive_points WHERE sessionId = :sessionId ORDER BY ts DESC, id DESC LIMIT 1")
+    suspend fun lastPoint(sessionId: String): DrivePointEntity?
+
+    @Transaction
+    suspend fun recordBatch(points: List<DrivePointEntity>, cityName: String) {
+        if (points.isEmpty()) return
+        val sid = points.first().sessionId
+        val meta = getSession(sid)
+        val previous = lastPoint(sid)
+        val track = (listOfNotNull(previous) + points).map { DriveTrackFix(it.ts, it.lat, it.lng, it.segmentStart) }
+        insertBatch(points)
+        putSession(DriveSessionEntity(sid, meta?.cityName?.takeIf { it.isNotBlank() } ?: cityName,
+            (meta?.distanceMeters ?: 0.0) + driveTrackLength(track)))
+    }
+
+    @Query("DELETE FROM drive_sessions WHERE sessionId = :sessionId")
+    suspend fun deleteSessionMetadata(sessionId: String)
+
+    @Transaction
+    suspend fun deleteRecording(sessionId: String) {
+        deleteStations(sessionId)
+        deleteSession(sessionId)
+        deleteSessionMetadata(sessionId)
+    }
 
     @Query("DELETE FROM drive_points WHERE sessionId = :sessionId")
     suspend fun deleteSession(sessionId: String)

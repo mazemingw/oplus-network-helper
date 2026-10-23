@@ -116,7 +116,8 @@ class NetworkPanelMultiSimViewModel(app: Application) : AndroidViewModel(app) {
         info: com.nvmex.networkhelper.model.network.NrCaInfo?
     ): com.nvmex.networkhelper.model.network.NrCaInfo? {
         if (state.dataNetworkType != "NR") return null
-        val carriers = info?.carriers.orEmpty()
+        if (info == null) return null
+        val carriers = info.carriers
         if (carriers.isEmpty()) return null
 
         val hasConfiguredCarrier = carriers.any {
@@ -125,7 +126,7 @@ class NetworkPanelMultiSimViewModel(app: Application) : AndroidViewModel(app) {
         if (!hasConfiguredCarrier) return null
 
         val hasPositiveDlBw = carriers.any {
-            (NrcaTranslator.bandwidthMhzOrNull(it.dlBwRaw) ?: 0) > 0
+            (NrcaTranslator.bandwidthMhzOrNull(it.dlBwRaw, info.bandwidthEncoding) ?: 0) > 0
         }
         val hasAnyActiveCarrier = carriers.any { it.dlStateRaw == 2 || it.ulStateRaw == 2 }
         if (!hasPositiveDlBw && !hasAnyActiveCarrier) return null

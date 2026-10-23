@@ -11,9 +11,10 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.CircleShape
-import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material3.Card
@@ -41,6 +42,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.Dp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.nvmex.networkhelper.R
 import com.nvmex.networkhelper.model.network.NetworkPanelUiState
@@ -50,6 +52,7 @@ import com.nvmex.networkhelper.ui.network.sections.localizedNetworkQualityText
 import com.nvmex.networkhelper.util.network.NetworkPanelWithPermissionGate
 import com.nvmex.networkhelper.util.network.comparisonDataSimStatus
 import com.nvmex.networkhelper.util.network.formatComparisonBand
+import com.nvmex.networkhelper.util.network.formatCellType
 import com.nvmex.networkhelper.util.network.sections.NetworkQualityAssessment
 import com.nvmex.networkhelper.util.network.sections.assessNetworkQuality
 import com.nvmex.networkhelper.util.windows.WindowUtils
@@ -74,7 +77,7 @@ private enum class SignalMetric(
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun SignalComparisonScreen(onBack: () -> Unit) {
+fun SignalComparisonScreen(onBack: () -> Unit, contentBottomPadding: Dp = 0.dp) {
     val context = LocalContext.current
     val statusBarHeight = WindowUtils.getStatusBarHeight(context)
 
@@ -106,7 +109,7 @@ fun SignalComparisonScreen(onBack: () -> Unit) {
                 .padding(horizontal = 16.dp)
         ) {
             NetworkPanelWithPermissionGate {
-                SignalComparisonContent()
+                SignalComparisonContent(contentBottomPadding = contentBottomPadding)
             }
         }
     }
@@ -114,7 +117,8 @@ fun SignalComparisonScreen(onBack: () -> Unit) {
 
 @Composable
 private fun SignalComparisonContent(
-    vm: NetworkPanelMultiSimViewModel = viewModel()
+    vm: NetworkPanelMultiSimViewModel = viewModel(),
+    contentBottomPadding: Dp = 0.dp
 ) {
     val sims by vm.sims.collectAsState()
     val frame by vm.frame.collectAsState()
@@ -129,99 +133,109 @@ private fun SignalComparisonContent(
         )
     }
 
-    Column(
+    LazyColumn(
         modifier = Modifier
-            .fillMaxSize()
-            .verticalScroll(rememberScrollState())
-            .padding(bottom = 24.dp),
+            .fillMaxSize(),
+        state = rememberLazyListState(),
+        contentPadding = PaddingValues(bottom = contentBottomPadding + 24.dp),
         verticalArrangement = Arrangement.spacedBy(14.dp)
     ) {
-        Text(
-            text = stringResource(R.string.home_signal_compare_live_hint),
-            style = MaterialTheme.typography.bodySmall,
-            color = MaterialTheme.colorScheme.onSurfaceVariant
-        )
-
-        SignalScoreOverview(entries)
-
-        Card(
-            modifier = Modifier.fillMaxWidth(),
-            colors = CardDefaults.cardColors(
-                containerColor = MaterialTheme.colorScheme.surfaceContainerLow
+        item(key = "hint") {
+            Text(
+                text = stringResource(R.string.home_signal_compare_live_hint),
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
             )
-        ) {
-            Column(
-                modifier = Modifier.padding(horizontal = 14.dp, vertical = 16.dp),
-                verticalArrangement = Arrangement.spacedBy(10.dp)
+        }
+
+        item(key = "scores") { SignalScoreOverview(entries) }
+
+        item(key = "basic") {
+            Card(
+                modifier = Modifier.fillMaxWidth(),
+                colors = CardDefaults.cardColors(
+                    containerColor = MaterialTheme.colorScheme.surfaceContainerLow
+                )
             ) {
-                Text(
-                    text = stringResource(R.string.home_signal_basic_info),
-                    style = MaterialTheme.typography.titleMedium,
-                    fontWeight = FontWeight.SemiBold
-                )
-                ComparisonHeader(entries)
-                HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
-                ComparisonRow(
-                    label = stringResource(R.string.home_signal_is_data_sim),
-                    values = entries.map {
-                        when (comparisonDataSimStatus(it.subscriptionId, dataSubId)) {
-                            true -> stringResource(R.string.state_yes)
-                            false -> stringResource(R.string.state_no)
-                            null -> "-"
+                Column(
+                    modifier = Modifier.padding(horizontal = 14.dp, vertical = 16.dp),
+                    verticalArrangement = Arrangement.spacedBy(10.dp)
+                ) {
+                    Text(
+                        text = stringResource(R.string.home_signal_basic_info),
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.SemiBold
+                    )
+                    ComparisonHeader(entries)
+                    HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
+                    ComparisonRow(
+                        label = stringResource(R.string.home_signal_is_data_sim),
+                        values = entries.map {
+                            when (comparisonDataSimStatus(it.subscriptionId, dataSubId)) {
+                                true -> stringResource(R.string.state_yes)
+                                false -> stringResource(R.string.state_no)
+                                null -> "-"
+                            }
                         }
-                    }
-                )
-                ComparisonRow(
-                    label = stringResource(R.string.network_operator),
-                    values = entries.map { displayValue(it.state?.operatorName) }
-                )
-                ComparisonRow(
-                    label = stringResource(R.string.home_signal_data_network),
-                    values = entries.map { displayValue(it.state?.dataNetworkType) }
-                )
-                ComparisonRow(
-                    label = stringResource(R.string.home_signal_nr_mode),
-                    values = entries.map { displayValue(it.state?.nrMode) }
-                )
-                ComparisonRow(
-                    label = stringResource(R.string.home_signal_band),
-                    values = entries.map { formatComparisonBand(it.state) }
-                )
-                ComparisonRow(
-                    label = stringResource(R.string.home_signal_arfcn),
-                    values = entries.map { displayValue(it.state?.arfcn) }
-                )
+                    )
+                    ComparisonRow(
+                        label = stringResource(R.string.network_operator),
+                        values = entries.map { displayValue(it.state?.operatorName) }
+                    )
+                    ComparisonRow(
+                        label = stringResource(R.string.home_signal_data_network),
+                        values = entries.map { displayValue(it.state?.dataNetworkType) }
+                    )
+                    ComparisonRow(
+                        label = stringResource(R.string.network_cell_type),
+                        values = entries.map { formatCellType(it.state?.cellType.orEmpty(), it.state?.arfcn?.toIntOrNull()) }
+                    )
+                    ComparisonRow(
+                        label = stringResource(R.string.home_signal_nr_mode),
+                        values = entries.map { displayValue(it.state?.nrMode) }
+                    )
+                    ComparisonRow(
+                        label = stringResource(R.string.home_signal_band),
+                        values = entries.map { formatComparisonBand(it.state) }
+                    )
+                    ComparisonRow(
+                        label = stringResource(R.string.home_signal_arfcn),
+                        values = entries.map { displayValue(it.state?.arfcn) }
+                    )
+                }
             }
         }
 
-        Card(
-            modifier = Modifier.fillMaxWidth(),
-            colors = CardDefaults.cardColors(
-                containerColor = MaterialTheme.colorScheme.surfaceContainerLow
-            )
-        ) {
-            Column(
-                modifier = Modifier.padding(horizontal = 14.dp, vertical = 16.dp),
-                verticalArrangement = Arrangement.spacedBy(12.dp)
-            ) {
-                Text(
-                    text = stringResource(R.string.home_signal_quality),
-                    style = MaterialTheme.typography.titleMedium,
-                    fontWeight = FontWeight.SemiBold
+        item(key = "quality") {
+            Card(
+                modifier = Modifier.fillMaxWidth(),
+                colors = CardDefaults.cardColors(
+                    containerColor = MaterialTheme.colorScheme.surfaceContainerLow
                 )
-                ComparisonHeader(entries)
-                HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
-                SignalMetric.entries.forEach { metric ->
-                    SignalComparisonRow(
-                        metric = metric,
-                        values = entries.map { signalValue(it.state, metric) }
+            ) {
+                Column(
+                    modifier = Modifier.padding(horizontal = 14.dp, vertical = 16.dp),
+                    verticalArrangement = Arrangement.spacedBy(12.dp)
+                ) {
+                    Text(
+                        text = stringResource(R.string.home_signal_quality),
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.SemiBold
+                    )
+                    ComparisonHeader(entries)
+                    HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
+                    SignalMetric.entries.forEach { metric ->
+                        SignalComparisonRow(
+                            metric = metric,
+                            values = entries.map { signalValue(it.state, metric) }
+                        )
+                    }
+                    Text(
+                        text = stringResource(R.string.home_signal_nr_ss_hint),
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
                 }
-                Text(
-                    text = stringResource(R.string.home_signal_nr_ss_hint),
-                    style = MaterialTheme.typography.labelSmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
             }
         }
     }

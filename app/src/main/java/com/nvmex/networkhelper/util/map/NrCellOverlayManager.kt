@@ -16,8 +16,10 @@ import com.nvmex.networkhelper.network.model.NrSiteQueryResp
 import com.nvmex.networkhelper.repository.CellParamLocalRepository
 import com.nvmex.networkhelper.util.map.Gcj02
 import com.nvmex.networkhelper.util.map.makeRedTriangleIcon
+import com.nvmex.networkhelper.util.map.makeTriangleIcon
 import com.nvmex.networkhelper.util.network.telephony.nrGuessBandByDlMhzCN
 import com.nvmex.networkhelper.util.network.utils.nrArfcnToMhz
+import com.nvmex.networkhelper.util.map.mapChannelFrequency
 import com.nvmex.networkhelper.xposed.logger.Logger
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -30,7 +32,8 @@ class NrCellOverlayManager(
     private val localRepository: CellParamLocalRepository,
     private val scope: CoroutineScope,
     private val serverCoord: ServerCoord = ServerCoord.WGS84,
-    private val maxHistoryMarkers: Int = 300
+    private val maxHistoryMarkers: Int = 300,
+    private val drawAntennas: Boolean = true
 ) {
     sealed interface QueryResult {
         data class Rendered(
@@ -44,6 +47,8 @@ class NrCellOverlayManager(
     }
 
     private val icon by lazy { makeRedTriangleIcon(56) }
+    private val linkedIcon by lazy { makeTriangleIcon(56, 0xFF159447.toInt()) }
+    private var linkedStationKeys = emptySet<String>()
 
     private var sectorRadiusMeters: Double = 200.0
     private var sectorAngleDeg: Float = 120f
@@ -84,21 +89,40 @@ class NrCellOverlayManager(
     private val historyMap = HashMap<String, BsNode>(256)
     private val history = ArrayDeque<BsNode>(128)
 
+    private var antennasVisible = true
+    private var antennaStationKeys: Set<String>? = null
+    fun setAntennaVisible(visible: Boolean) {
+        antennasVisible = visible
+        history.forEach { applyAntennaVisibility(it) }
+    }
+
+    private fun applyAntennaVisibility(node: BsNode) {
+        node.sectors.forEach { it.isVisible = antennasVisible }
+        node.lines.forEach { it.isVisible = antennasVisible }
+        node.labels.forEach { it.isVisible = antennasVisible }
+    }
+
     fun updateSectorDrawConfig(angleDeg: Float, radiusMeters: Double) {
         sectorAngleDeg = angleDeg.coerceIn(20f, 180f)
         sectorRadiusMeters = radiusMeters.coerceIn(50.0, 2000.0)
     }
 
-    fun renderNearbyCells(rows: List<NrCellParamItem>): Int {
+    private fun nearbyStationKey(row: NrCellParamItem): String =
+        "nearby|${row.nr_tac}|${kotlin.math.round(row.latitude!! * 10000)}|" +
+            kotlin.math.round(row.longitude!! * 10000)
+
+    fun renderNearbyCells(rows: List<NrCellParamItem>, antennaRows: List<NrCellParamItem> = rows,
+        linkedRows: List<NrCellParamItem> = emptyList()): Int {
         clear()
+        linkedStationKeys = linkedRows.filter { it.latitude != null && it.longitude != null }
+            .map(::nearbyStationKey).toSet()
+        antennaStationKeys = antennaRows.filter { it.latitude != null && it.longitude != null }
+            .map(::nearbyStationKey).toSet()
         rows.filter { it.latitude != null && it.longitude != null }
-            .groupBy {
-                "${it.nr_tac}|${kotlin.math.round(it.latitude!! * 10000)}|" +
-                    kotlin.math.round(it.longitude!! * 10000)
-            }.forEach { (key, cells) ->
+            .groupBy(::nearbyStationKey).forEach { (key, cells) ->
                 val anchor = cells.first()
                 renderOneStation(
-                    stationKey = "nearby|$key", anchorRow = anchor, rows = cells,
+                    stationKey = key, anchorRow = anchor, rows = cells,
                     requestTac = anchor.nr_tac, requestArfcn = anchor.nr_arfcn,
                     requestPci = anchor.nr_pci, headerMatch = "nearby"
                 )
@@ -107,6 +131,8 @@ class NrCellOverlayManager(
     }
 
     fun clear() {
+        linkedStationKeys = emptySet()
+        antennaStationKeys = null
         history.forEach { node ->
             runCatching { node.marker.remove() }
             node.sectors.forEach { runCatching { it.remove() } }
@@ -382,6 +408,9 @@ class NrCellOverlayManager(
         val snippet = buildString {
             if (!headerMatch.isNullOrBlank()) append("match=").append(headerMatch).append('\n')
             append("count=").append(rows.size).append('\n')
+            rows.mapNotNull { it.nr_arfcn }.distinct().sorted().forEach { channel ->
+                append("NR-ARFCN=").append(channel).append("  ").append(mapChannelFrequency("NR", channel)).append('\n')
+            }
             if (requestTac != null || requestArfcn != null) {
                 append("tac=").append(requestTac ?: "-").append("  nrarfcn=").append(requestArfcn ?: "-").append('\n')
             }
@@ -407,9 +436,9 @@ class NrCellOverlayManager(
         val marker = aMap.addMarker(
             MarkerOptions()
                 .position(pos)
-                .icon(icon)
+                .icon(if (stationKey in linkedStationKeys) linkedIcon else icon)
                 .anchor(0.5f, 1.0f)
-                .zIndex(triangleZ)
+                .zIndex(if (stationKey in linkedStationKeys) 50f else triangleZ)
                 .title(title)
                 .snippet(snippet)
         ) ?: run {
@@ -417,8 +446,16 @@ class NrCellOverlayManager(
             return false
         }
 
+        marker.setObject(anchorRow)
+        if (!drawAntennas || antennaStationKeys?.let { stationKey !in it } == true) {
+            val node = BsNode(stationKey, marker, emptyList(), emptyList(), emptyList())
+            history.addLast(node)
+            historyMap[stationKey] = node
+            trimHistoryIfNeeded()
+            return true
+        }
         val groups = groupByAzimuthCluster(rows)
-        val shouldDrawCircle = groups.size == 1 && (groups.first().azimuth == null || groups.first().azimuth == 0f)
+        val shouldDrawCircle = groups.size == 1 && groups.first().azimuth == null
 
         val polys = ArrayList<Polygon>(8)
         val plines = ArrayList<Polyline>(8)
@@ -482,6 +519,7 @@ class NrCellOverlayManager(
         val node = BsNode(stationKey, marker, polys, plines, labels)
         history.addLast(node)
         historyMap[stationKey] = node
+        applyAntennaVisibility(node)
         trimHistoryIfNeeded()
         return true
     }
@@ -526,7 +564,7 @@ class NrCellOverlayManager(
             return listOf(
                 SectorGroup(
                     key = "az#na",
-                    azimuth = null,
+                    azimuth = if (zeros.isNotEmpty()) 0f else null,
                     rows = rows
                 )
             )

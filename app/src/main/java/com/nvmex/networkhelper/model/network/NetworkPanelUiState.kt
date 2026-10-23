@@ -1,5 +1,7 @@
 package com.nvmex.networkhelper.model.network
 
+import com.nvmex.networkhelper.util.network.NrcaBandwidthEncoding
+
 data class NetworkPanelUiState(
     val hasPhonePermission: Boolean = false,
     val hasLocationPermission: Boolean = false,
@@ -100,7 +102,8 @@ data class NrCaInfo(
     val slot: Int,
     val type: Int,
     val carriers: List<NrCaCarrier>,
-    val updatedAt: Long
+    val updatedAt: Long,
+    val bandwidthEncoding: NrcaBandwidthEncoding = NrcaBandwidthEncoding.LEGACY
 )
 
 data class LteCaCarrier(

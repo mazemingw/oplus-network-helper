@@ -1,6 +1,7 @@
 package com.nvmex.networkhelper.xposed.handler
 
 import android.os.SystemClock
+import com.nvmex.networkhelper.util.network.NrcaBandwidth
 import com.nvmex.networkhelper.xposed.broad.BroadcastHelper
 import com.nvmex.networkhelper.xposed.logger.Logger
 import com.nvmex.networkhelper.xposed.translator.NrcaTranslator
@@ -27,7 +28,7 @@ class NrcaHandler(private val broadcastHelper: BroadcastHelper) {
 
             if (dumpedFieldsOnce.compareAndSet(false, true)) {
                 val fields = c.declaredFields.joinToString { "${it.type.simpleName}:${it.name}" }
-                Logger.log("[NRCA][parse] nrcaClass=${c.name} cl=${Logger.clTag(c.classLoader)} fields=$fields")
+                Logger.log("[NRCA][parse] nrcaClass=${c.name} cl=${Logger.clTag(c.classLoader)} bandwidthEncoding=${NrcaBandwidth.deviceEncoding.wireValue} fields=$fields")
             }
 
             val numField = XposedHelpers.findField(c, "numCarriers")
@@ -155,6 +156,7 @@ class NrcaHandler(private val broadcastHelper: BroadcastHelper) {
             .put("slot", slot)
             .put("type", type)
             .put("carriers", carriers)
+            .put("bandwidthEncoding", NrcaBandwidth.deviceEncoding.wireValue)
             .put("list", list)
             .toString()
     }

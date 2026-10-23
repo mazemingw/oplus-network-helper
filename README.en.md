@@ -8,10 +8,10 @@ Compose and includes a separate VPN/hotspot library module.
 
 ## Source version and downloads
 
-- Current source: `v1.5.3` (versionCode `53`). This update publishes source code without creating a Release.
-- [v1.4.5 ARM64 APK](https://github.com/mazemingw/oplus-network-helper/releases/tag/v1.4.5)
+- Current source: `v1.5.7-dev` (versionCode `57`).
+- [v1.5.7-dev ARM64 APK and release notes](https://github.com/mazemingw/oplus-network-helper/releases/tag/v1.5.7-dev) (prerelease)
 - Architecture: `arm64-v8a`
-- SHA-256: `624EEC9EA2FE25152A4320CD6C44758B8DA820A38DFDF0CAFDFF58E3609DED04`
+- APK SHA-256: `bd952a7b29a2b16ce4f337474b1bbafc05f720b4d24fa16a730a6bdd2883e8ae`
 
 ## Features
 
@@ -21,6 +21,7 @@ Compose and includes a separate VPN/hotspot library module.
 - **QoS diagnostics**: inspect Qualcomm DATA/IMS QCI, AMBR and NAS information with per-SIM caches. The experimental MediaTek AT reader has not been verified on a MediaTek device.
 - **Engineer-mode tools**: access network engineering functions and clear engineer-mode files.
 - **Bands and cells**: inspect LTE/NR bands, cell parameters and carrier aggregation.
+- **Local data management**: manage imported cells and locally recorded cell information. Dedicated home-log and drive-record pages support Excel-compatible CSV import/export, including original and GCJ02 coordinates for new drive points. See the [data-management guide (Chinese)](docs/local-data-management.md).
 - **Network utilities**: iPerf speed tests, Wi-Fi information, Ping and VPN/hotspot management; Wi-Fi channel plots compress idle ranges and display separate 80+80 MHz segments.
 - **Updates and plugin sharing**: show download, validation and installer phases, validate APK package/version/signatures, and import standalone plugins or sharing archives that contain framework files.
 - **Xposed/vendor APIs**: some advanced features require root, Xposed/LSPosed or vendor-specific system APIs.
@@ -33,7 +34,15 @@ Select all RATs, 4G or 5G independently of the band. Leave the band empty for al
 
 Opening the map keeps the current location. Only manually restoring a Session moves the camera to its first point. SIM tabs select each recorded dataset, including older single-SIM recordings. See the [drive-map guide (Chinese)](docs/drive-test-map.md).
 
+Map updates add dense markers with continuous full-resolution tracks, handover/serving-sector switches, a red serving-station distance link, scrolling operator names and dedicated map/2D/3D buttons. Recordings show their start city and estimated length, save on exit and can be explicitly selected for continued recording. GPS, accelerometer and gyroscope fusion starts when the map opens and calibrates while driving. It estimates turns and speed changes during GPS outages up to 60 seconds; vehicle validation is still required.
+
+AMap positioning and sampling take priority without waiting for IMU readiness. The speed panel shows only speed and IMU Ready/Not ready. Nearby stations show markers; antenna sectors belong only to the current serving station, including the selected point during replay. Connected station and antenna-sector snapshots are saved with each Session for offline per-SIM replay; marker details append frequencies in MHz. The dual-SIM comparison page scrolls vertically and includes the cell type. NR channel 520830 is labeled as a metro private network, while existing high-speed railway labels are retained.
+
 The Apache 2.0 backend has its own repository: [NetworkHelperBack](https://github.com/mazemingw/NetworkHelperBack). Deploy the updated backend and restart it to enable the [nearby station API](https://github.com/mazemingw/NetworkHelperBack/blob/main/nearby-api.md).
+
+Optional Falcon correction is off by default. The official AMap Android Falcon SDK uploads and queries driving tracks with road matching; no route import is required. Gathering starts and stops with road-test recording; browsing the map does not upload a track. Raw fixes, inertial estimates and dual-SIM measurements remain separate. Railway and subway correction is not supported. The map has translucent overlays, upper-right map/view/speed controls, lower-right actions aligned with the RSRP legend, and bottom-center zoom controls. The serving station is green; selected markers are highlighted, and tapping an information bubble copies its details. Point details and CSV include RSRQ, SINR and NR SS measurements. See [integration and device acceptance notes (Chinese)](docs/map-matching-mvp.md).
+
+Under the More FAB, Band filter and coverage accepts separate comma-separated LTE/NR bands, such as `3,41` and `41,28`, for live points and recording replay. The overlay lists the selected bands and their distance coverage; grey lines retain the unselected road-test path, and all raw samples remain saved. NRCA bandwidth decoding on newer devices uses system capability checks while retaining legacy decoding. See the [analysis (Chinese)](docs/nrca-pyb110-analysis.md).
 
 ## Screenshots
 

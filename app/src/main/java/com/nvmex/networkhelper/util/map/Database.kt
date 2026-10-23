@@ -10,9 +10,11 @@ import androidx.sqlite.db.SupportSQLiteDatabase
 @Database(
     entities = [
         DrivePointEntity::class,
+        DriveSessionEntity::class,
+        DriveStationEntity::class,
         CellOverlayCacheEntity::class, // ✅新增
     ],
-    version = 3,
+    version = 6,
     exportSchema = false  // 你原来就是 false，保持不变
 )
 abstract class AppDb : RoomDatabase() {
@@ -59,6 +61,30 @@ abstract class AppDb : RoomDatabase() {
             }
         }
 
+        private val MIGRATION_3_4 = object : Migration(3, 4) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL("ALTER TABLE drive_points ADD COLUMN estimated INTEGER NOT NULL DEFAULT 0")
+                db.execSQL("ALTER TABLE drive_points ADD COLUMN accuracyMeters REAL")
+                db.execSQL("ALTER TABLE drive_points ADD COLUMN segmentStart INTEGER NOT NULL DEFAULT 0")
+                db.execSQL("CREATE INDEX IF NOT EXISTS index_drive_points_sessionId_ts ON drive_points (sessionId, ts)")
+                db.execSQL("CREATE TABLE IF NOT EXISTS drive_sessions (sessionId TEXT NOT NULL PRIMARY KEY, cityName TEXT NOT NULL, distanceMeters REAL NOT NULL)")
+            }
+        }
+
+        val MIGRATION_4_5 = object : Migration(4, 5) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL("CREATE TABLE IF NOT EXISTS drive_stations (sessionId TEXT NOT NULL, simSlot INTEGER NOT NULL, cellKey TEXT NOT NULL, ts INTEGER NOT NULL, userLat REAL NOT NULL, userLng REAL NOT NULL, snapshotJson TEXT NOT NULL, PRIMARY KEY(sessionId, simSlot, cellKey))")
+            }
+        }
+
+        val MIGRATION_5_6 = object : Migration(5, 6) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL("ALTER TABLE drive_points ADD COLUMN rawLat REAL")
+                db.execSQL("ALTER TABLE drive_points ADD COLUMN rawLng REAL")
+                db.execSQL("ALTER TABLE drive_points ADD COLUMN rawCoordType TEXT")
+            }
+        }
+
         fun get(context: Context): AppDb =
             INS ?: synchronized(this) {
                 INS ?: Room.databaseBuilder(
@@ -66,7 +92,7 @@ abstract class AppDb : RoomDatabase() {
                     AppDb::class.java,
                     "networkhelper.db"
                 )
-                    .addMigrations(MIGRATION_1_2, MIGRATION_2_3)
+                    .addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6)
                     .build()
                     .also { INS = it }
             }

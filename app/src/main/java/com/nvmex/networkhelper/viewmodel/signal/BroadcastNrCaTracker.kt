@@ -8,6 +8,8 @@ import android.content.IntentFilter
 import androidx.core.content.ContextCompat
 import com.nvmex.networkhelper.model.network.NrCaCarrier
 import com.nvmex.networkhelper.model.network.NrCaInfo
+import com.nvmex.networkhelper.util.network.NrcaBandwidth
+import com.nvmex.networkhelper.util.network.NrcaBandwidthEncoding
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.update
@@ -82,7 +84,12 @@ class BroadcastNrCaTracker(
     }
 }
 
-private fun parseNrCaJson(slot: Int, type: Int, json: String): NrCaInfo {
+internal fun parseNrCaJson(
+    slot: Int,
+    type: Int,
+    json: String,
+    fallbackEncoding: NrcaBandwidthEncoding? = null
+): NrCaInfo {
     val root = JSONObject(json)
     val list = root.optJSONArray("list")
 
@@ -116,6 +123,8 @@ private fun parseNrCaJson(slot: Int, type: Int, json: String): NrCaInfo {
         slot = slot,
         type = type,
         carriers = carriers,
-        updatedAt = System.currentTimeMillis() // 使用当前时间戳
+        updatedAt = System.currentTimeMillis(), // 使用当前时间戳
+        bandwidthEncoding = NrcaBandwidthEncoding.fromWireValue(root.optString("bandwidthEncoding"))
+            ?: fallbackEncoding ?: NrcaBandwidth.deviceEncoding
     )
 }

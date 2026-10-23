@@ -20,81 +20,52 @@ import javax.inject.Singleton
 @Singleton
 class CellParamLocalRepository @Inject constructor(
     private val nrDao: NrCellParamDao,
-    private val lteDao: LteCellParamDao
+    private val lteDao: LteCellParamDao,
+    private val managed: com.nvmex.networkhelper.db.entity.ManagedCellDao
 ) {
 
     /**
      * 导入 NR 文件后写入本地库
      * 唯一键：gcellId
      */
-    suspend fun saveNr(items: List<NrCellParam>): LocalSaveResult {
-        if (items.isEmpty()) {
-            return LocalSaveResult(false, 0, 0, "NR 数据为空")
-        }
+    suspend fun saveNr(items: List<NrCellParam>): LocalSaveResult = saveImported(items.map {
+        com.nvmex.networkhelper.db.entity.ManagedCell.from(it.toEntity())
+    })
 
-        var inserted = 0
-        var updated = 0
+    suspend fun saveLte(items: List<ImportLteCellParam>): LocalSaveResult = saveImported(items.filter { it.eci != null }.map {
+        com.nvmex.networkhelper.db.entity.ManagedCell.from(it.toEntity())
+    })
 
-        for (item in items) {
-            val gcellId = item.gcellId.trim()
-            if (gcellId.isBlank()) continue
-
-            val entity = item.toEntity()
-            val rowId = nrDao.insertIgnore(listOf(entity)).firstOrNull() ?: -1L
-            if (rowId > 0) {
-                inserted++
-            } else {
-                val old = nrDao.findByGcellId(gcellId)
-                if (old != null) {
-                    nrDao.update(listOf(entity.copy(id = old.id)))
-                    updated++
-                }
+    private suspend fun saveImported(items: List<com.nvmex.networkhelper.db.entity.ManagedCell>): LocalSaveResult {
+        val rows = items.distinctBy { it.rat to it.ci }
+        require(rows.isNotEmpty()) { "没有可写入的本地工参" }
+        rows.forEachIndexed { index, row ->
+            try { row.validate(requireName = false) } catch (error: IllegalArgumentException) {
+                throw IllegalArgumentException("第 ${index + 1} 条工参：${error.message}")
             }
         }
-
-        return LocalSaveResult(
-            success = true,
-            inserted = inserted,
-            updated = updated,
-            message = "本地写入完成：新增 $inserted 条，更新 $updated 条"
-        )
+        val before = managed.count()
+        managed.put(rows)
+        val inserted = managed.count() - before
+        return LocalSaveResult(true, inserted, rows.size - inserted, "本地写入完成：新增 $inserted 条，更新 ${rows.size - inserted} 条")
     }
 
-    /**
-     * 导入 LTE 文件后写入本地库
-     * 唯一键：eci
-     */
-    suspend fun saveLte(items: List<ImportLteCellParam>): LocalSaveResult {
-        if (items.isEmpty()) {
-            return LocalSaveResult(false, 0, 0, "LTE 数据为空")
-        }
-
-        var inserted = 0
-        var updated = 0
-
-        for (item in items) {
-            val entity = item.toEntity()
-            val eci = entity.eci ?: continue
-
-            val rowId = lteDao.insertIgnore(listOf(entity)).firstOrNull() ?: -1L
-            if (rowId > 0) {
-                inserted++
-            } else {
-                val old = lteDao.findByEci(eci)
-                if (old != null) {
-                    lteDao.update(listOf(entity.copy(id = old.id)))
-                    updated++
-                }
-            }
-        }
-
-        return LocalSaveResult(
-            success = true,
-            inserted = inserted,
-            updated = updated,
-            message = "本地写入完成：新增 $inserted 条，更新 $updated 条"
-        )
+    suspend fun listManaged(search: String = "", limit: Int = 100, offset: Int = 0) = managed.list(search, limit, offset)
+    suspend fun findManaged(rat: String, ci: String) = managed.find(rat, ci)
+    suspend fun countManaged() = managed.count()
+    suspend fun listLegacy(search: String, limit: Int) = (lteDao.listLegacy(search, limit).filter { it.eci != null }.map {
+        com.nvmex.networkhelper.db.entity.ManagedCell.from(it)
+    } + nrDao.listLegacy(search, limit).map { com.nvmex.networkhelper.db.entity.ManagedCell.from(it) }).sortedByDescending { it.updatedAt }.take(limit)
+    suspend fun countLegacy() = lteDao.count() + nrDao.count()
+    suspend fun deleteLegacy(rat: String, ci: String) {
+        if (rat == "LTE") ci.toLongOrNull()?.let { lteDao.deleteByEci(it) } else nrDao.deleteByGcellId(ci)
     }
+    suspend fun saveManaged(row: com.nvmex.networkhelper.db.entity.ManagedCell, replaceLegacy: Boolean = false) {
+        row.validate()
+        managed.put(listOf(row.copy(updatedAt = System.currentTimeMillis())))
+        if (replaceLegacy) deleteLegacy(row.rat, row.ci)
+    }
+    suspend fun deleteManaged(rat: String, ci: String) = managed.delete(rat, ci)
 
     /**
      * NR 查询：优先本地
@@ -102,6 +73,9 @@ class CellParamLocalRepository @Inject constructor(
      */
     suspend fun queryNr(body: NrQueryReq): NrCellQueryResp? {
         val gcellId = body.gcellId?.trim().orEmpty()
+        val own = if (gcellId.isNotBlank()) managed.find("NR", gcellId)
+            else managed.match("NR", body.nrTac, body.nrArfcn, body.nrPci)
+        if (own != null) return own.nr().toNrQueryResp().copy(match_level = "local_user")
 
         val entity = if (gcellId.isNotBlank()) {
             nrDao.findByGcellId(gcellId)
@@ -121,6 +95,9 @@ class CellParamLocalRepository @Inject constructor(
      * 优先 eci，其次 tac + earfcn + pci + cellId
      */
     suspend fun queryLte(body: LteCellQueryBody): LteCellQueryResp? {
+        val own = if (body.eci != null) managed.find("LTE", body.eci.toString())
+            else managed.match("LTE", body.tac, body.earfcn, body.pci)
+        if (own != null) return own.lte().toLteQueryResp().copy(match_level = "local_user")
         val entity = if (body.eci != null) {
             lteDao.findByEci(body.eci)
         } else {

@@ -120,6 +120,8 @@
 # 你当前明确用了 3D 地图
 -keep class com.amap.api.maps.** { *; }
 -keep class com.amap.api.location.** { *; }
+-keep class com.amap.api.track.** { *; }
+-keep class com.amap.api.col.trl.** { *; }
 -keep class com.autonavi.** { *; }
 -keep class com.loc.** { *; }
 -keep class com.autonavi.aps.amapapi.model.** { *; }

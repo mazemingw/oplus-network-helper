@@ -29,6 +29,7 @@ import androidx.compose.ui.unit.dp
 import com.nvmex.networkhelper.R
 import com.nvmex.networkhelper.model.network.NrCaCarrier
 import com.nvmex.networkhelper.model.network.NrCaInfo
+import com.nvmex.networkhelper.util.network.NrcaBandwidthEncoding
 import com.nvmex.networkhelper.util.network.utils.nrArfcnToMhz
 import com.nvmex.networkhelper.xposed.translator.NrcaTranslator
 import java.util.Locale
@@ -118,7 +119,8 @@ fun NrCaDetailDialog(
                                 NrCaCarrierCardCompact(
                                     idx = idx,
                                     c = c,
-                                    showBandwidth = showBandwidth
+                                    showBandwidth = showBandwidth,
+                                    bandwidthEncoding = info.bandwidthEncoding
                                 )
                             }
                         }
@@ -142,7 +144,8 @@ fun NrCaDetailDialog(
 private fun NrCaCarrierCardCompact(
     idx: Int,
     c: NrCaCarrier,
-    showBandwidth: Boolean
+    showBandwidth: Boolean,
+    bandwidthEncoding: NrcaBandwidthEncoding
 ) {
     Card(
         modifier = Modifier.fillMaxWidth(),
@@ -166,7 +169,7 @@ private fun NrCaCarrierCardCompact(
                 )
 
                 val bandText = bandTextOf(c)
-                val freqRangeText = freqRangeTextOf(c)
+                val freqRangeText = freqRangeTextOf(c, bandwidthEncoding)
                 Row(
                     horizontalArrangement = Arrangement.spacedBy(6.dp),
                     verticalAlignment = Alignment.CenterVertically
@@ -187,9 +190,9 @@ private fun NrCaCarrierCardCompact(
             CompactKeyValueRow("PCI", c.pci.toString())
             CompactKeyValueRow("CC / SCC", "ccId=${c.ccId}  sccId=${c.sccId}")
             CompactKeyValueRow("DL STATE", NrcaTranslator.activityState(c.dlStateRaw))
-            CompactKeyValueRow("DL BW", if (showBandwidth) NrcaTranslator.bandwidth(c.dlBwRaw) else "-")
+            CompactKeyValueRow("DL BW", if (showBandwidth) NrcaTranslator.bandwidth(c.dlBwRaw, bandwidthEncoding) else "-")
             CompactKeyValueRow("UL STATE", NrcaTranslator.activityState(c.ulStateRaw))
-            CompactKeyValueRow("UL BW", if (showBandwidth) NrcaTranslator.bandwidth(c.ulBwRaw) else "-")
+            CompactKeyValueRow("UL BW", if (showBandwidth) NrcaTranslator.bandwidth(c.ulBwRaw, bandwidthEncoding) else "-")
         }
     }
 }
@@ -214,10 +217,10 @@ private fun NrBandChip(text: String) {
 
 private fun bandTextOf(c: NrCaCarrier): String = NrcaTranslator.bandSmart(c.bandRaw).trim()
 
-private fun freqRangeTextOf(c: NrCaCarrier): String? {
+private fun freqRangeTextOf(c: NrCaCarrier, bandwidthEncoding: NrcaBandwidthEncoding): String? {
     val centerMhz = c.dlArfcn.takeIf { it > 0 }?.let(::nrArfcnToMhz)?.takeIf { it > 0.0 }
-    val bwMhz = NrcaTranslator.bandwidthMhzOrNull(c.dlBwRaw)
-        ?: NrcaTranslator.bandwidthMhzOrNull(c.ulBwRaw)
+    val bwMhz = NrcaTranslator.bandwidthMhzOrNull(c.dlBwRaw, bandwidthEncoding)
+        ?: NrcaTranslator.bandwidthMhzOrNull(c.ulBwRaw, bandwidthEncoding)
 
     return if (centerMhz != null && bwMhz != null && bwMhz > 0) {
         val half = bwMhz / 2.0

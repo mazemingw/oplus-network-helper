@@ -1,0 +1,22 @@
+<resources>
+    <string name="map_falcon_idle">Match · Idle</string>
+    <string name="map_falcon_idle_description">Falcon gathering starts with road-test recording and stops with it. Stopping also removes the live matched path. Browsing the map does not upload a track.</string>
+    <string name="map_matching_title">Falcon trajectory correction</string>
+    <string name="map_matching_description">Use AMap Falcon to denoise and match driving tracks to roads. Enabling this uploads location tracks to AMap; raw points and dual-SIM measurements are kept separately.</string>
+    <string name="map_matching_coverage">No route import required. Cyan shows cloud corrections; signal-colored tracks retain raw positions. Driving roads are supported; railways and subways are not.</string>
+    <string name="map_falcon_connecting">Correction · Connecting</string>
+    <string name="map_falcon_waiting">Correction · Waiting</string>
+    <string name="map_falcon_ready">Correction · Synced</string>
+    <string name="map_falcon_unavailable">Correction · Setup needed</string>
+    <string name="map_falcon_not_configured">Trajectory correction has not been configured. Contact your administrator.</string>
+    <string name="map_falcon_retrying">Correction · Retrying</string>
+    <string name="map_falcon_retry">Reconnect</string>
+    <string name="map_falcon_history">Correction · History</string>
+    <string name="map_falcon_history_no_data">This recording has no Falcon track metadata. Showing the raw road-test points.</string>
+    <string name="map_falcon_history_description">Showing the recording’s Falcon track. Replay does not upload historical points or collect live locations.</string>
+    <string name="map_falcon_description">AMap Falcon driving correction collects every 2 seconds, syncs every 10 seconds and refreshes the last 3 minutes about every 15 seconds. Cyan shows the cloud road track. Delayed endpoints never replace your current position; raw locations remain available during outages. Railway and subway correction is not supported.</string>
+    <string name="map_falcon_network_error">Cloud connection unavailable; retrying automatically. Raw locations and road-test recording continue.</string>
+    <string name="map_falcon_error_code">Falcon unavailable (code %1$d); retrying automatically. Raw locations and recording continue.</string>
+    <string name="map_falcon_notification">Road-test trajectory correction</string>
+    <string name="map_falcon_notification_detail">AMap Falcon is syncing the driving track</string>
+</resources>

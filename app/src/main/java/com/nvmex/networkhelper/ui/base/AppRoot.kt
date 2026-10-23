@@ -282,7 +282,8 @@ fun AppRoot(
                 exitTransition = { slideOutHorizontally(targetOffsetX = { -it }) + fadeOut() }
             ) {
                 SignalComparisonScreen(
-                    onBack = { navController.popBackStack() }
+                    onBack = { navController.popBackStack() },
+                    contentBottomPadding = bottomPageInset
                 )
             }
 

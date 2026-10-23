@@ -19,6 +19,8 @@ import com.nvmex.networkhelper.util.map.CellOverlayCacheEntity
 import com.nvmex.networkhelper.util.map.Gcj02
 import com.nvmex.networkhelper.util.map.lteEarfcnToFreqMhzCN
 import com.nvmex.networkhelper.util.map.makeRedTriangleIcon
+import com.nvmex.networkhelper.util.map.makeTriangleIcon
+import com.nvmex.networkhelper.util.map.mapChannelFrequency
 import com.nvmex.networkhelper.xposed.logger.Logger
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -37,8 +39,11 @@ class LteCellOverlayManager(
     private val cacheTtlMs: Long = 7L * 24 * 3600_000L,
     private val serverCoord: ServerCoord = ServerCoord.WGS84,
     private val maxHistoryMarkers: Int = 300,
+    private val drawAntennas: Boolean = true,
 ) {
     private val icon by lazy { makeRedTriangleIcon(56) }
+    private val linkedIcon by lazy { makeTriangleIcon(56, 0xFF159447.toInt()) }
+    private var linkedStationKeys = emptySet<String>()
 
     // 你之前的容器还留着（如果别处不用可删）
     private val markers = ArrayList<Marker>(32)
@@ -98,22 +103,41 @@ class LteCellOverlayManager(
 
     private val history = ArrayDeque<BsNode>(128)
 
+    private var antennasVisible = true
+    private var antennaStationKeys: Set<String>? = null
+    fun setAntennaVisible(visible: Boolean) {
+        antennasVisible = visible
+        history.forEach { applyAntennaVisibility(it) }
+    }
+
+    private fun applyAntennaVisibility(node: BsNode) {
+        node.sectors.forEach { it.isVisible = antennasVisible }
+        node.lines.forEach { it.isVisible = antennasVisible }
+        node.labels.forEach { it.isVisible = antennasVisible }
+    }
+
     fun updateSectorDrawConfig(angleDeg: Float, radiusMeters: Double) {
         sectorAngleDeg = angleDeg.coerceIn(20f, 180f)
         sectorRadiusMeters = radiusMeters.coerceIn(50.0, 2000.0)
     }
 
     /** Nearby results have no serving-cell anchor; group using each row's own coordinates. */
-    fun renderNearbyCells(rows: List<LteCellParam>): Int {
+    private fun nearbyStationKey(row: LteCellParam): String =
+        "nearby|${row.enodeb_id}|${row.tac}|${kotlin.math.round(row.latitude!! * 10000)}|" +
+            kotlin.math.round(row.longitude!! * 10000)
+
+    fun renderNearbyCells(rows: List<LteCellParam>, antennaRows: List<LteCellParam> = rows,
+        linkedRows: List<LteCellParam> = emptyList()): Int {
         clear()
+        linkedStationKeys = linkedRows.filter { it.latitude != null && it.longitude != null }
+            .map(::nearbyStationKey).toSet()
+        antennaStationKeys = antennaRows.filter { it.latitude != null && it.longitude != null }
+            .map(::nearbyStationKey).toSet()
         rows.filter { it.latitude != null && it.longitude != null }
-            .groupBy {
-                "${it.enodeb_id}|${it.tac}|${kotlin.math.round(it.latitude!! * 10000)}|" +
-                    kotlin.math.round(it.longitude!! * 10000)
-            }.forEach { (key, cells) ->
+            .groupBy(::nearbyStationKey).forEach { (key, cells) ->
                 val anchor = cells.first().asRow()
                 renderOneStation(
-                    stationKey = "nearby|$key", anchorRow = anchor, rows = cells.map { it.asRow() },
+                    stationKey = key, anchorRow = anchor, rows = cells.map { it.asRow() },
                     requestTac = anchor.tac ?: 0, requestEarfcn = anchor.earfcn ?: 0,
                     headerMatch = "nearby"
                 )
@@ -122,6 +146,8 @@ class LteCellOverlayManager(
     }
 
     fun clear() {
+        linkedStationKeys = emptySet()
+        antennaStationKeys = null
         history.forEach { node ->
             runCatching { node.marker.remove() }
             node.sectors.forEach { runCatching { it.remove() } }
@@ -380,6 +406,9 @@ class LteCellOverlayManager(
             if (!headerMatch.isNullOrBlank()) append("match=").append(headerMatch).append('\n')
             append("count=").append(rows.size).append('\n')
             append("tac=").append(requestTac).append("  earfcn=").append(requestEarfcn).append('\n')
+            rows.mapNotNull { it.earfcn }.distinct().sorted().forEach { channel ->
+                append("EARFCN=").append(channel).append("  ").append(mapChannelFrequency("LTE", channel)).append('\n')
+            }
             append("pci=").append(anchorRow.pci).append("  eci=").append(anchorRow.eci).append('\n')
             append("src=").append(anchorRow.source ?: "-")
         }
@@ -394,9 +423,9 @@ class LteCellOverlayManager(
         val m = aMap.addMarker(
             MarkerOptions()
                 .position(pos)
-                .icon(icon)
+                .icon(if (stationKey in linkedStationKeys) linkedIcon else icon)
                 .anchor(0.5f, 1.0f)
-                .zIndex(triangleZ)
+                .zIndex(if (stationKey in linkedStationKeys) 50f else triangleZ)
                 .title(title)
                 .snippet(snippet)
         ) ?: run {
@@ -405,10 +434,7 @@ class LteCellOverlayManager(
         }
         m.`object` = anchorRow
 
-        val azGroups = groupByAzimuthCluster(rows)
-        val groups = if (azGroups.isNotEmpty()) azGroups else groupBySectorId(rows)
-
-        if (groups.isEmpty()) {
+        if (!drawAntennas || antennaStationKeys?.let { stationKey !in it } == true) {
             val node = BsNode(stationKey, m, emptyList(), emptyList(), emptyList())
             history.addLast(node)
             historyMap[stationKey] = node
@@ -416,9 +442,21 @@ class LteCellOverlayManager(
             return true
         }
 
+        val azGroups = groupByAzimuthCluster(rows)
+        val groups = if (azGroups.isNotEmpty()) azGroups else groupBySectorId(rows)
+
+        if (groups.isEmpty()) {
+            val node = BsNode(stationKey, m, emptyList(), emptyList(), emptyList())
+            history.addLast(node)
+            historyMap[stationKey] = node
+            applyAntennaVisibility(node)
+            trimHistoryIfNeeded()
+            return true
+        }
+
         val onlyOne = groups.size == 1
         val onlyAz = groups.first().azimuth
-        val shouldDrawCircle = onlyOne && (onlyAz == null || onlyAz == 0f)
+        val shouldDrawCircle = onlyOne && onlyAz == null
 
         val polys = ArrayList<Polygon>(8)
         val plines = ArrayList<Polyline>(8)
@@ -465,6 +503,7 @@ class LteCellOverlayManager(
             val node = BsNode(stationKey, m, polys, plines, labels)
             history.addLast(node)
             historyMap[stationKey] = node
+            applyAntennaVisibility(node)
             trimHistoryIfNeeded()
             return true
         }
@@ -523,6 +562,7 @@ class LteCellOverlayManager(
         val node = BsNode(stationKey, m, polys, plines, labels)
         history.addLast(node)
         historyMap[stationKey] = node
+        applyAntennaVisibility(node)
         trimHistoryIfNeeded()
         return true
     }
@@ -543,6 +583,7 @@ class LteCellOverlayManager(
             val snippet = buildString {
                 append("match=cache\n")
                 append("tac=").append(it.tac).append(" earfcn=").append(it.earfcn).append('\n')
+                append(mapChannelFrequency("LTE", it.earfcn)).append('\n')
                 append("pci=").append(it.pci).append(" eci=").append(it.eci).append('\n')
                 append("enb=").append(it.enodebId).append(" cid=").append(it.cellId).append('\n')
                 append("azimuth=").append(it.azimuth).append(" src=").append(it.source)
@@ -679,6 +720,7 @@ class LteCellOverlayManager(
             val snippet = buildString {
                 append("match=cache\n")
                 append("tac=").append(it.tac).append(" earfcn=").append(it.earfcn).append('\n')
+                append(mapChannelFrequency("LTE", it.earfcn)).append('\n')
                 append("pci=").append(it.pci).append(" eci=").append(it.eci).append('\n')
                 append("enb=").append(it.enodebId).append(" cid=").append(it.cellId).append('\n')
                 append("azimuth=").append(it.azimuth).append(" src=").append(it.source)

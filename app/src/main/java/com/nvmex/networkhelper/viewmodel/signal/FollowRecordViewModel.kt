@@ -41,7 +41,8 @@ data class UploadResult(
 @HiltViewModel
 class FollowRecordViewModel @Inject constructor(
     application: Application,
-    private val apiService: ApiService
+    private val apiService: ApiService,
+    private val localRepository: com.nvmex.networkhelper.repository.CellParamLocalRepository
 ) : AndroidViewModel(application) {
 
     companion object {
@@ -331,7 +332,7 @@ class FollowRecordViewModel @Inject constructor(
         }
     }
 
-    fun submit(panelState: NetworkPanelUiState) {
+    fun submit(panelState: NetworkPanelUiState, localOnly: Boolean = false) {
         viewModelScope.launch {
             val cellName = _uiState.value.cellName.trim()
             val longitude = _uiState.value.longitude
@@ -361,7 +362,16 @@ class FollowRecordViewModel @Inject constructor(
                 )
             }
 
-            val result = when (panelState.cellType.uppercase()) {
+            val result = if (localOnly) {
+                runCatching {
+                    localRepository.saveManaged(com.nvmex.networkhelper.db.entity.ManagedCell(
+                        rat = panelState.cellType.uppercase(), ci = panelState.ci.trim(), name = cellName,
+                        longitude = longitude, latitude = latitude, tac = panelState.tac.toIntOrNull(),
+                        arfcn = panelState.arfcn.toIntOrNull(), pci = panelState.pci.toIntOrNull(), siteType = siteType,
+                        source = "local_follow_record"))
+                    UploadResult(true, message = "已保存到本地")
+                }.getOrElse { UploadResult(false, error = it.message) }
+            } else when (panelState.cellType.uppercase()) {
                 "LTE" -> submitLte(panelState, cellName, longitude, latitude, siteType)
                 "NR" -> submitNr(panelState, cellName, longitude, latitude, siteType)
                 else -> UploadResult(

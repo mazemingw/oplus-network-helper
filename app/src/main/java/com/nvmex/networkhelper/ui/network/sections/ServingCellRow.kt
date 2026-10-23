@@ -33,14 +33,14 @@ fun LteServingCellRow(
         else -> raw
     }
     val canOpenDetail = queryUi.canOpenServingCellDetail()
-    val canFollowRecord = devEnabled && queryUi.isServingCellUnknown()
+    val canFollowRecord = !hideSensitive && queryUi.isServingCellUnknown()
 
     KeyValueRow(
         k = label,
         v = if (hideSensitive) "***" else valueText,
         onClick = when {
-            canOpenDetail -> onOpenDetail
             canFollowRecord -> onFollowRecord
+            canOpenDetail && !hideSensitive -> onOpenDetail
             else -> null
         },
         valueColor = if (canOpenDetail || canFollowRecord) {
@@ -99,5 +99,5 @@ fun CellQueryUiState.toServingCellDisplayText(devEnabled: Boolean): String {
 }
 
 fun CellQueryUiState.canClickServingCell(devEnabled: Boolean): Boolean {
-    return canOpenServingCellDetail() || (devEnabled && isServingCellUnknown())
+    return canOpenServingCellDetail() || isServingCellUnknown()
 }

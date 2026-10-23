@@ -1,6 +1,7 @@
-﻿package com.nvmex.networkhelper.ui.network
+package com.nvmex.networkhelper.ui.network
 
 import android.app.Activity
+import com.nvmex.networkhelper.util.network.formatCellType
 import android.content.ClipData
 import android.content.ClipboardManager
 import android.content.Context
@@ -118,6 +119,7 @@ import com.nvmex.networkhelper.util.network.utils.formatCiWithSplit
 import com.nvmex.networkhelper.viewmodel.menu.MenuCellQueryViewModel
 import com.nvmex.networkhelper.viewmodel.signal.FollowRecordViewModel
 import com.nvmex.networkhelper.xposed.translator.NrcaTranslator
+import com.nvmex.networkhelper.util.network.NrcaBandwidthEncoding
 import kotlinx.coroutines.delay
 import java.util.Locale
 @Composable
@@ -177,6 +179,7 @@ fun NetworkPanelContent(
     val followUi by followVm.uiState.collectAsState()
 
     var showFollowRecordDialog by rememberSaveable { mutableStateOf(false) }
+    var lastFollowWasLocal by rememberSaveable { mutableStateOf(true) }
     val pickPointLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.StartActivityForResult()
     ) { result ->
@@ -222,7 +225,7 @@ fun NetworkPanelContent(
 
     val servingCellUnknown = queryUi.isServingCellUnknown()
 
-    val canShowFollowRecord = devEnabled &&
+    val canShowFollowRecord =
             !hideSensitive &&
             hasBasicParams &&
             servingCellUnknown &&
@@ -547,6 +550,13 @@ fun NetworkPanelContent(
                 show = showCellDialog,
                 queryUi = queryUi,
                 onDismiss = { showCellDialog = false },
+                onLocalCellChanged = {
+                    queryVm.reset()
+                    if (displayState.cellType == "LTE" && tacInt != null && earfcnInt != null)
+                        queryVm.queryLte(LteCellQueryBody(tac = tacInt, earfcn = earfcnInt, eci = eciLong, pci = pciInt))
+                    else if (displayState.cellType == "NR") queryVm.queryNr(NrQueryReq(gcellId = displayState.ci,
+                        nrTac = tacInt, nrArfcn = earfcnInt, nrPci = pciInt))
+                },
                 onCellChanged = {
                     when (displayState.cellType.uppercase()) {
                         "LTE" -> {
@@ -650,13 +660,14 @@ fun NetworkPanelContent(
                 valueColor = Color(0xFF448AFF)
             )
 
+            val nrBandwidthEncoding = s.nrCaInfo?.bandwidthEncoding ?: NrcaBandwidthEncoding.LEGACY
             val nrDlBwText = remember(s.nrCaInfo, showNrBandwidth) {
                 if (!showNrBandwidth) return@remember "-"
 
                 val carriers = s.nrCaInfo?.carriers.orEmpty()
                 if (carriers.isEmpty()) return@remember "-"
 
-                fun mhzOf(c: NrCaCarrier): Int = NrcaTranslator.bandwidthMhzOrNull(c.dlBwRaw) ?: 0
+                fun mhzOf(c: NrCaCarrier): Int = NrcaTranslator.bandwidthMhzOrNull(c.dlBwRaw, nrBandwidthEncoding) ?: 0
 
                 val configured = carriers.filter { it.dlStateRaw == 1 || it.dlStateRaw == 2 } // Configured
                 val activated = carriers.filter { it.dlStateRaw == 2 } // Activated
@@ -715,13 +726,13 @@ fun NetworkPanelContent(
                     else -> stringResource(R.string.state_no_data)
                 }
 
-                val caChips = remember(nrCarriers) {
+                val caChips = remember(nrCarriers, nrBandwidthEncoding) {
                     if (nrCarriers.size < 2) {
                         emptyList()
                     } else {
                         nrCarriers.take(6).map { c ->
                             CaChip(
-                                text = NrcaTranslator.toChipText(c.bandRaw, c.dlBwRaw, c.ulBwRaw),
+                                text = NrcaTranslator.toChipText(c.bandRaw, c.dlBwRaw, c.ulBwRaw, nrBandwidthEncoding),
                                 active = isCarrierActivated(c)
                             )
                         }
@@ -858,12 +869,15 @@ fun NetworkPanelContent(
                         )
                     )
                 },
-                onSubmit = { followVm.submit(displayState) },
+                localOnly = !devEnabled,
+                onSubmit = { lastFollowWasLocal = !devEnabled; followVm.submit(displayState, localOnly = !devEnabled) },
+                onSaveLocal = { lastFollowWasLocal = true; followVm.submit(displayState, localOnly = true) },
                 onSubmitSuccess = {
+                    if (lastFollowWasLocal) queryVm.reset()
                     when (displayState.cellType.uppercase()) {
                         "LTE" -> {
                             if (tacInt != null && earfcnInt != null && eciLong != null) {
-                                queryVm.queryLteForce(
+                                (if (lastFollowWasLocal) queryVm::queryLte else queryVm::queryLteForce)(
                                     LteCellQueryBody(
                                         tac = tacInt,
                                         earfcn = earfcnInt,
@@ -877,7 +891,7 @@ fun NetworkPanelContent(
                         "NR" -> {
                             val gcellId = displayState.ci.trim().takeIf { it.isNotBlank() && it != "-" }
                             if (gcellId != null || tacInt != null || earfcnInt != null || pciInt != null) {
-                                queryVm.queryNrForce(
+                                (if (lastFollowWasLocal) queryVm::queryNr else queryVm::queryNrForce)(
                                     NrQueryReq(
                                         gcellId = gcellId,
                                         nrTac = tacInt,
@@ -1214,19 +1228,6 @@ private fun signalHeaderText(s: NetworkPanelUiState, showRaw: Boolean): String {
         "LTE" -> if (isLtePlusOverride(s.overrideNetworkTypeRaw)) "LTE 4G+" else "LTE 4G"
         else -> s.dataNetworkType.takeIf { it.isNotBlank() } ?: "-"
     }
-}
-
-private val nrHighSpeedRailwayArfcns = setOf(
-    507150,
-    527070,
-    627744,
-    634464,
-    423630
-)
-
-private fun formatCellType(cellType: String, arfcn: Int?): String {
-    if (cellType != "NR" || arfcn == null || arfcn !in nrHighSpeedRailwayArfcns) return cellType
-    return "$cellType 高铁专网"
 }
 
 @Composable

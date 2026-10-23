@@ -33,13 +33,16 @@ android {
         applicationId = "com.nvmex.networkhelper"
         minSdk = 29
         targetSdk = 35
-        versionCode = 53
-        versionName = "1.5.3"
+        versionCode = 57
+        versionName = "1.5.7-dev"
 
         // Inject the AMap key locally; never commit API credentials.
         manifestPlaceholders["AMAP_API_KEY"] =
             project.findProperty("AMAP_API_KEY")?.toString()
                 ?: localConfig.getProperty("AMAP_API_KEY", "")
+        manifestPlaceholders["AMAP_FALCON_SID"] =
+            project.findProperty("AMAP_FALCON_SID")?.toString()
+                ?: localConfig.getProperty("AMAP_FALCON_SID", "0")
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
 
@@ -178,6 +181,7 @@ dependencies {
 
     //高德地图SDK
     implementation("com.amap.api:3dmap:10.0.600")
+    implementation(files("libs/amap-track-1.5.0.jar"))
 //    implementation("com.amap.api:location:11.1.000")
 
     val room_version = "2.8.4"
@@ -195,6 +199,7 @@ dependencies {
 //    implementation("org.jetbrains.kotlinx:kotlinx-coroutines-play-services:1.8.1")
 
     testImplementation(libs.junit)
+    testImplementation("org.json:json:20240303")
 }
 
 kapt {

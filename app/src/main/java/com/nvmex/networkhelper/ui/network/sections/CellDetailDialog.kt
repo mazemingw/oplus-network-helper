@@ -1,5 +1,7 @@
-﻿package com.nvmex.networkhelper.ui.network.sections
+package com.nvmex.networkhelper.ui.network.sections
 
+import com.nvmex.networkhelper.db.entity.ManagedCell
+import com.nvmex.networkhelper.ui.management.LocalCellActions
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -75,7 +77,8 @@ fun LteCellDetailDialog(
     show: Boolean,
     queryUi: CellQueryUiState,
     onDismiss: () -> Unit,
-    onCellChanged: (() -> Unit)? = null
+    onCellChanged: (() -> Unit)? = null,
+    onLocalCellChanged: (() -> Unit)? = onCellChanged
 ) {
     if (!show) return
 
@@ -279,6 +282,13 @@ fun LteCellDetailDialog(
                                     color = MaterialTheme.colorScheme.onSurfaceVariant
                                 )
 
+                                first.eci?.let { ci ->
+                                    LocalCellActions(ManagedCell("LTE", ci.toString(), first.cell_name.orEmpty(), first.latitude,
+                                        first.longitude, first.azimuth, first.tac, first.earfcn, first.pci, first.enodeb_id,
+                                        first.cell_id, first.sector_id, first.site_type, first.antenna_height, first.source),
+                                        legacyLocal = resp.match_level == "local",
+                                        onChanged = { onLocalCellChanged?.invoke(); onDismiss() })
+                                }
                                 PanelDivider()
 
                                 Text(
@@ -374,7 +384,7 @@ fun LteCellDetailDialog(
                                 }
 
                                 SuperAdminEditorSection(
-                                    enabled = isSuperAdmin,
+                                    enabled = isSuperAdmin && resp.match_level != "local_user",
                                     authToken = authToken,
                                     authTokenValid = authTokenValid,
                                     busy = adminUi.isSubmitting,
@@ -457,6 +467,13 @@ fun LteCellDetailDialog(
                                     )
                                 }
 
+                                first.gcell_id?.let { ci ->
+                                    LocalCellActions(ManagedCell("NR", ci, first.cell_name.orEmpty(), first.latitude,
+                                        first.longitude, first.azimuth, first.nr_tac, first.nr_arfcn, first.nr_pci,
+                                        siteType = first.site_type, antennaHeight = first.antenna_height, source = first.source),
+                                        legacyLocal = resp.match_level == "local",
+                                        onChanged = { onLocalCellChanged?.invoke(); onDismiss() })
+                                }
                                 PanelDivider()
 
                                 Text(
@@ -547,7 +564,7 @@ fun LteCellDetailDialog(
                                 }
 
                                 SuperAdminEditorSection(
-                                    enabled = isSuperAdmin,
+                                    enabled = isSuperAdmin && resp.match_level != "local_user",
                                     authToken = authToken,
                                     authTokenValid = authTokenValid,
                                     busy = adminUi.isSubmitting,

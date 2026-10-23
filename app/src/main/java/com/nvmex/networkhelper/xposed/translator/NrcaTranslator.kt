@@ -1,5 +1,7 @@
 package com.nvmex.networkhelper.xposed.translator
 
+import com.nvmex.networkhelper.util.network.NrcaBandwidth
+import com.nvmex.networkhelper.util.network.NrcaBandwidthEncoding
 import de.robv.android.xposed.XposedHelpers
 
 object NrcaTranslator {
@@ -11,26 +13,13 @@ object NrcaTranslator {
         else -> "Invalid($v)"
     }
 
-    fun bandwidth(v: Int): String = when (v) {
-        0 -> "NR5G_BW_5MHZ"
-        1 -> "NR5G_BW_10MHZ"
-        2 -> "NR5G_BW_15MHZ"
-        3 -> "NR5G_BW_20MHZ"
-        4 -> "NR5G_BW_25MHZ"
-        5 -> "NR5G_BW_30MHZ"
-        6 -> "NR5G_BW_35MHZ"
-        7 -> "NR5G_BW_40MHZ"
-        8 -> "NR5G_BW_45MHZ"
-        9 -> "NR5G_BW_50MHZ"
-        10 -> "NR5G_BW_60MHZ"
-        11 -> "NR5G_BW_70MHZ"
-        12 -> "NR5G_BW_80MHZ"
-        13 -> "NR5G_BW_90MHZ"
-        14 -> "NR5G_BW_100MHZ"
-        15 -> "NR5G_BW_200MHZ"
-        16 -> "NR5G_BW_400MHZ"
-        18 -> "NR5G_BW_INVALID"
-        else -> "NR5G_BW_UNKNOWN($v)"
+    fun bandwidth(v: Int, encoding: NrcaBandwidthEncoding = NrcaBandwidth.deviceEncoding): String {
+        val mhz = encoding.mhzOrNull(v)
+        return when {
+            mhz != null -> "NR5G_BW_${mhz}MHZ"
+            v == encoding.invalidRaw -> "NR5G_BW_INVALID"
+            else -> "NR5G_BW_UNKNOWN($v)"
+        }
     }
 
     /**
@@ -161,31 +150,27 @@ object NrcaTranslator {
     }
 
     /** UI 用：dlBwRaw -> "100M"（取不到就 "-"） */
-    fun bandwidthShort(v: Int): String {
-        // 你的 bandwidth(v) 形如 "NR5G_BW_100MHZ"
-        val s = bandwidth(v)
-        val mhz = Regex("""BW_(\d+)MHZ""").find(s)?.groupValues?.getOrNull(1)
-        return mhz?.let { "${it}M" } ?: "-"
-    }
+    fun bandwidthShort(v: Int, encoding: NrcaBandwidthEncoding = NrcaBandwidth.deviceEncoding): String =
+        encoding.mhzOrNull(v)?.let { "${it}M" } ?: "-"
 
     /** UI 用：拼 chip 文本，如 "41 · 100M" */
-    private fun isBwValid(v: Int): Boolean {
-        val s = bandwidth(v)
-        return Regex("""BW_(\d+)MHZ""").containsMatchIn(s)
-    }
-
-    fun toChipText(bandRaw: Int, dlBwRaw: Int, ulBwRaw: Int): String {
+    fun toChipText(
+        bandRaw: Int,
+        dlBwRaw: Int,
+        ulBwRaw: Int,
+        encoding: NrcaBandwidthEncoding = NrcaBandwidth.deviceEncoding
+    ): String {
         val b = bandShort(bandRaw)
 
-        val dlOk = isBwValid(dlBwRaw)
-        val ulOk = isBwValid(ulBwRaw)
+        val dlOk = encoding.mhzOrNull(dlBwRaw) != null
+        val ulOk = encoding.mhzOrNull(ulBwRaw) != null
 
         // ✅ UL-only 判定：DL 不可用，UL 可用
         val isUlOnly = !dlOk && ulOk
 
         val w = when {
-            dlOk -> bandwidthShort(dlBwRaw)
-            isUlOnly -> bandwidthShort(ulBwRaw)
+            dlOk -> bandwidthShort(dlBwRaw, encoding)
+            isUlOnly -> bandwidthShort(ulBwRaw, encoding)
             else -> "-" // 两边都不行
         }
 
@@ -197,12 +182,8 @@ object NrcaTranslator {
         }
     }
 
-    //解析 MHz 数值”的函数
-    fun bandwidthMhzOrNull(v: Int): Int? {
-        // bandwidth(v) 形如 "NR5G_BW_100MHZ"
-        val s = bandwidth(v)
-        return Regex("""BW_(\d+)MHZ""").find(s)?.groupValues?.getOrNull(1)?.toIntOrNull()
-    }
+    fun bandwidthMhzOrNull(v: Int, encoding: NrcaBandwidthEncoding = NrcaBandwidth.deviceEncoding): Int? =
+        encoding.mhzOrNull(v)
 
 
 

@@ -7,6 +7,24 @@ import com.nvmex.networkhelper.model.network.NetworkPanelUiState
 
 object SnapshotJson {
     private val gson = Gson()
+    /** Optional output metadata lives beside the stable signal schema; old snapshots remain readable. */
+    fun withMapMatch(snapshotJson: String, matchJson: String?): String {
+        if (matchJson.isNullOrBlank()) return snapshotJson
+        val root = JsonParser.parseString(snapshotJson).asJsonObject
+        val match = JsonParser.parseString(matchJson)
+        require(match.isJsonObject) { "路网纠偏快照格式无效" }
+        listOf("raw_wgs84", "matched_wgs84").forEach { prefix ->
+            val lat = match.asJsonObject["${prefix}_lat"]?.asDouble
+            val lng = match.asJsonObject["${prefix}_lng"]?.asDouble
+            require((lat == null) == (lng == null) && (lat == null ||
+                lat.isFinite() && lng!!.isFinite() && lat in -90.0..90.0 && lng in -180.0..180.0)) { "纠偏快照坐标无效" }
+        }
+        root.add("map_match", match)
+        return root.toString()
+    }
+    fun mapMatch(snapshotJson: String): String? = runCatching {
+        JsonParser.parseString(snapshotJson).asJsonObject.getAsJsonObject("map_match")?.toString()
+    }.getOrNull()
 
     // 持久化用稳定 schema，避免 R8 混淆字段名导致跨版本不可恢复。
     fun toJson(s: NetworkPanelUiState): String = gson.toJson(PersistedSnapshot.fromState(s))

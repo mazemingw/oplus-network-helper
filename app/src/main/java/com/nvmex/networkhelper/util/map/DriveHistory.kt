@@ -13,4 +13,7 @@ internal class DriveHistory(points: List<DrivePoint>) {
 
     fun initialSlot(preferred: Int): Int = preferred.takeIf { it in pointsBySlot }
         ?: pointsBySlot.keys.minOrNull() ?: 0
+
+    fun filteredBy(filter: DriveBandFilter): DriveHistory = if (!filter.active) this
+        else DriveHistory(pointsBySlot.values.flatten().filter { filter.matches(it.snapshot) })
 }

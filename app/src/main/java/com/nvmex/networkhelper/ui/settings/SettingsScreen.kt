@@ -161,6 +161,15 @@ fun SettingsScreen(
         item {
             ThinListContainer {
                 SwitchSettingItem(
+                    title = stringResource(R.string.map_matching_title),
+                    desc = stringResource(R.string.map_matching_description),
+                    checked = settings.enableMapMatching,
+                    onCheckedChange = { setSettings(settings.copy(enableMapMatching = it)) }
+                )
+                if (settings.enableMapMatching) Text(stringResource(R.string.map_matching_coverage),
+                    Modifier.padding(horizontal = 14.dp, vertical = 8.dp), style = MaterialTheme.typography.bodySmall)
+                ThinDivider()
+                SwitchSettingItem(
                     title = stringResource(R.string.settings_real_signal_icon_title),
                     desc = stringResource(R.string.settings_real_signal_icon_desc),
                     checked = settings.enableRealSignalIcon,

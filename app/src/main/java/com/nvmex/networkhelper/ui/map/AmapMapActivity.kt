@@ -32,6 +32,7 @@ import androidx.core.app.NotificationManagerCompat
 import androidx.core.content.ContextCompat
 import androidx.lifecycle.Lifecycle
 import com.amap.api.location.AMapLocationClient
+import com.amap.api.location.AMapLocation
 import com.amap.api.location.AMapLocationClientOption
 import com.amap.api.maps.AMap
 import com.amap.api.maps.CameraUpdateFactory
@@ -64,7 +65,31 @@ import com.nvmex.networkhelper.util.map.Gcj02
 import com.nvmex.networkhelper.util.map.SnapshotJson
 import com.nvmex.networkhelper.util.network.NetworkPanelRepositoryMultiSim
 import com.nvmex.networkhelper.util.network.TelephonySnapshotterMultiSim
+import com.nvmex.networkhelper.util.map.DeadReckoningEngine
+import com.nvmex.networkhelper.util.map.DriveMotionTracker
+import com.nvmex.networkhelper.util.map.DrivePersistence
+import com.nvmex.networkhelper.util.map.DriveSessionEntity
+import com.nvmex.networkhelper.util.map.DriveTrackFix
+import com.nvmex.networkhelper.util.map.ServingStationOverlay
+import com.nvmex.networkhelper.util.map.driveDistanceMeters
+import com.nvmex.networkhelper.util.map.driveTrackLength
 import com.nvmex.networkhelper.util.map.driveSnapshotsBySlot
+import com.nvmex.networkhelper.util.map.driveFixElapsedMillis
+import com.nvmex.networkhelper.util.map.driveValidPosition
+import com.nvmex.networkhelper.util.map.DrivePointWriteQueue
+import com.nvmex.networkhelper.util.map.DriveStationEntity
+import com.nvmex.networkhelper.util.map.DriveStationJson
+import com.nvmex.networkhelper.util.map.DriveStationSnapshot
+import com.nvmex.networkhelper.util.map.DriveStyle
+import com.nvmex.networkhelper.util.map.DriveBandFilter
+import com.nvmex.networkhelper.util.map.DriveCoverage
+import com.nvmex.networkhelper.util.map.MapBubbleBackground
+import com.nvmex.networkhelper.util.map.matching.*
+import android.text.TextUtils
+import android.widget.PopupMenu
+import android.graphics.drawable.GradientDrawable
+import android.location.Location
+import java.util.concurrent.ConcurrentHashMap
 import com.nvmex.networkhelper.xposed.logger.Logger
 import dagger.hilt.android.AndroidEntryPoint
 import kotlinx.coroutines.CoroutineScope
@@ -96,6 +121,13 @@ class AmapMapActivity : AppCompatActivity(), LocationSource {
     private var amapListener: LocationSource.OnLocationChangedListener? = null
     private var locClient: AMapLocationClient? = null
     private var lastLatLng: LatLng? = null
+    private var lastRawPosition: Triple<Double?, Double?, String?> = Triple(null, null, null)
+    private var mapMatching: MapMatchingController? = null
+    private var lastMatchedPosition: LatLng? = null
+    private var lastMapMatchJson: String? = null
+    private var lastAmapFixAt = -1L
+    private var lastAmapIsGps = false
+    private var lastAmapSpeed: Double? = null
     private var isFirstFix = true
 
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
@@ -121,13 +153,12 @@ class AmapMapActivity : AppCompatActivity(), LocationSource {
 
     private var cellWatchJob: kotlinx.coroutines.Job? = null
     private var mapResumed = false
-    private var lastLteKey: String? = null
-    private var lastOverlayRat: String? = null
-    private var lastNrResultSig: String? = null
-    private var lastNrResultAt: Long = 0L
 
     // ===== DB =====
     private lateinit var dao: DrivePointDao
+    private val stationWrites = DrivePointWriteQueue<DriveStationEntity>(DrivePersistence.scope) { rows, _ -> dao.insertStations(rows) }
+    private val linkedStationKeys = mutableSetOf<String>()
+    private var restoredStations = emptyList<DriveStationEntity>()
     private var currentSessionId: String? = null
     private var persistSessionId: String? = null
     @Volatile
@@ -136,7 +167,13 @@ class AmapMapActivity : AppCompatActivity(), LocationSource {
     // ===== driving =====
     private var isDriving = false
     private var finishingDrive = false
+    private var bandFilter = DriveBandFilter()
+    private var visibleHistory: DriveHistory? = null
     private var restoredHistory: DriveHistory? = null
+        set(value) {
+            field = value
+            visibleHistory = value?.filteredBy(bandFilter)
+        }
     private var restoreJob: Job? = null
     private var lastToggleAt = 0L
     private var drivePermissionPending = false
@@ -148,7 +185,6 @@ class AmapMapActivity : AppCompatActivity(), LocationSource {
 
     // ===== 3D倾斜 =====
     private var is3DMode = false
-    private lateinit var fab2d3d: FloatingActionButton
     private var lastBearingDeg: Float? = null
     private val followTilt3D = 55f
 
@@ -156,14 +192,45 @@ class AmapMapActivity : AppCompatActivity(), LocationSource {
     private val density by lazy { resources.displayMetrics.density }
     private lateinit var fabCenter: FloatingActionButton
     private var fabDrive: FloatingActionButton? = null
-    private lateinit var fabClear: FloatingActionButton
-    private lateinit var fabMapType: FloatingActionButton
-    private lateinit var fabSectorConfig: FloatingActionButton
-    private lateinit var fabSessionRestore: FloatingActionButton
     private lateinit var fabMore: FloatingActionButton
     private lateinit var signalPanel: LinearLayout
-    private lateinit var signalPanelTitle: TextView
     private lateinit var nearbyStatus: TextView
+    private lateinit var servingStatus: TextView
+    private lateinit var mapTypeButton: TextView
+    private lateinit var viewModeButton: TextView
+    private lateinit var speedView: TextView
+    private lateinit var fabActions: LinearLayout
+    private lateinit var fabActionsHost: ScrollView
+    private lateinit var mapStatusRow: LinearLayout
+    private lateinit var bandCoveragePanel: LinearLayout
+    private lateinit var bandCoverageTitle: TextView
+    private lateinit var bandCoverageBands: TextView
+    private lateinit var bandCoverageDistance: TextView
+    private lateinit var bandCoverageNote: TextView
+    private var bandCoverage = DriveCoverage()
+    private var showBandCoverage = true
+    private lateinit var zoomInButton: TextView
+    private lateinit var zoomOutButton: TextView
+    private lateinit var motionTracker: DriveMotionTracker
+    private lateinit var servingStation: ServingStationOverlay
+    private val carrierViews = mutableMapOf<Int, TextView>()
+    private var showHandoverPoints = true
+    private var showServingAntennas = true
+    private var showServingLink = true
+    private var inertialEnabled = true
+    private var lastPositionAt = 0L
+    private var lastPositionEstimated = false
+    private var lastPositionAccuracy: Float? = null
+    private var lastCityName = ""
+    private var lastCityPoint: LatLng? = null
+    private var restoredSessionTitle = ""
+    private var restoredSessionId: String? = null
+    private val sessionDisplayNames = ConcurrentHashMap<String, String>()
+    private var currentDistanceMeters = 0.0
+    private var pendingResumeSessionId: String? = null
+    private var pendingResumePoints: List<DrivePoint> = emptyList()
+    private val sessionCities = ConcurrentHashMap<String, String>()
+    private val cityLookups = ConcurrentHashMap.newKeySet<String>()
     private val signalPanelValueViews = mutableMapOf<Int, TextView>()
     private val signalPanelProgressViews = mutableMapOf<Int, ProgressBar>()
     private val signalPanelTabs = mutableMapOf<Int, LinearLayout>()
@@ -259,6 +326,7 @@ class AmapMapActivity : AppCompatActivity(), LocationSource {
             isMyLocationButtonEnabled = false
         }
         baseMapMode = loadBaseMapMode()
+        is3DMode = overlayPrefs.getBoolean("map_3d", false)
         applyMapTypeForCurrentMode()
 
         aMap.setOnMapTouchListener {
@@ -271,6 +339,8 @@ class AmapMapActivity : AppCompatActivity(), LocationSource {
         aMap.setOnCameraChangeListener(object : AMap.OnCameraChangeListener {
             override fun onCameraChange(position: com.amap.api.maps.model.CameraPosition?) {}
             override fun onCameraChangeFinish(position: com.amap.api.maps.model.CameraPosition?) {
+                updateZoomControls()
+                if (!isPickMode && ::sampler.isInitialized) sampler.refreshVisibleMarkers()
                 if (ignoreCameraMoveCancelOnce) {
                     ignoreCameraMoveCancelOnce = false
                     return
@@ -278,7 +348,18 @@ class AmapMapActivity : AppCompatActivity(), LocationSource {
             }
         })
 
+        installWrappingInfoWindows()
         if (isPickMode) {
+            nearbyStatus = TextView(this).apply {
+                setPadding(dp(12), dp(8), dp(12), dp(8))
+                setTextColor(Color.DKGRAY)
+                background = panelBackground()
+            }
+            root.addView(nearbyStatus, FrameLayout.LayoutParams(-1, -2).apply {
+                gravity = Gravity.TOP
+                topMargin = statusBarHeightPx() + dp(8)
+                leftMargin = dp(12); rightMargin = dp(12)
+            })
             setupPickMode(root)
             seedPickPointIfNeeded()
         } else {
@@ -286,16 +367,43 @@ class AmapMapActivity : AppCompatActivity(), LocationSource {
             multiSnapshotter = TelephonySnapshotterMultiSim(this)
             panelRepository = NetworkPanelRepositoryMultiSim(this, multiSnapshotter)
             sectorDrawConfig = loadSectorDrawConfig()
+            bandFilter = runCatching {
+                DriveBandFilter(DriveBandFilter.parseLte(overlayPrefs.getString(KEY_POINT_LTE_BANDS, "").orEmpty()),
+                    DriveBandFilter.parseNr(overlayPrefs.getString(KEY_POINT_NR_BANDS, "").orEmpty()))
+            }.getOrDefault(DriveBandFilter())
+            showBandCoverage = overlayPrefs.getBoolean(KEY_SHOW_BAND_COVERAGE, true)
             markerSampleIntervalSec = loadMarkerSampleIntervalSec()
             nearbyEnabled = overlayPrefs.getBoolean(KEY_NEARBY_ENABLED, false)
             nearbyRadiusKm = overlayPrefs.getInt(KEY_NEARBY_RADIUS_KM, 3).coerceIn(1, 10)
             nearbyBand = overlayPrefs.getString(KEY_NEARBY_BAND, null)?.takeIf { it.isNotBlank() }
             nearbyRat = overlayPrefs.getString(KEY_NEARBY_RAT, null)?.takeIf { it == "LTE" || it == "NR" }
 
+            showHandoverPoints = overlayPrefs.getBoolean("show_handover_points", true)
+            showServingAntennas = overlayPrefs.getBoolean("show_serving_antennas", true)
+            showServingLink = overlayPrefs.getBoolean("show_serving_link", true)
+            // The old manual-calibration preference defaulted to off. Automatic fusion has its own opt-out.
+            inertialEnabled = overlayPrefs.getBoolean("inertial_auto_enabled", true)
+
             sampler = DriveSampler(
                 aMap = aMap,
                 scope = scope,
-                getLatLng = { lastLatLng },
+                getLatLng = { lastLatLng?.takeIf {
+                    SystemClock.elapsedRealtime() - lastPositionAt <= 5000 &&
+                        (lastPositionEstimated || (lastPositionAccuracy ?: Float.MAX_VALUE) <= 100f)
+                } },
+                positionQuality = { lastPositionEstimated to lastPositionAccuracy },
+                rawPosition = { lastRawPosition },
+                mapMatchJson = { lastMapMatchJson },
+                onCoverageChanged = { coverage ->
+                    bandCoverage = coverage
+                    updateBandCoveragePanel()
+                },
+                onPointSelected = { point ->
+                    if (restoredHistory != null) {
+                        servingStation.selectHistoryPoint(point)
+                        updateSignalPanel(displayedSnapshots() + (point.simSlot to point.snapshot))
+                    }
+                },
                 snapshots = { snapshotAllSims() },
                 density = resources.displayMetrics.density,
                 pointDp = 11f,
@@ -306,7 +414,7 @@ class AmapMapActivity : AppCompatActivity(), LocationSource {
                 maxMarkers = 4000,
                 resolvePersistSessionId = { persistSessionId },
                 onPersist = { points, sid ->
-                    dao.insertBatch(points.map { p ->
+                    dao.recordBatch(points.map { p ->
                         DrivePointEntity(
                             sessionId = sid,
                             ts = p.ts,
@@ -316,24 +424,32 @@ class AmapMapActivity : AppCompatActivity(), LocationSource {
                             rsrpDbm = p.rsrpDbm,
                             isHandover = p.isHandover,
                             cellKey = p.cellKey ?: "",
-                            snapshotJson = SnapshotJson.toJson(p.snapshot)
+                            snapshotJson = SnapshotJson.withMapMatch(SnapshotJson.toJson(p.snapshot), p.mapMatchJson),
+                            estimated = p.estimated,
+                            accuracyMeters = p.accuracyMeters,
+                            segmentStart = p.segmentStart,
+                            rawLat = p.rawLat, rawLng = p.rawLng, rawCoordType = p.rawCoordType
                         )
-                    })
-                    hasNewPointsInSession = true
+                    }, sessionCities[sid].orEmpty())
+                    resolveSessionCity(sid, points.first().latLng)
+                    val metadata = dao.getSession(sid)
+                    withContext(Dispatchers.Main.immediate) {
+                        if (currentSessionId == sid) {
+                            hasNewPointsInSession = true
+                            currentDistanceMeters = metadata?.distanceMeters ?: 0.0
+                            if (!isDestroyed) updateSignalPanel(displayedSnapshots())
+                        }
+                    }
                 },
                 persistEnabled = { isDriving && !persistSessionId.isNullOrBlank() },
-                onHandover = { s ->
-                    // Sampling is dual-SIM, but overlays follow the selected TAB.
-                    if (latestSnapshots[selectedSimSlot]?.subId != s.subId) return@DriveSampler
-                    s.toNrQueryArgsOrNull()?.let {
-                        queryNrOverlay(it, lteFallback = s.toLteQueryArgsOrNull())
-                        return@DriveSampler
-                    }
-                    s.toLteQueryArgsOrNull()?.let { queryLteOverlay(it) }
+                onHandover = { state ->
+                    if (latestSnapshots[selectedSimSlot]?.subId == state.subId && ::servingStation.isInitialized)
+                        servingStation.update(state)
                 }
             )
 
             sampler.bindClickToShowInfo()
+            sampler.setBandFilter(bandFilter)
 
             lteOverlay = LteCellOverlayManager(
                 aMap = aMap,
@@ -342,30 +458,54 @@ class AmapMapActivity : AppCompatActivity(), LocationSource {
                 scope = scope,
                 cacheDao = AppDb.get(applicationContext).cellOverlayCacheDao(),
                 cacheTtlMs = 7L * 24 * 3600_000L,
-                serverCoord = ServerCoord.WGS84
+                serverCoord = ServerCoord.WGS84,
+                maxHistoryMarkers = Int.MAX_VALUE
             )
             nrOverlay = NrCellOverlayManager(
                 aMap = aMap,
                 api = apiService,
                 localRepository = localRepository,
                 scope = scope,
-                serverCoord = ServerCoord.WGS84
+                serverCoord = ServerCoord.WGS84,
+                maxHistoryMarkers = Int.MAX_VALUE
             )
             nearbyLteOverlay = LteCellOverlayManager(
                 aMap = aMap, api = apiService, localRepository = localRepository, scope = scope,
                 cacheDao = AppDb.get(applicationContext).cellOverlayCacheDao(),
-                serverCoord = ServerCoord.WGS84, maxHistoryMarkers = 1000
+                serverCoord = ServerCoord.WGS84, maxHistoryMarkers = 1000, drawAntennas = false
             )
             nearbyNrOverlay = NrCellOverlayManager(
                 aMap = aMap, api = apiService, localRepository = localRepository, scope = scope,
-                serverCoord = ServerCoord.WGS84, maxHistoryMarkers = 1000
+                serverCoord = ServerCoord.WGS84, maxHistoryMarkers = 1000, drawAntennas = false
             )
             applySectorDrawConfigToOverlays()
-            lteOverlay.bindMapLoadedListener()
 
-            triggerTriangleOnceOnEnter()
             setupFabs(root)
             setupSignalPanel(root)
+            setupMapControls(root)
+            setupZoomControls(root)
+            setupSignalLegend(root)
+            setupBandCoverage(root)
+            sampler.setHandoverVisible(showHandoverPoints)
+            servingStation = ServingStationOverlay(aMap, apiService, localRepository, scope, lteOverlay, nrOverlay, onStatus = { message, name ->
+                servingStatus.text = if (name == null) getString(message) else getString(message, name)
+            }, onLinked = ::saveLinkedStation)
+            servingStation.setDisplay(showServingAntennas, showServingLink)
+            motionTracker = DriveMotionTracker(this, ::onMotionReading)
+            motionTracker.setInertialEnabled(inertialEnabled)
+            mapMatching = MapMatchingController(this, aMap, scope, mapStatusRow, ::onMapMatchResult)
+            mapMatching?.setPathVisible(!bandFilter.active)
+            aMap.setOnMapLoadedListener {
+                aMap.uiSettings.isZoomControlsEnabled = false
+                updateZoomControls()
+                servingStation.onMapReady()
+                sampler.refreshVisibleMarkers()
+                nearbyResult?.let {
+                    nearbyLteOverlay.renderNearbyCells(it.lte)
+                    nearbyNrOverlay.renderNearbyCells(it.nr)
+                }
+            }
+            triggerTriangleOnceOnEnter()
             updateSignalPanel(snapshotAllSims())
 
             // ✅ 处理外部传入测试点
@@ -471,7 +611,7 @@ class AmapMapActivity : AppCompatActivity(), LocationSource {
             }
         )
         fabPickCancel.backgroundTintList =
-            ContextCompat.getColorStateList(this, android.R.color.holo_red_dark)
+            android.content.res.ColorStateList.valueOf(overlayColor(0xFFC62828.toInt()))
         applyFabIconUi(fabPickCancel)
 
         fabPickConfirm = FloatingActionButton(this).apply {
@@ -507,11 +647,7 @@ class AmapMapActivity : AppCompatActivity(), LocationSource {
             }
         }
 
-        android.widget.Toast.makeText(
-            this,
-            getString(R.string.map_pick_hint),
-            android.widget.Toast.LENGTH_SHORT
-        ).show()
+        showMapStatus(getString(R.string.map_pick_hint))
     }
 
     private fun seedPickPointIfNeeded() {
@@ -559,12 +695,7 @@ class AmapMapActivity : AppCompatActivity(), LocationSource {
     private fun finishPickWithResult() {
         val pointGcj = pickedPointGcj
         if (pointGcj == null) {
-            android.widget.Toast.makeText(
-                this,
-                getString(R.string.map_pick_no_selection),
-                android.widget.Toast.LENGTH_SHORT
-            )
-                .show()
+            showMapStatus(getString(R.string.map_pick_no_selection))
             return
         }
 
@@ -586,274 +717,513 @@ class AmapMapActivity : AppCompatActivity(), LocationSource {
         finish()
     }
 
-    private fun setupFabs(root: FrameLayout) {
-        fabCenter = FloatingActionButton(this).apply {
-            setImageResource(android.R.drawable.ic_menu_mylocation)
-            setOnClickListener {
-                val p = lastLatLng ?: return@setOnClickListener
-                val now = SystemClock.elapsedRealtime()
-                val doubleTapWindow = 800L
-                val isSecondClick = (now - lastCenterClickAt) <= doubleTapWindow
-                lastCenterClickAt = now
 
-                if (!isSecondClick) {
-                    ignoreCameraMoveCancelOnce = true
-                    val zoom = aMap.cameraPosition.zoom.coerceAtLeast(16f)
-                    aMap.animateCamera(CameraUpdateFactory.newLatLngZoom(p, zoom))
-                } else {
+    private fun setupFabs(root: FrameLayout) {
+        fabActions = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            gravity = Gravity.CENTER_HORIZONTAL
+        }
+        fabActionsHost = ScrollView(this).apply {
+            isVerticalScrollBarEnabled = false
+            overScrollMode = View.OVER_SCROLL_NEVER
+            addView(fabActions, FrameLayout.LayoutParams(dp(48), -2))
+        }
+        root.addView(fabActionsHost, FrameLayout.LayoutParams(dp(48), -2).apply {
+            gravity = Gravity.END or Gravity.BOTTOM
+            rightMargin = dp(12)
+            bottomMargin = navigationBarHeightPx() + dp(72)
+        })
+        fun addFab(action: (View) -> Unit, icon: Int): FloatingActionButton {
+            val fab = FloatingActionButton(this).apply {
+                customSize = dp(48)
+                setMaxImageSize(dp(20))
+                useCompatPadding = false
+                setImageResource(icon)
+                setOnClickListener(action)
+            }
+            fabActions.addView(fab, LinearLayout.LayoutParams(dp(48), dp(48)).apply {
+                if (fabActions.childCount > 0) topMargin = dp(6)
+            })
+            applyFabDefaultUi(fab)
+            return fab
+        }
+        fabCenter = addFab({
+            val point = lastLatLng
+            if (point != null) {
+                val now = SystemClock.elapsedRealtime()
+                val secondClick = now - lastCenterClickAt <= 800
+                lastCenterClickAt = now
+                if (secondClick) {
                     followMyLocation = !followMyLocation
                     updateCenterFabUi()
-                    if (followMyLocation) {
-                        applyFollowCamera(p, lastBearingDeg)
-                    }
+                    if (followMyLocation) applyFollowCamera(point, lastBearingDeg)
+                } else {
+                    ignoreCameraMoveCancelOnce = true
+                    aMap.animateCamera(CameraUpdateFactory.newLatLngZoom(point, aMap.cameraPosition.zoom.coerceAtLeast(16f)))
                 }
             }
-        }
-        root.addView(
-            fabCenter,
-            FrameLayout.LayoutParams(
-                FrameLayout.LayoutParams.WRAP_CONTENT,
-                FrameLayout.LayoutParams.WRAP_CONTENT
-            ).apply {
-                gravity = Gravity.END or Gravity.BOTTOM
-                rightMargin = dp(18)
-                bottomMargin = dp(28)
+        }, android.R.drawable.ic_menu_mylocation)
+        fabCenter.contentDescription = getString(R.string.map_control_location)
+        fabDrive = addFab({ toggleDrive() }, android.R.drawable.ic_media_play)
+        fabDrive?.contentDescription = getString(R.string.map_control_record)
+        fabMore = addFab({ anchor ->
+            PopupMenu(this, anchor).apply {
+                menu.add(0, 4, 0, R.string.map_band_filter_title).apply {
+                    isCheckable = true
+                    isChecked = bandFilter.active
+                }
+                menu.add(0, 1, 1, R.string.map_drawing_probe_settings)
+                menu.add(0, 2, 2, R.string.map_sessions)
+                menu.add(0, 3, 3, R.string.map_clear_recording)
+                setOnMenuItemClickListener { item ->
+                    when (item.itemId) {
+                        4 -> showBandFilterDialog()
+                        1 -> showSectorConfigDialog()
+                        2 -> showSessionRestoreDialog()
+                        3 -> newDialogBuilder().setTitle(R.string.map_clear_recording)
+                            .setMessage(R.string.map_clear_recording_confirm)
+                            .setPositiveButton(android.R.string.ok) { _, _ -> clearCurrentSession() }
+                            .setNegativeButton(android.R.string.cancel, null).show()
+                    }
+                    true
+                }
+                show()
             }
-        )
+        }, android.R.drawable.ic_menu_more)
+        fabMore.contentDescription = getString(R.string.map_control_more)
         updateCenterFabUi()
-
-        fabDrive = FloatingActionButton(this).apply {
-            setOnClickListener { toggleDrive() }
-        }
-        root.addView(
-            fabDrive,
-            FrameLayout.LayoutParams(
-                FrameLayout.LayoutParams.WRAP_CONTENT,
-                FrameLayout.LayoutParams.WRAP_CONTENT
-            ).apply {
-                gravity = Gravity.END or Gravity.BOTTOM
-                rightMargin = dp(18)
-                bottomMargin = dp(28 + 56 + 12)
-            }
-        )
         applyDriveUi(isDriving)
+    }
 
-        fabClear = FloatingActionButton(this).apply {
-            setImageResource(android.R.drawable.ic_menu_delete)
-            setOnClickListener { clearCurrentSession() }
-        }
-        root.addView(
-            fabClear,
-            FrameLayout.LayoutParams(
-                FrameLayout.LayoutParams.WRAP_CONTENT,
-                FrameLayout.LayoutParams.WRAP_CONTENT
-            ).apply {
-                gravity = Gravity.END or Gravity.BOTTOM
-                rightMargin = dp(18)
-                bottomMargin = dp(28 + (56 + 12) * 3)
-            }
-        )
-        applyFabDefaultUi(fabClear)
+    private fun overlayTextColor(): Int = if (isSystemNightMode()) 0xFFF0F4FA.toInt() else 0xFF263547.toInt()
 
-        fab2d3d = FloatingActionButton(this).apply {
-            setOnClickListener { toggle2D3D() }
-        }
-        root.addView(
-            fab2d3d,
-            FrameLayout.LayoutParams(
-                FrameLayout.LayoutParams.WRAP_CONTENT,
-                FrameLayout.LayoutParams.WRAP_CONTENT
-            ).apply {
-                gravity = Gravity.END or Gravity.BOTTOM
-                rightMargin = dp(18)
-                bottomMargin = dp(28 + (56 + 12) * 4)
-            }
-        )
-        applyFabDefaultUi(fab2d3d)
-        update2D3DFabUi()
+    private fun overlayColor(color: Int): Int = Color.argb(210, Color.red(color), Color.green(color), Color.blue(color))
 
-        fabMapType = FloatingActionButton(this).apply {
-            setOnClickListener { toggleBaseMapMode() }
-        }
-        root.addView(
-            fabMapType,
-            FrameLayout.LayoutParams(
-                FrameLayout.LayoutParams.WRAP_CONTENT,
-                FrameLayout.LayoutParams.WRAP_CONTENT
-            ).apply {
-                gravity = Gravity.END or Gravity.BOTTOM
-                rightMargin = dp(18)
-                bottomMargin = dp(28 + (56 + 12) * 5)
-            }
-        )
-        applyFabDefaultUi(fabMapType)
-        updateMapTypeFabUi()
-
-        fabSectorConfig = FloatingActionButton(this).apply {
-            setImageResource(android.R.drawable.ic_menu_manage)
-            contentDescription = getString(R.string.map_drawing_probe_settings)
-            setOnClickListener { showSectorConfigDialog() }
-        }
-        root.addView(
-            fabSectorConfig,
-            FrameLayout.LayoutParams(
-                FrameLayout.LayoutParams.WRAP_CONTENT,
-                FrameLayout.LayoutParams.WRAP_CONTENT
-            ).apply {
-                gravity = Gravity.END or Gravity.BOTTOM
-                rightMargin = dp(18)
-                bottomMargin = dp(28 + (56 + 12) * 6)
-            }
-        )
-        applyFabDefaultUi(fabSectorConfig)
-
-        fabSessionRestore = FloatingActionButton(this).apply {
-            setImageResource(android.R.drawable.ic_menu_recent_history)
-            setOnClickListener { showSessionRestoreDialog() }
-        }
-        root.addView(
-            fabSessionRestore,
-            FrameLayout.LayoutParams(
-                FrameLayout.LayoutParams.WRAP_CONTENT,
-                FrameLayout.LayoutParams.WRAP_CONTENT
-            ).apply {
-                gravity = Gravity.END or Gravity.BOTTOM
-                rightMargin = dp(18)
-                bottomMargin = dp(28 + (56 + 12) * 7)
-            }
-        )
-        applyFabDefaultUi(fabSessionRestore)
-
-        fabMore = FloatingActionButton(this).apply {
-            setImageResource(android.R.drawable.ic_menu_more)
-            contentDescription = "更多地图操作"
-            setOnClickListener {
-                val expanded = fabClear.visibility != View.VISIBLE
-                listOf(fabClear, fab2d3d, fabMapType, fabSectorConfig, fabSessionRestore)
-                    .forEach { it.visibility = if (expanded) View.VISIBLE else View.GONE }
-                setImageResource(if (expanded) android.R.drawable.ic_menu_close_clear_cancel else android.R.drawable.ic_menu_more)
-            }
-        }
-        root.addView(
-            fabMore,
-            FrameLayout.LayoutParams(
-                FrameLayout.LayoutParams.WRAP_CONTENT,
-                FrameLayout.LayoutParams.WRAP_CONTENT
-            ).apply {
-                gravity = Gravity.END or Gravity.BOTTOM
-                rightMargin = dp(18)
-                bottomMargin = dp(28 + (56 + 12) * 2)
-            }
-        )
-        applyFabDefaultUi(fabMore)
-        listOf(fabClear, fab2d3d, fabMapType, fabSectorConfig, fabSessionRestore)
-            .forEach { it.visibility = View.GONE }
+    private fun panelBackground(radiusDp: Int = 12) = GradientDrawable().apply {
+        setColor(if (isSystemNightMode()) 0xCC182331.toInt() else 0xCCFFFFFF.toInt())
+        cornerRadius = dp(radiusDp).toFloat()
+        setStroke(dp(1), if (isSystemNightMode()) 0x40FFFFFF else 0x30FFFFFF)
     }
 
     private fun setupSignalPanel(root: FrameLayout) {
         signalPanel = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
-            setPadding(dp(12), dp(8), dp(12), dp(8))
-            background = android.graphics.drawable.GradientDrawable().apply {
-                setColor(0xEFFFFFFF.toInt())
-                cornerRadius = dp(14).toFloat()
-                setStroke(dp(1), 0x55333333)
-            }
+            setPadding(dp(8), dp(5), dp(8), dp(5))
+            background = panelBackground()
             elevation = dp(6).toFloat()
         }
-        signalPanelTitle = TextView(this).apply {
-            text = getString(R.string.map_dual_sim_tabs_title)
-            setTextColor(Color.DKGRAY)
-            textSize = 13f
-            setTypeface(typeface, android.graphics.Typeface.BOLD)
-        }
-        signalPanel.addView(signalPanelTitle, LinearLayout.LayoutParams(-1, dp(24)))
-
-        val row = LinearLayout(this).apply {
-            orientation = LinearLayout.HORIZONTAL
-            gravity = Gravity.CENTER_VERTICAL
-        }
+        val row = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL }
         (0..1).forEach { slot ->
             val tab = LinearLayout(this).apply {
                 orientation = LinearLayout.VERTICAL
-                gravity = Gravity.CENTER_HORIZONTAL
-                setPadding(dp(6), 0, dp(6), 0)
+                setPadding(dp(8), dp(4), dp(8), dp(4))
                 setOnClickListener {
                     selectedSimSlot = slot
                     sampler.setVisibleSimSlot(slot)
-                    val states = displayedSnapshots()
-                    updateSignalPanel(states)
-                    lteOverlay.clear()
-                    nrOverlay.clear()
-                    lastLteKey = null
-                    lastOverlayRat = null
-                    states[slot]?.let { triggerOverlayForState(it) }
+                    updateSignalPanel(displayedSnapshots())
+                    if (restoredHistory != null) refreshHistoryStation()
+                    else {
+                        servingStation.clear()
+                        servingStation.update(displayedSnapshots()[slot])
+                    }
+                    updateServingPosition()
                 }
-                contentDescription = "SIM${slot + 1} 路测地图"
+                contentDescription = "SIM${slot + 1}"
             }
-            signalPanelTabs[slot] = tab
-            val label = TextView(this).apply {
-                text = "SIM${slot + 1}  -"
+            val carrier = TextView(this).apply {
                 textSize = 12f
-                gravity = Gravity.CENTER
+                setSingleLine()
+                ellipsize = TextUtils.TruncateAt.MARQUEE
+                marqueeRepeatLimit = -1
+                isSelected = true
             }
-            val progress = ProgressBar(this, null, android.R.attr.progressBarStyleHorizontal).apply {
-                max = 100
-                this.progress = 0
-            }
+            carrierViews[slot] = carrier
+            val label = TextView(this).apply { textSize = 13f; setTextColor(overlayTextColor()); setSingleLine(); ellipsize = TextUtils.TruncateAt.END }
+            val progress = ProgressBar(this, null, android.R.attr.progressBarStyleHorizontal).apply { max = 100 }
+            signalPanelTabs[slot] = tab
             signalPanelValueViews[slot] = label
             signalPanelProgressViews[slot] = progress
-            tab.addView(label, LinearLayout.LayoutParams(-1, dp(42)))
-            tab.addView(progress, LinearLayout.LayoutParams(-1, dp(7)))
-            row.addView(tab, LinearLayout.LayoutParams(0, dp(58), 1f))
+            tab.addView(carrier, LinearLayout.LayoutParams(-1, dp(19)))
+            tab.addView(label, LinearLayout.LayoutParams(-1, dp(22)))
+            tab.addView(progress, LinearLayout.LayoutParams(-1, dp(3)))
+            row.addView(tab, LinearLayout.LayoutParams(0, -2, 1f))
         }
-        signalPanel.addView(row, LinearLayout.LayoutParams(-1, dp(60)))
-        root.addView(
-            signalPanel,
-            FrameLayout.LayoutParams(dp(290), dp(100)).apply {
-                gravity = Gravity.TOP or Gravity.CENTER_HORIZONTAL
-                // 仅移动悬浮面板；MapView 仍从屏幕顶端绘制，不增加不透明“额头”。
-                topMargin = statusBarHeightPx() + dp(8)
-            }
-        )
+        signalPanel.addView(row, LinearLayout.LayoutParams(-1, -2))
+        mapStatusRow = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER_VERTICAL
+        }
+        servingStatus = TextView(this).apply {
+            textSize = 11f
+            setTextColor(overlayTextColor())
+            setPadding(dp(4), dp(4), dp(4), dp(2))
+            setSingleLine()
+            ellipsize = TextUtils.TruncateAt.END
+            setText(R.string.map_serving_no_match)
+        }
+        mapStatusRow.addView(servingStatus, LinearLayout.LayoutParams(0, dp(26), 1f))
+        signalPanel.addView(mapStatusRow, LinearLayout.LayoutParams(-1, -2))
         nearbyStatus = TextView(this).apply {
-            setTextColor(Color.DKGRAY)
-            textSize = 12f
-            gravity = Gravity.CENTER
-            setPadding(dp(8), dp(5), dp(8), dp(5))
-            setBackgroundColor(0xEFFFFFFF.toInt())
+            textSize = 11f
+            setTextColor(overlayTextColor())
+            setPadding(dp(4), dp(3), dp(4), 0)
+            setSingleLine()
+            ellipsize = TextUtils.TruncateAt.END
             visibility = View.GONE
         }
-        root.addView(nearbyStatus, FrameLayout.LayoutParams(dp(290), -2).apply {
-            gravity = Gravity.TOP or Gravity.CENTER_HORIZONTAL
-            topMargin = statusBarHeightPx() + dp(112)
+        signalPanel.addView(nearbyStatus, LinearLayout.LayoutParams(-1, -2))
+        root.addView(signalPanel, FrameLayout.LayoutParams(-1, -2).apply {
+            gravity = Gravity.TOP
+            topMargin = statusBarHeightPx() + dp(8)
+            leftMargin = dp(12)
+            rightMargin = dp(12)
         })
     }
 
+    private fun setupMapControls(root: FrameLayout) {
+        val controls = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            gravity = Gravity.CENTER_VERTICAL
+        }
+        val controlsHost = ScrollView(this).apply {
+            isVerticalScrollBarEnabled = false
+            overScrollMode = View.OVER_SCROLL_NEVER
+            addView(controls, FrameLayout.LayoutParams(dp(48), -2))
+        }
+        root.addView(controlsHost, FrameLayout.LayoutParams(dp(48), -2).apply {
+            gravity = Gravity.TOP or Gravity.END
+            rightMargin = dp(12)
+        })
+        fun button(label: String, action: () -> Unit): TextView {
+            val view = TextView(this).apply {
+                text = label
+                textSize = 11f
+                setTextColor(overlayTextColor())
+                gravity = Gravity.CENTER
+                background = panelBackground()
+                elevation = dp(2).toFloat()
+                isClickable = true
+                isFocusable = true
+                setOnClickListener { action() }
+            }
+            controls.addView(view, LinearLayout.LayoutParams(dp(48), dp(44)).apply { bottomMargin = dp(6) })
+            return view
+        }
+        mapTypeButton = button("") { toggleBaseMapMode() }
+        viewModeButton = button("") { toggle2D3D() }
+        speedView = TextView(this).apply {
+            gravity = Gravity.CENTER
+            textSize = 11f
+            setTextColor(overlayTextColor())
+            setPadding(dp(2), dp(5), dp(2), dp(5))
+            background = panelBackground()
+            text = getString(R.string.map_speed_waiting)
+        }
+        controls.addView(speedView, LinearLayout.LayoutParams(dp(48), dp(62)))
+        fun fitControls() {
+            root.post {
+                if (isDestroyed || root.height == 0) return@post
+                val top = signalPanel.bottom + dp(12)
+                val bottomMargin = navigationBarHeightPx() + dp(72)
+                val available = (root.height - bottomMargin - top).coerceAtLeast(0)
+                val compact = available < dp(332)
+                val orientation = if (compact) LinearLayout.HORIZONTAL else LinearLayout.VERTICAL
+                val width = dp(if (compact) 156 else 48)
+                listOf(controls, fabActions).forEach { group ->
+                    if (group.orientation != orientation) {
+                        group.orientation = orientation
+                        repeat(group.childCount) { index ->
+                            val child = group.getChildAt(index)
+                            val params = child.layoutParams as LinearLayout.LayoutParams
+                            params.topMargin = if (!compact && group === fabActions && index > 0) dp(6) else 0
+                            params.bottomMargin = if (!compact && group === controls && index < 2) dp(6) else 0
+                            params.rightMargin = if (compact && index < 2) dp(6) else 0
+                            child.layoutParams = params
+                        }
+                    }
+                    if (group.layoutParams.width != width) group.layoutParams = group.layoutParams.apply { this.width = width }
+                }
+                val limit = ((available - dp(12)) / 2).coerceAtLeast(1)
+                val upper = controlsHost.layoutParams as FrameLayout.LayoutParams
+                val upperHeight = minOf(controls.measuredHeight, limit).coerceAtLeast(1)
+                if (upper.width != width || upper.height != upperHeight || upper.topMargin != top) {
+                    upper.width = width; upper.height = upperHeight; upper.topMargin = top
+                    controlsHost.layoutParams = upper
+                }
+                val lower = fabActionsHost.layoutParams as FrameLayout.LayoutParams
+                val lowerHeight = minOf(fabActions.measuredHeight, limit).coerceAtLeast(1)
+                if (lower.width != width || lower.height != lowerHeight || lower.bottomMargin != bottomMargin) {
+                    lower.width = width; lower.height = lowerHeight; lower.bottomMargin = bottomMargin
+                    fabActionsHost.layoutParams = lower
+                }
+            }
+        }
+        root.addOnLayoutChangeListener { _, _, _, _, _, _, _, _, _ -> fitControls() }
+        signalPanel.addOnLayoutChangeListener { _, _, _, _, _, _, _, _, _ -> fitControls() }
+        updateMapTypeFabUi()
+        update2D3DFabUi()
+    }
+
+    private fun navigationBarHeightPx(): Int = androidx.core.view.ViewCompat.getRootWindowInsets(mapView)
+        ?.getInsets(androidx.core.view.WindowInsetsCompat.Type.navigationBars())?.bottom ?: 0
+
+    private fun setupZoomControls(root: FrameLayout) {
+        val bar = LinearLayout(this).apply {
+            gravity = Gravity.CENTER
+            background = panelBackground(22)
+            elevation = dp(3).toFloat()
+        }
+        fun button(label: String, description: Int, action: () -> Unit) = TextView(this).apply {
+            text = label
+            textSize = 24f
+            gravity = Gravity.CENTER
+            setTextColor(overlayTextColor())
+            contentDescription = getString(description)
+            isFocusable = true
+            setOnClickListener { action() }
+            bar.addView(this, LinearLayout.LayoutParams(dp(48), dp(44)))
+        }
+        zoomOutButton = button("−", R.string.map_zoom_out) { aMap.animateCamera(CameraUpdateFactory.zoomOut()) }
+        bar.addView(View(this).apply { setBackgroundColor(0x30445566) }, LinearLayout.LayoutParams(dp(1), dp(20)))
+        zoomInButton = button("+", R.string.map_zoom_in) { aMap.animateCamera(CameraUpdateFactory.zoomIn()) }
+        root.addView(bar, FrameLayout.LayoutParams(-2, dp(44)).apply {
+            gravity = Gravity.BOTTOM or Gravity.CENTER_HORIZONTAL
+            bottomMargin = navigationBarHeightPx() + dp(16)
+        })
+        root.addOnLayoutChangeListener { _, _, _, _, _, _, _, _, _ ->
+            val params = bar.layoutParams as FrameLayout.LayoutParams
+            val margin = navigationBarHeightPx() + dp(16)
+            if (params.bottomMargin != margin) { params.bottomMargin = margin; bar.layoutParams = params }
+        }
+        updateZoomControls()
+    }
+
+    private fun updateZoomControls() {
+        if (!::zoomInButton.isInitialized) return
+        val zoom = aMap.cameraPosition.zoom
+        zoomInButton.isEnabled = zoom < aMap.maxZoomLevel - 0.01f
+        zoomOutButton.isEnabled = zoom > aMap.minZoomLevel + 0.01f
+        zoomInButton.alpha = if (zoomInButton.isEnabled) 1f else 0.35f
+        zoomOutButton.alpha = if (zoomOutButton.isEnabled) 1f else 0.35f
+    }
+
+    private fun setupSignalLegend(root: FrameLayout) {
+        val legend = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding(dp(10), dp(7), dp(10), dp(7))
+            background = panelBackground()
+            elevation = dp(2).toFloat()
+            contentDescription = getString(R.string.map_rsrp_legend)
+        }
+        legend.addView(TextView(this).apply {
+            text = "RSRP · dBm"
+            textSize = 11f
+            setTypeface(typeface, android.graphics.Typeface.BOLD)
+            setTextColor(overlayTextColor())
+        })
+        DriveStyle.signalBands.forEach { band ->
+            val row = LinearLayout(this).apply { gravity = Gravity.CENTER_VERTICAL; setPadding(0, dp(3), 0, 0) }
+            row.addView(View(this).apply {
+                background = GradientDrawable().apply { shape = GradientDrawable.OVAL; setColor(band.color) }
+            }, LinearLayout.LayoutParams(dp(8), dp(8)).apply { rightMargin = dp(7) })
+            row.addView(TextView(this).apply {
+                text = band.rangeLabel ?: getString(R.string.map_signal_unavailable)
+                textSize = 10f
+                setTextColor(overlayTextColor())
+            })
+            legend.addView(row)
+        }
+        root.addView(legend, FrameLayout.LayoutParams(-2, -2).apply {
+            gravity = Gravity.BOTTOM or Gravity.START
+            leftMargin = dp(12)
+            bottomMargin = navigationBarHeightPx() + dp(72)
+        })
+        root.addOnLayoutChangeListener { _, _, _, _, _, _, _, _, _ ->
+            val params = legend.layoutParams as FrameLayout.LayoutParams
+            val margin = navigationBarHeightPx() + dp(72)
+            if (params.bottomMargin != margin) { params.bottomMargin = margin; legend.layoutParams = params }
+        }
+    }
+
+    private fun installWrappingInfoWindows() {
+        aMap.setOnInfoWindowClickListener { marker ->
+            val text = listOfNotNull(marker.title?.takeIf { it.isNotBlank() }, marker.snippet?.takeIf { it.isNotBlank() })
+                .joinToString("\n")
+            if (text.isNotEmpty()) {
+                getSystemService(android.content.ClipboardManager::class.java)
+                    .setPrimaryClip(android.content.ClipData.newPlainText(marker.title.orEmpty(), text))
+                if (Build.VERSION.SDK_INT < Build.VERSION_CODES.TIRAMISU)
+                    android.widget.Toast.makeText(this, R.string.map_bubble_copied, android.widget.Toast.LENGTH_SHORT).show()
+            }
+        }
+        aMap.setInfoWindowAdapter(object : AMap.InfoWindowAdapter {
+            override fun getInfoWindow(marker: Marker): View {
+                return LinearLayout(this@AmapMapActivity).apply {
+                    orientation = LinearLayout.VERTICAL
+                    setPadding(dp(12), dp(10), dp(12), dp(18))
+                    background = MapBubbleBackground(resources.displayMetrics.density, isSystemNightMode())
+                    addView(TextView(context).apply {
+                        text = marker.title.orEmpty()
+                        maxWidth = minOf(dp(280), resources.displayMetrics.widthPixels - dp(64))
+                        textSize = 14f
+                        setTextColor(overlayTextColor())
+                        setTypeface(typeface, android.graphics.Typeface.BOLD)
+                        setSingleLine(false)
+                    })
+                    addView(TextView(context).apply {
+                        text = marker.snippet.orEmpty()
+                        maxWidth = minOf(dp(280), resources.displayMetrics.widthPixels - dp(64))
+                        textSize = 12f
+                        setTextColor(overlayTextColor())
+                        setSingleLine(false)
+                    })
+                    addView(TextView(context).apply {
+                        text = getString(R.string.map_bubble_copy_hint)
+                        textSize = 10f
+                        setTextColor(if (isSystemNightMode()) 0xFF70B9FF.toInt() else 0xFF1679C9.toInt())
+                        setPadding(0, dp(6), 0, 0)
+                    })
+                }
+            }
+            override fun getInfoContents(marker: Marker): View? = null
+        })
+    }
+
+    private fun onMotionReading(reading: DeadReckoningEngine.Reading) {
+        if (isDestroyed || !::speedView.isInitialized) return
+        val now = SystemClock.elapsedRealtime()
+        val sdkFresh = lastAmapFixAt >= 0 && now - lastAmapFixAt in 0..3000
+        val speed = (if (sdkFresh && lastAmapIsGps) lastAmapSpeed ?: reading.speedMps else reading.speedMps)
+            ?.let { String.format(Locale.getDefault(), "%.1f", it * 3.6) } ?: "—"
+        val readiness = getString(if (motionTracker.engine.isReady(now)) R.string.map_inertial_ready else R.string.map_inertial_not_ready)
+        speedView.text = "$speed\nkm/h\n$readiness"
+        speedView.contentDescription = "$speed km/h · $readiness"
+        if (!sdkFresh && reading.lat != null && reading.lng != null && reading.mode == DeadReckoningEngine.Mode.ESTIMATED) {
+            val (lat, lng) = Gcj02.wgs84ToGcj02(reading.lat, reading.lng)
+            val point = LatLng(lat, lng)
+            acceptMapPosition(point, reading.bearing?.toFloat(), reading.mode == DeadReckoningEngine.Mode.ESTIMATED,
+                reading.uncertaintyMeters?.toFloat(), Triple(reading.lat, reading.lng, "WGS84_ESTIMATED"),
+                reading.speedMps, motionTracker.engine.isReady(now), now)
+            if (mapResumed) amapListener?.onLocationChanged(Location("drive").apply {
+                latitude = lat; longitude = lng
+                accuracy = reading.uncertaintyMeters?.toFloat() ?: 10f
+                time = System.currentTimeMillis()
+                elapsedRealtimeNanos = SystemClock.elapsedRealtimeNanos()
+                reading.speedMps?.let { this.speed = it.toFloat() }
+                reading.bearing?.let { bearing = it.toFloat() }
+            })
+        } else if (!sdkFresh && reading.mode == DeadReckoningEngine.Mode.NO_FIX) {
+            mapMatching?.qualityLost()
+        }
+    }
+
+    private fun acceptMapPosition(point: LatLng, bearing: Float?, estimated: Boolean, accuracy: Float?,
+        raw: Triple<Double?, Double?, String?> = Triple(null, null, null), speedMps: Double? = null,
+        speedReliable: Boolean = false, fixAt: Long = SystemClock.elapsedRealtime()) {
+        lastLatLng = point
+        lastRawPosition = raw
+        lastPositionAt = SystemClock.elapsedRealtime()
+        lastPositionEstimated = estimated
+        lastPositionAccuracy = accuracy
+        syncMapMatchingState()
+        if (mapMatching?.enabled == true) {
+            val wgs = if (raw.third?.startsWith("WGS84", true) == true && raw.first != null && raw.second != null)
+                raw.first!! to raw.second!! else Gcj02.gcj02ToWgs84(point.latitude, point.longitude)
+            mapMatching?.accept(MatchFix(RoutePosition(wgs.first, wgs.second), fixAt,
+                if (estimated) MatchSource.IMU else if (lastAmapIsGps) MatchSource.GNSS else MatchSource.SDK,
+                speedMps, bearing?.toDouble(), accuracy?.toDouble() ?: 999.0, speedReliable,
+                System.currentTimeMillis() - (SystemClock.elapsedRealtime() - fixAt).coerceAtLeast(0)))
+        }
+        if (bearing != null) lastBearingDeg = bearing
+        if (!mapResumed) return
+        if (isFirstFix) {
+            isFirstFix = false
+            if (shouldSkipFirstFixCenter) shouldSkipFirstFixCenter = false
+            else {
+                ignoreCameraMoveCancelOnce = true
+                aMap.moveCamera(CameraUpdateFactory.newLatLngZoom(point, 17f))
+            }
+        } else if (followMyLocation) applyFollowCamera(point, lastBearingDeg)
+        if (!isPickMode) {
+            updateServingPosition()
+            probeNearbyCells()
+        }
+    }
+
+    private fun updateServingPosition() {
+        if (::servingStation.isInitialized) servingStation.updatePosition(
+            if (restoredHistory != null) visibleHistory?.pointsBySlot?.get(selectedSimSlot)?.firstOrNull()?.latLng
+            else lastMatchedPosition ?: lastLatLng)
+    }
+
+    private fun onMapMatchResult(result: MatchResult?, metadata: String?) {
+        val previous = lastMatchedPosition
+        lastMapMatchJson = metadata ?: result?.toJson()
+        lastMatchedPosition = result?.corrected?.let { p -> Gcj02.wgs84ToGcj02(p.lat, p.lng).let { LatLng(it.first, it.second) } }
+        if (!mapResumed || isPickMode || restoredHistory != null) return
+        val display = lastMatchedPosition ?: if (previous != null) lastLatLng else null
+        if (display != null) {
+            // Display only: the GPS observer and sampler continue to receive the unmodified raw fix.
+            amapListener?.onLocationChanged(Location("map_match_output").apply {
+                latitude = display.latitude; longitude = display.longitude
+                accuracy = lastPositionAccuracy ?: 100f
+                time = System.currentTimeMillis(); elapsedRealtimeNanos = SystemClock.elapsedRealtimeNanos()
+                result?.fix?.speedMps?.let { speed = it.toFloat() }
+                result?.fix?.bearing?.let { bearing = it.toFloat() }
+            })
+            if (followMyLocation) applyFollowCamera(display, lastBearingDeg)
+            updateServingPosition()
+        }
+    }
+
+    private fun saveLinkedStation(state: NetworkPanelUiState, snapshot: DriveStationSnapshot, position: LatLng) {
+        val sid = persistSessionId ?: return
+        if (!isDriving || finishingDrive || restoredHistory != null) return
+        val slot = latestSnapshots.entries.firstOrNull { it.value.subId == state.subId }?.key ?: return
+        val cellKey = DriveStyle.cellKey(state)
+        if (!linkedStationKeys.add("$sid|$slot|$cellKey")) return
+        stationWrites.enqueue(listOf(DriveStationEntity(sid, slot, cellKey, System.currentTimeMillis(),
+            position.latitude, position.longitude, DriveStationJson.encode(snapshot))), sid)
+    }
+
+    private fun showMapStatus(message: String) {
+        if (::nearbyStatus.isInitialized) { nearbyStatus.text = message; nearbyStatus.visibility = View.VISIBLE }
+        Logger.log("Map: $message")
+    }
+
     private fun statusBarHeightPx(): Int {
+        androidx.core.view.ViewCompat.getRootWindowInsets(mapView)
+            ?.getInsets(androidx.core.view.WindowInsetsCompat.Type.statusBars() or androidx.core.view.WindowInsetsCompat.Type.displayCutout())
+            ?.top?.takeIf { it > 0 }?.let { return it }
         val id = resources.getIdentifier("status_bar_height", "dimen", "android")
         return if (id > 0) resources.getDimensionPixelSize(id) else dp(24)
     }
 
     private fun updateSignalPanel(states: Map<Int, NetworkPanelUiState>) {
         if (!::signalPanel.isInitialized) return
-        signalPanelTitle.setText(if (restoredHistory == null) R.string.map_dual_sim_tabs_title
-            else R.string.map_history_tabs_title)
+        syncMapMatchingState()
+        restoredHistory?.let { mapMatching?.showHistory(it.pointsBySlot[selectedSimSlot].orEmpty()) }
         (0..1).forEach { slot ->
             val state = states[slot]
+            carrierViews[slot]?.apply {
+                val label = "SIM${slot + 1} · ${state?.operatorName?.takeIf { it.isNotBlank() && it != "-" } ?: "—"}"
+                if (text.toString() != label) text = label
+                isSelected = true
+                setTextColor(if (selectedSimSlot == slot) fabBlue else overlayTextColor())
+            }
             val rsrp = state?.let {
                 val raw = if (it.cellType.equals("NR", true) && it.ssRsrp != "-") it.ssRsrp else it.rsrp
                 parseSignalDbm(raw)
             }
             signalPanelValueViews[slot]?.apply {
                 val rat = state?.cellType?.takeIf { it != "-" } ?: "-"
-                val historyPoints = restoredHistory?.pointsBySlot?.get(slot)
+                val historyPoints = visibleHistory?.pointsBySlot?.get(slot)
                 text = if (restoredHistory != null && historyPoints.isNullOrEmpty()) {
-                    getString(R.string.map_history_sim_empty, slot + 1)
+                    getString(if (bandFilter.active) R.string.map_band_filter_sim_empty else R.string.map_history_sim_empty, slot + 1)
                 } else {
-                    "SIM${slot + 1} · $rat\nRSRP ${rsrp?.let { "$it dBm" } ?: "-"}"
+                    "$rat  ${rsrp?.let { "$it dBm" } ?: "—"}"
                 }
-                setTextColor(if (selectedSimSlot == slot) fabBlue else Color.DKGRAY)
+                setTextColor(if (selectedSimSlot == slot) fabBlue else overlayTextColor())
             }
             signalPanelTabs[slot]?.apply {
                 isSelected = selectedSimSlot == slot
@@ -865,9 +1235,10 @@ class AmapMapActivity : AppCompatActivity(), LocationSource {
             signalPanelProgressViews[slot]?.apply {
                 progress = rsrp?.let { ((it + 140) * 100 / 70).coerceIn(0, 100) } ?: 0
                 progressTintList = android.content.res.ColorStateList.valueOf(
-                    if (selectedSimSlot == slot) fabBlue else 0xFF90A4AE.toInt()
+                    DriveStyle.colorByRsrp(rsrp)
                 )
             }
+            carrierViews[slot]?.isSelected = true
         }
     }
 
@@ -879,12 +1250,172 @@ class AmapMapActivity : AppCompatActivity(), LocationSource {
     private fun snapshotAllSims(): Map<Int, NetworkPanelUiState> = latestSnapshots
 
     private fun displayedSnapshots(): Map<Int, NetworkPanelUiState> =
-        restoredHistory?.snapshots ?: latestSnapshots
+        if (restoredHistory != null) visibleHistory?.snapshots.orEmpty() else latestSnapshots
+
+    private fun setupBandCoverage(root: FrameLayout) {
+        bandCoveragePanel = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding(dp(10), dp(8), dp(10), dp(8))
+            background = panelBackground()
+            elevation = dp(3).toFloat()
+        }
+        fun label(size: Float) = TextView(this).apply {
+            textSize = size
+            setTextColor(overlayTextColor())
+            setSingleLine()
+            ellipsize = TextUtils.TruncateAt.END
+            bandCoveragePanel.addView(this)
+        }
+        bandCoverageTitle = label(13f).apply { setTypeface(typeface, android.graphics.Typeface.BOLD) }
+        bandCoverageBands = label(11f).apply {
+            setSingleLine(false)
+            ellipsize = null
+            setPadding(0, dp(2), 0, dp(3))
+        }
+        bandCoverageDistance = label(12f)
+        bandCoverageNote = label(10f)
+        label(10f).setText(R.string.map_band_coverage_route_note)
+        root.addView(bandCoveragePanel, FrameLayout.LayoutParams(dp(200), -2))
+        fun fit() {
+            root.post {
+                if (isDestroyed || root.height == 0) return@post
+                val portrait = root.height >= root.width
+                val params = bandCoveragePanel.layoutParams as FrameLayout.LayoutParams
+                val gravity = if (portrait) Gravity.TOP or Gravity.START else Gravity.BOTTOM or Gravity.CENTER_HORIZONTAL
+                val top = if (portrait) signalPanel.bottom + dp(12) else 0
+                val left = if (portrait) dp(12) else 0
+                val bottom = if (portrait) 0 else navigationBarHeightPx() + dp(72)
+                if (params.gravity != gravity || params.topMargin != top || params.leftMargin != left || params.bottomMargin != bottom) {
+                    params.gravity = gravity; params.topMargin = top; params.leftMargin = left; params.bottomMargin = bottom
+                    bandCoveragePanel.layoutParams = params
+                }
+            }
+        }
+        root.addOnLayoutChangeListener { _, _, _, _, _, _, _, _, _ -> fit() }
+        signalPanel.addOnLayoutChangeListener { _, _, _, _, _, _, _, _, _ -> fit() }
+        updateBandCoveragePanel()
+    }
+
+    private fun updateBandCoveragePanel() {
+        if (!::bandCoveragePanel.isInitialized) return
+        bandCoveragePanel.visibility = if (bandFilter.active && showBandCoverage) View.VISIBLE else View.GONE
+        val percent = bandCoverage.fraction?.let { String.format(Locale.getDefault(), "%.1f%%", it * 100) } ?: "—"
+        bandCoverageTitle.text = getString(R.string.map_band_coverage_title, percent)
+        bandCoverageBands.text = bandFilter.summary("\n")
+        bandCoverageDistance.text = getString(R.string.map_band_coverage_distance,
+            formatDistance(bandCoverage.coveredMeters), formatDistance(bandCoverage.totalMeters))
+        bandCoverageNote.text = getString(R.string.map_band_coverage_note, selectedSimSlot + 1)
+        bandCoveragePanel.contentDescription = "${bandFilter.summary()} · ${bandCoverageTitle.text} · ${bandCoverageDistance.text} · ${bandCoverageNote.text}"
+    }
+
+    private fun showBandFilterDialog() {
+        val form = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding(dp(20), dp(8), dp(20), dp(8))
+        }
+        form.addView(TextView(this).apply {
+            setText(R.string.map_band_filter_description)
+            textSize = 13f
+            setPadding(0, 0, 0, dp(12))
+        })
+        fun field(label: Int, input: String): Pair<TextInputLayout, TextInputEditText> {
+            val edit = TextInputEditText(this).apply {
+                inputType = InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_FLAG_NO_SUGGESTIONS
+                setSingleLine()
+                setText(input)
+            }
+            val layout = TextInputLayout(this).apply { hint = getString(label); addView(edit) }
+            form.addView(layout, LinearLayout.LayoutParams(-1, -2).apply { bottomMargin = dp(8) })
+            return layout to edit
+        }
+        val (lteLayout, lteEdit) = field(R.string.map_band_filter_lte, bandFilter.lteInput())
+        val (nrLayout, nrEdit) = field(R.string.map_band_filter_nr, bandFilter.nrInput())
+        lteEdit.imeOptions = android.view.inputmethod.EditorInfo.IME_ACTION_NEXT
+        nrEdit.imeOptions = android.view.inputmethod.EditorInfo.IME_ACTION_DONE
+        val coverageSwitch = SwitchMaterial(this).apply {
+            setText(R.string.map_band_coverage_show)
+            isChecked = showBandCoverage
+        }
+        form.addView(coverageSwitch, LinearLayout.LayoutParams(-1, -2))
+        form.addView(TextView(this).apply {
+            setText(R.string.map_band_coverage_method)
+            textSize = 12f
+            setPadding(0, dp(4), 0, dp(4))
+        })
+        val dialog = newDialogBuilder().setTitle(R.string.map_band_filter_title)
+            .setView(ScrollView(this).apply { addView(form) })
+            .setPositiveButton(R.string.map_band_filter_apply, null)
+            .setNeutralButton(R.string.map_band_filter_clear) { _, _ -> applyBandFilter(DriveBandFilter()) }
+            .setNegativeButton(android.R.string.cancel, null).create()
+        dialog.setOnShowListener {
+            dialog.getButton(AlertDialog.BUTTON_POSITIVE).setOnClickListener {
+                lteLayout.error = null; nrLayout.error = null
+                val lte = runCatching { DriveBandFilter.parseLte(lteEdit.text.toString()) }.getOrElse {
+                    lteLayout.error = getString(R.string.map_band_filter_lte_error); return@setOnClickListener
+                }
+                val nr = runCatching { DriveBandFilter.parseNr(nrEdit.text.toString()) }.getOrElse {
+                    nrLayout.error = getString(R.string.map_band_filter_nr_error); return@setOnClickListener
+                }
+                showBandCoverage = coverageSwitch.isChecked
+                overlayPrefs.edit().putBoolean(KEY_SHOW_BAND_COVERAGE, showBandCoverage).apply()
+                applyBandFilter(DriveBandFilter(lte, nr))
+                dialog.dismiss()
+            }
+        }
+        nrEdit.setOnEditorActionListener { _, action, _ ->
+            if (action == android.view.inputmethod.EditorInfo.IME_ACTION_DONE) {
+                dialog.getButton(AlertDialog.BUTTON_POSITIVE).performClick()
+                true
+            } else false
+        }
+        dialog.show()
+        dialog.window?.setSoftInputMode(android.view.WindowManager.LayoutParams.SOFT_INPUT_ADJUST_RESIZE)
+    }
+
+    private fun applyBandFilter(filter: DriveBandFilter) {
+        bandFilter = filter
+        overlayPrefs.edit().putString(KEY_POINT_LTE_BANDS, filter.lteInput())
+            .putString(KEY_POINT_NR_BANDS, filter.nrInput()).apply()
+        visibleHistory = restoredHistory?.filteredBy(filter)
+        sampler.setBandFilter(filter)
+        // The cloud path has no band labels; it must not show an unfiltered route over filtered points.
+        mapMatching?.setPathVisible(!filter.active)
+        visibleHistory?.let { history ->
+            selectedSimSlot = history.initialSlot(selectedSimSlot)
+            sampler.setVisibleSimSlot(selectedSimSlot)
+            refreshHistoryStation()
+            history.pointsBySlot[selectedSimSlot]?.firstOrNull()?.let { first ->
+                ignoreCameraMoveCancelOnce = true
+                aMap.moveCamera(CameraUpdateFactory.newLatLngZoom(first.latLng, 17f))
+            }
+        }
+        updateBandCoveragePanel()
+        updateSignalPanel(displayedSnapshots())
+        updateServingPosition()
+        if (restoredHistory != null) showHistoryPointCount()
+    }
+
+    private fun refreshHistoryStation() {
+        val history = visibleHistory ?: return
+        val points = history.pointsBySlot[selectedSimSlot].orEmpty()
+        val keys = points.mapTo(HashSet()) { it.cellKey }
+        val stations = restoredStations.filter { it.simSlot == selectedSimSlot && it.cellKey in keys }
+        servingStation.clear()
+        if (stations.isNotEmpty()) servingStation.showHistory(stations, selectedSimSlot, points.firstOrNull())
+        else servingStation.update(history.snapshots[selectedSimSlot])
+    }
+
+    private fun showHistoryPointCount() {
+        val total = restoredHistory?.pointsBySlot?.values?.sumOf { it.size } ?: return
+        val visible = visibleHistory?.pointsBySlot?.values?.sumOf { it.size } ?: 0
+        showMapStatus(if (bandFilter.active) getString(R.string.map_band_filter_history_result, restoredSessionTitle, visible, total)
+            else getString(R.string.map_recording_restored, restoredSessionTitle, total))
+    }
 
     private fun updateCenterFabUi() {
         if (followMyLocation) {
             fabCenter.backgroundTintList =
-                ContextCompat.getColorStateList(this, android.R.color.holo_green_dark)
+                android.content.res.ColorStateList.valueOf(overlayColor(0xFF2E7D32.toInt()))
         } else {
             tintFabBlue(fabCenter)
         }
@@ -904,8 +1435,14 @@ class AmapMapActivity : AppCompatActivity(), LocationSource {
         scope.launch {
             try {
                 sampler.awaitPersistence()
-                withContext(Dispatchers.IO) { dao.deleteSession(sid) }
+                stationWrites.awaitIdle()
+                withContext(Dispatchers.IO) { dao.deleteRecording(sid) }
+                linkedStationKeys.removeAll { it.startsWith("$sid|") }
                 hasNewPointsInSession = false
+                currentDistanceMeters = 0.0
+                sessionCities.remove(sid)
+                cityLookups.remove(sid)
+                updateSignalPanel(latestSnapshots)
             } finally {
                 finishingDrive = false
                 if (wasDriving && isDriving) sampler.start()
@@ -920,9 +1457,13 @@ class AmapMapActivity : AppCompatActivity(), LocationSource {
         lastToggleAt = now
 
         if (!isDriving) {
+            pendingResumeSessionId = null
+            pendingResumePoints = emptyList()
             requestDriveStart()
         } else {
+            sampler.captureNow()
             isDriving = false
+            syncMapMatchingState()
             sampler.stop()
             DriveKeepAliveService.stop(this)
             if (!mapResumed) locClient?.stopLocation()
@@ -930,7 +1471,9 @@ class AmapMapActivity : AppCompatActivity(), LocationSource {
 
             finishingDrive = true
             scope.launch {
-                val error = sampler.awaitPersistence()
+                val pointError = sampler.awaitPersistence()
+                val stationError = stationWrites.awaitIdle()
+                val error = pointError ?: stationError
                 finishingDrive = false
                 if (error != null) {
                     Logger.log("Drive persistence failed: ${error.message}")
@@ -941,7 +1484,13 @@ class AmapMapActivity : AppCompatActivity(), LocationSource {
                     currentSessionId = null
                     persistSessionId = null
                     hasNewPointsInSession = false
-                } else showSaveDialog(sessionId = sid)
+                } else {
+                    currentSessionId = null
+                    persistSessionId = null
+                    hasNewPointsInSession = false
+                    showMapStatus(getString(R.string.map_session_saved))
+                }
+                updateSignalPanel(displayedSnapshots())
             }
         }
     }
@@ -987,15 +1536,32 @@ class AmapMapActivity : AppCompatActivity(), LocationSource {
             restoreJob?.cancel()
             restoredHistory = null
             sampler.clear()
-            updateSignalPanel(latestSnapshots)
-            val sid = newSessionId()
+            val sid = pendingResumeSessionId ?: newSessionId()
+            if (pendingResumeSessionId != null) {
+                sampler.renderHistory(pendingResumePoints, clearExisting = true)
+            } else {
+                currentDistanceMeters = 0.0
+                sessionCities[sid] = lastCityName.takeIf {
+                    val cityPoint = lastCityPoint
+                    val startPoint = lastLatLng
+                    cityPoint != null && startPoint != null &&
+                        driveDistanceMeters(cityPoint.latitude, cityPoint.longitude, startPoint.latitude, startPoint.longitude) < 500
+                }.orEmpty()
+            }
+            pendingResumeSessionId = null
+            pendingResumePoints = emptyList()
             currentSessionId = sid
             persistSessionId = sid
             hasNewPointsInSession = false
             isDriving = true
+            syncMapMatchingState()
             locClient?.startLocation()
             sampler.start()
             applyDriveUi(true)
+            updateSignalPanel(latestSnapshots)
+            if (::motionTracker.isInitialized) motionTracker.start()
+            servingStation.update(latestSnapshots[selectedSimSlot])
+            updateServingPosition()
             val notifications = NotificationManagerCompat.from(this)
             if (!notifications.areNotificationsEnabled() ||
                 notifications.getNotificationChannel(DriveKeepAliveService.CHANNEL_ID)?.importance ==
@@ -1003,6 +1569,7 @@ class AmapMapActivity : AppCompatActivity(), LocationSource {
             ) showDriveMessage(R.string.map_drive_notification_disabled)
         } catch (error: Exception) {
             isDriving = false
+            syncMapMatchingState()
             sampler.stop()
             DriveKeepAliveService.stop(this)
             currentSessionId = null
@@ -1014,26 +1581,7 @@ class AmapMapActivity : AppCompatActivity(), LocationSource {
     }
 
     private fun showDriveMessage(message: Int) {
-        android.widget.Toast.makeText(this, message, android.widget.Toast.LENGTH_LONG).show()
-    }
-
-    private fun showSaveDialog(sessionId: String) {
-        newDialogBuilder()
-            .setTitle("保存本次路测会话？")
-            .setMessage("保存：保留本次采样点\n不保存：删除本次采样点")
-            .setCancelable(false)
-            .setPositiveButton("保存") { _, _ ->
-                currentSessionId = null
-                persistSessionId = null
-                hasNewPointsInSession = false
-            }
-            .setNegativeButton("不保存") { _, _ ->
-                scope.launch(Dispatchers.IO) { runCatching { dao.deleteSession(sessionId) } }
-                currentSessionId = null
-                persistSessionId = null
-                hasNewPointsInSession = false
-            }
-            .show()
+        showMapStatus(getString(message))
     }
 
     private fun applyDriveUi(isDriving: Boolean) {
@@ -1043,12 +1591,17 @@ class AmapMapActivity : AppCompatActivity(), LocationSource {
         if (isDriving) {
             btn.setImageResource(android.R.drawable.ic_media_pause)
             btn.backgroundTintList =
-                ContextCompat.getColorStateList(this, android.R.color.holo_red_dark)
+                android.content.res.ColorStateList.valueOf(overlayColor(0xFFC62828.toInt()))
         } else {
             btn.setImageResource(android.R.drawable.ic_media_play)
             btn.backgroundTintList =
-                android.content.res.ColorStateList.valueOf(fabBlue)
+                android.content.res.ColorStateList.valueOf(overlayColor(fabBlue))
         }
+    }
+
+    /** Viewing the live map must never start a cloud recording. Background recording stays active. */
+    private fun syncMapMatchingState() {
+        mapMatching?.setActive(isDriving && restoredHistory == null && hasLocPerm())
     }
 
     private fun initMyLocation() {
@@ -1057,6 +1610,8 @@ class AmapMapActivity : AppCompatActivity(), LocationSource {
             .myLocationType(MyLocationStyle.LOCATION_TYPE_LOCATION_ROTATE_NO_CENTER)
             .interval(1000L)
         aMap.isMyLocationEnabled = true
+        syncMapMatchingState()
+        if (!isPickMode && ::motionTracker.isInitialized && mapResumed) motionTracker.start()
     }
 
     override fun activate(listener: LocationSource.OnLocationChangedListener?) {
@@ -1068,7 +1623,7 @@ class AmapMapActivity : AppCompatActivity(), LocationSource {
                     locationMode = AMapLocationClientOption.AMapLocationMode.Hight_Accuracy
                     isOnceLocation = false
                     interval = 1000L
-                    isNeedAddress = false
+                    isNeedAddress = true
                     isWifiScan = true
                     isMockEnable = true
                 }
@@ -1076,30 +1631,45 @@ class AmapMapActivity : AppCompatActivity(), LocationSource {
 
                 setLocationListener { loc ->
                     if (loc != null && loc.errorCode == 0) {
-                        val p = LatLng(loc.latitude, loc.longitude)
-                        lastLatLng = p
-                        if (mapResumed) amapListener?.onLocationChanged(loc)
-                        lastBearingDeg = runCatching { loc.bearing }.getOrNull()
-
-                        // Continue collecting fixes without moving a paused map camera.
-                        if (!mapResumed) return@setLocationListener
-                        if (isFirstFix) {
-                            isFirstFix = false
-
-                            if (shouldSkipFirstFixCenter) {
-                                shouldSkipFirstFixCenter = false
-                            } else {
-                                ignoreCameraMoveCancelOnce = true
-                                val initZoom = 17f
-                                val initTilt = if (is3DMode) followTilt3D else 0f
-                                val initBearing = if (is3DMode) (lastBearingDeg ?: 0f) else 0f
-                                val cam = com.amap.api.maps.model.CameraPosition(p, initZoom, initTilt, initBearing)
-                                aMap.moveCamera(CameraUpdateFactory.newCameraPosition(cam))
-                            }
-                        } else if (followMyLocation) {
-                            applyFollowCamera(p, lastBearingDeg)
+                        val now = SystemClock.elapsedRealtime()
+                        val fixAt = driveFixElapsedMillis(loc.elapsedRealtimeNanos, loc.time, now, System.currentTimeMillis())
+                        if (!driveValidPosition(loc.latitude, loc.longitude, loc.accuracy) || fixAt == null) return@setLocationListener
+                        val coordinate = if (loc.coordType == AMapLocation.COORD_TYPE_WGS84)
+                            Gcj02.wgs84ToGcj02(loc.latitude, loc.longitude) else loc.latitude to loc.longitude
+                        val point = LatLng(coordinate.first, coordinate.second)
+                        val city = loc.city?.takeIf { it.isNotBlank() } ?: loc.province.orEmpty()
+                        if (city.isNotBlank()) { lastCityName = city; lastCityPoint = point }
+                        lastAmapFixAt = fixAt
+                        lastAmapIsGps = loc.locationType == AMapLocation.LOCATION_TYPE_GPS
+                        lastAmapSpeed = if (lastAmapIsGps && loc.hasSpeed()) loc.speed.toDouble().takeIf { it in 0.0..75.0 } else null
+                        // The SDK owns normal map positioning. IMU calibration must never veto a valid SDK fix.
+                        acceptMapPosition(point, if (loc.hasBearing()) loc.bearing else null, false, loc.accuracy,
+                            Triple(loc.latitude, loc.longitude, loc.coordType ?: "GCJ02"), lastAmapSpeed,
+                            lastAmapIsGps && loc.hasSpeed() && (!loc.hasSpeedAccuracy() || loc.speedAccuracyMetersPerSecond <= 2f) &&
+                                loc.hasBearing() && (!loc.hasBearingAccuracy() || loc.bearingAccuracyDegrees <= 25f), fixAt)
+                        lastPositionAt = fixAt
+                        if (mapResumed) amapListener?.onLocationChanged(if (loc.coordType == AMapLocation.COORD_TYPE_WGS84)
+                            Location(loc).apply { latitude = point.latitude; longitude = point.longitude } else loc)
+                        if (lastAmapIsGps && !isPickMode && ::motionTracker.isInitialized) {
+                            val (wgsLat, wgsLng) = if (loc.coordType == AMapLocation.COORD_TYPE_WGS84)
+                                loc.latitude to loc.longitude else Gcj02.gcj02ToWgs84(loc.latitude, loc.longitude)
+                            runCatching {
+                                motionTracker.acceptGps(Location(loc).apply {
+                                    latitude = wgsLat; longitude = wgsLng; elapsedRealtimeNanos = fixAt * 1_000_000
+                                })
+                            }.onFailure { Logger.log("Drive IMU observation failed: ${it.message}") }
                         }
-                        if (!isPickMode) probeNearbyCells()
+                        val sid = persistSessionId
+                        if (sid != null && city.isNotBlank() && sessionCities[sid].isNullOrBlank()) {
+                            // Only use an address associated with the first saved point, not a later city.
+                            DrivePersistence.scope.launch {
+                                val first = dao.getFirstPoint(sid)
+                                if (first != null && driveDistanceMeters(first.lat, first.lng, point.latitude, point.longitude) < 500) {
+                                    sessionCities[sid] = city
+                                    dao.setCityIfEmpty(sid, city)
+                                }
+                            }
+                        }
                     }
                 }
             }
@@ -1120,6 +1690,12 @@ class AmapMapActivity : AppCompatActivity(), LocationSource {
         updateMapTypeFabUi()
         if (!isPickMode) {
             startWatchCellChanges()
+            syncMapMatchingState()
+            restoredHistory?.let { mapMatching?.showHistory(it.pointsBySlot[selectedSimSlot].orEmpty()) }
+            if (hasLocPerm()) motionTracker.start()
+            if (hasLocPerm()) locClient?.startLocation()
+            if (restoredHistory == null) servingStation.update(latestSnapshots[selectedSimSlot])
+            updateServingPosition()
         }
     }
 
@@ -1127,31 +1703,35 @@ class AmapMapActivity : AppCompatActivity(), LocationSource {
         super.onPause()
         mapResumed = false
         mapView.onPause()
+        if (!isDriving) mapMatching?.setActive(false)
         // Keep per-SIM telemetry fresh while a running road test is backgrounded.
         if (isDriving) locClient?.startLocation()
+        else if (!isPickMode && ::motionTracker.isInitialized) {
+            motionTracker.stop()
+            locClient?.stopLocation()
+        }
     }
 
     override fun onDestroy() {
-        super.onDestroy()
-        if (!isPickMode) DriveKeepAliveService.stop(this)
-
-        if (isDriving) {
-            val sid = currentSessionId
-            isDriving = false
-            runCatching { sampler.stop() }
-            if (sid != null) {
-                // The Activity scope is about to be cancelled. Finish deletion after its writers stop.
-                CoroutineScope(Dispatchers.IO).launch {
-                    sampler.awaitPersistence()
-                    runCatching { dao.deleteSession(sid) }
-                }
+        mapMatching?.close()
+        if (!isPickMode) {
+            if (::sampler.isInitialized) {
+                sampler.clearSelection()
+                if (isDriving) sampler.captureNow()
+                sampler.stop()
             }
+            isDriving = false
+            DriveKeepAliveService.stop(this)
+            if (::motionTracker.isInitialized) motionTracker.stop()
+            if (::servingStation.isInitialized) servingStation.clear()
         }
-
+        // Already queued batches belong to DrivePersistence, not the page scope.
+        // Committed points survive back navigation, task removal and process restart.
         scope.cancel()
         mapView.onDestroy()
         locClient?.onDestroy()
         locClient = null
+        super.onDestroy()
     }
 
     override fun onSaveInstanceState(outState: Bundle) {
@@ -1159,51 +1739,66 @@ class AmapMapActivity : AppCompatActivity(), LocationSource {
         mapView.onSaveInstanceState(outState)
     }
 
-    private fun showSessionRestoreDialog() {
-        if (isDriving || finishingDrive) {
-            showDriveMessage(R.string.map_history_stop_recording)
-            return
+    private val recordingManager = registerForActivityResult(ActivityResultContracts.StartActivityForResult()) { result ->
+        val sid = result.data?.getStringExtra("session_id")
+        if (result.resultCode == android.app.Activity.RESULT_OK && sid != null) {
+            if (result.data?.getBooleanExtra("resume", false) == true) prepareResumeSession(sid)
+            else restoreSessionPoints(sid)
+        } else {
+            val restored = restoredSessionId
+            if (restoredHistory != null && restored != null) scope.launch {
+                if (withContext(Dispatchers.IO) { dao.getBySession(restored).isEmpty() }) {
+                    sampler.clear(); restoredHistory = null; restoredStations = emptyList(); restoredSessionId = null
+                    servingStation.clear(); servingStation.update(latestSnapshots[selectedSimSlot]); updateServingPosition()
+                    updateSignalPanel(latestSnapshots)
+                }
+            }
         }
-        scope.launch {
-            val sessions = withContext(Dispatchers.IO) {
-                runCatching { dao.getSessionSummaries(MAX_SESSION_LIST) }.getOrDefault(emptyList())
-            }
-            if (sessions.isEmpty()) {
-                android.widget.Toast.makeText(
-                    this@AmapMapActivity,
-                    "暂无可恢复的 Session",
-                    android.widget.Toast.LENGTH_SHORT
-                ).show()
-                return@launch
-            }
+    }
 
-            val labels = sessions.map { summary ->
-                val start = formatTs(summary.startTs)
-                val end = formatTs(summary.endTs)
-                "${summary.sessionId}  (${summary.pointCount}点)\n$start ~ $end"
-            }.toTypedArray()
+    private fun showSessionRestoreDialog() {
+        if (isDriving || finishingDrive) { showDriveMessage(R.string.map_history_stop_recording); return }
+        recordingManager.launch(com.nvmex.networkhelper.ui.management.DataManagementActivity.intent(this, "drive"))
+    }
 
-            var selected = 0
-            val dialog = newDialogBuilder()
-                .setTitle("选择要恢复的 Session")
-                .setSingleChoiceItems(labels, selected) { _, which ->
-                    selected = which
-                }
-                .setPositiveButton("恢复") { _, _ ->
-                    val target = sessions.getOrNull(selected) ?: return@setPositiveButton
-                    restoreSessionPoints(target.sessionId)
-                }
-                .setNeutralButton("删除", null)
-                .setNegativeButton("取消", null)
-                .show()
+    private suspend fun loadSessionMetadata(sid: String): DriveSessionEntity {
+        dao.getSession(sid)?.let { return it }
+        val rows = dao.getBySession(sid)
+        val distance = driveTrackLength(rows.map { DriveTrackFix(it.ts, it.lat, it.lng, it.segmentStart) })
+        return DriveSessionEntity(sid, distanceMeters = distance).also { dao.putSession(it) }
+    }
 
-            dialog.getButton(AlertDialog.BUTTON_NEUTRAL)?.setOnClickListener {
-                val target = sessions.getOrNull(selected) ?: return@setOnClickListener
-                showDeleteSessionConfirm(target.sessionId) {
-                    dialog.dismiss()
-                    showSessionRestoreDialog()
-                }
-            }
+    private fun prepareResumeSession(sid: String) {
+        if (isDriving || finishingDrive || drivePermissionPending) return
+        restoreJob?.cancel()
+        restoreJob = scope.launch {
+            val (rows, meta) = withContext(Dispatchers.IO) { dao.getBySession(sid) to loadSessionMetadata(sid) }
+            val points = rows.mapNotNull { it.toDrivePointOrNull() }
+            if (points.isEmpty()) { showMapStatus(getString(R.string.map_sessions_empty)); return@launch }
+            pendingResumeSessionId = sid
+            pendingResumePoints = points
+            sessionCities[sid] = meta.cityName
+            currentDistanceMeters = meta.distanceMeters
+            requestDriveStart()
+        }
+    }
+
+    private fun formatDistance(meters: Double): String = if (meters < 1000)
+        String.format(Locale.getDefault(), "%.0f m", meters) else String.format(Locale.getDefault(), "%.2f km", meters / 1000)
+
+    private fun resolveSessionCity(sid: String, firstPoint: LatLng) {
+        if (!cityLookups.add(sid) || !sessionCities[sid].isNullOrBlank()) return
+        val context = applicationContext
+        DrivePersistence.scope.launch {
+            val city = runCatching {
+                val original = dao.getFirstPoint(sid)
+                val (lat, lng) = Gcj02.gcj02ToWgs84(original?.lat ?: firstPoint.latitude, original?.lng ?: firstPoint.longitude)
+                @Suppress("DEPRECATION")
+                android.location.Geocoder(context, Locale.getDefault()).getFromLocation(lat, lng, 1)
+                    ?.firstOrNull()?.let { it.locality?.takeIf { name -> name.isNotBlank() } ?: it.adminArea }
+            }.getOrNull()?.takeIf { it.isNotBlank() } ?: return@launch
+            sessionCities[sid] = city
+            dao.setCityIfEmpty(sid, city)
         }
     }
 
@@ -1214,22 +1809,15 @@ class AmapMapActivity : AppCompatActivity(), LocationSource {
             val rows = withContext(Dispatchers.IO) {
                 runCatching { dao.getBySession(sessionId) }.getOrDefault(emptyList())
             }
+            val stations = withContext(Dispatchers.IO) { dao.getStations(sessionId) }
             if (rows.isEmpty()) {
-                android.widget.Toast.makeText(
-                    this@AmapMapActivity,
-                    "Session 无数据：$sessionId",
-                    android.widget.Toast.LENGTH_SHORT
-                ).show()
+                showMapStatus("Session 无数据：$sessionId")
                 return@launch
             }
 
             val points = rows.mapNotNull { it.toDrivePointOrNull() }
             if (points.isEmpty()) {
-                android.widget.Toast.makeText(
-                    this@AmapMapActivity,
-                    "Session 数据解析失败：$sessionId",
-                    android.widget.Toast.LENGTH_SHORT
-                ).show()
+                showMapStatus("Session 数据解析失败：$sessionId")
                 return@launch
             }
 
@@ -1237,57 +1825,52 @@ class AmapMapActivity : AppCompatActivity(), LocationSource {
             if (isDriving || finishingDrive) return@launch
             val history = DriveHistory(points)
             restoredHistory = history
-            selectedSimSlot = history.initialSlot(selectedSimSlot)
+            restoredSessionId = sessionId
+            val metadata = withContext(Dispatchers.IO) { loadSessionMetadata(sessionId) }
+            sessionCities[sessionId] = metadata.cityName
+            sessionDisplayNames[sessionId] = "${metadata.cityName.ifBlank { getString(R.string.map_unknown_city) }} · ${formatTs(points.minOf { it.ts })}"
+            restoredStations = stations
+            restoredSessionTitle = sessionDisplayNames[sessionId].orEmpty()
+            selectedSimSlot = visibleHistory?.initialSlot(selectedSimSlot) ?: history.initialSlot(selectedSimSlot)
             sampler.renderHistory(points, clearExisting = true)
             sampler.setVisibleSimSlot(selectedSimSlot)
-            updateSignalPanel(history.snapshots)
+            updateSignalPanel(displayedSnapshots())
             followMyLocation = false
             shouldSkipFirstFixCenter = true
             updateCenterFabUi()
-            history.firstPoint?.let { first ->
+            visibleHistory?.pointsBySlot?.get(selectedSimSlot)?.firstOrNull()?.let { first ->
                 ignoreCameraMoveCancelOnce = true
                 aMap.moveCamera(CameraUpdateFactory.newLatLngZoom(first.latLng, 17f))
             }
-            lteOverlay.clear()
-            nrOverlay.clear()
-            lastLteKey = null
-            lastOverlayRat = null
-            history.snapshots[selectedSimSlot]?.let { triggerOverlayForState(it) }
+            refreshHistoryStation()
             Logger.log("Drive restore session=$sessionId loaded=${points.size}")
-            android.widget.Toast.makeText(
-                this@AmapMapActivity,
-                "已恢复 $sessionId（${points.size}点）",
-                android.widget.Toast.LENGTH_SHORT
-            ).show()
+            showHistoryPointCount()
         }
     }
 
     private fun showDeleteSessionConfirm(sessionId: String, onDeleted: () -> Unit) {
         if (isDriving && currentSessionId == sessionId) {
-            android.widget.Toast.makeText(
-                this,
-                "当前 Session 正在采样，请先停止",
-                android.widget.Toast.LENGTH_SHORT
-            ).show()
+            showMapStatus("当前 Session 正在采样，请先停止")
             return
         }
 
         newDialogBuilder()
-            .setTitle("删除 Session")
-            .setMessage("确认删除 $sessionId 的全部打点记录吗？")
+            .setTitle(R.string.map_delete_session)
+            .setMessage(getString(R.string.map_delete_recording_confirm, sessionDisplayNames[sessionId].orEmpty()))
             .setPositiveButton("删除") { _, _ ->
                 scope.launch {
+                    stationWrites.awaitIdle()
                     withContext(Dispatchers.IO) {
-                        runCatching { dao.deleteSession(sessionId) }
+                        runCatching { dao.deleteRecording(sessionId) }
                     }
                     sampler.clear()
                     restoredHistory = null
+                    restoredStations = emptyList()
+                    servingStation.clear()
+                    servingStation.update(latestSnapshots[selectedSimSlot])
+                    updateServingPosition()
                     updateSignalPanel(latestSnapshots)
-                    android.widget.Toast.makeText(
-                        this@AmapMapActivity,
-                        "已删除 $sessionId",
-                        android.widget.Toast.LENGTH_SHORT
-                    ).show()
+                    showMapStatus(getString(R.string.map_recording_deleted))
                     onDeleted()
                 }
             }
@@ -1309,29 +1892,17 @@ class AmapMapActivity : AppCompatActivity(), LocationSource {
                 latestSnapshots = states
                 if (restoredHistory == null) {
                     updateSignalPanel(states)
-                    if (mapResumed) states[selectedSimSlot]?.let { triggerOverlayForState(it) }
+                    if (mapResumed) servingStation.update(states[selectedSimSlot])
                 }
             }
         }
     }
 
     private fun triggerOverlayForState(state: NetworkPanelUiState): Boolean {
-        val nrArgs = state.toNrQueryArgsOrNull()
-        val lteFallback = state.toLteQueryArgsOrNull()
-        if (nrArgs != null) {
-            if (lastOverlayRat != "NR") {
-                lastOverlayRat = "NR"
-            }
-            queryNrOverlay(nrArgs, lteFallback = lteFallback)
-            return true
-        }
-
-        val lteArgs = lteFallback ?: return false
-        if (lastOverlayRat != "LTE") {
-            lastOverlayRat = "LTE"
-            lastLteKey = null
-        }
-        return queryLteOverlayIfNeeded(lteArgs)
+        if (!::servingStation.isInitialized) return false
+        servingStation.update(state)
+        updateServingPosition()
+        return true
     }
 
     private fun hasLocPerm(): Boolean {
@@ -1349,7 +1920,7 @@ class AmapMapActivity : AppCompatActivity(), LocationSource {
 
     private fun tintFabBlue(fab: FloatingActionButton) {
         fab.backgroundTintList =
-            android.content.res.ColorStateList.valueOf(fabBlue)
+            android.content.res.ColorStateList.valueOf(overlayColor(fabBlue))
     }
 
     private fun newDialogBuilder(): AlertDialog.Builder {
@@ -1364,7 +1935,7 @@ class AmapMapActivity : AppCompatActivity(), LocationSource {
     private fun applyFabDefaultUi(fab: FloatingActionButton) {
         tintFabBlue(fab)
         applyFabIconUi(fab)
-        fab.compatElevation = dp(6).toFloat()
+        fab.compatElevation = dp(3).toFloat()
     }
 
     private fun normalizeSectorDrawConfig(angleDeg: Float, radiusMeters: Double): SectorDrawConfig {
@@ -1470,6 +2041,29 @@ class AmapMapActivity : AppCompatActivity(), LocationSource {
         container.addView(distanceLayout)
         container.addView(sampleIntervalLayout)
 
+        container.addView(section(R.string.map_display_options))
+        fun displaySwitch(label: Int, value: Boolean) = SwitchMaterial(this).apply {
+            setText(label)
+            isChecked = value
+            container.addView(this)
+        }
+        val handoverSwitch = displaySwitch(R.string.map_show_handovers, showHandoverPoints)
+        val antennasSwitch = displaySwitch(R.string.map_show_serving_antennas, showServingAntennas)
+        val linkSwitch = displaySwitch(R.string.map_show_serving_link, showServingLink)
+        val inertialSwitch = displaySwitch(R.string.map_inertial_enable, inertialEnabled)
+        container.addView(TextView(this).apply {
+            setText(R.string.map_inertial_description)
+            textSize = 12f
+            setPadding(0, dp(4), 0, dp(8))
+        })
+        displaySwitch(R.string.map_matching_title, mapMatching?.enabled == true).apply {
+            setOnCheckedChangeListener { _, checked -> mapMatching?.setEnabled(checked) }
+        }
+        container.addView(TextView(this).apply {
+            text = getString(R.string.map_matching_description) + "\n" + getString(R.string.map_matching_coverage)
+            textSize = 12f; setPadding(0, dp(4), 0, dp(8))
+        })
+
         container.addView(section(R.string.map_nearby_settings))
         val enableProbe = SwitchMaterial(this).apply {
             setText(R.string.map_nearby_enable)
@@ -1550,6 +2144,17 @@ class AmapMapActivity : AppCompatActivity(), LocationSource {
                     return false
 
                 sectorDrawConfig = normalizeSectorDrawConfig(angle!!, radius!!)
+                showHandoverPoints = handoverSwitch.isChecked
+                showServingAntennas = antennasSwitch.isChecked
+                showServingLink = linkSwitch.isChecked
+                inertialEnabled = inertialSwitch.isChecked
+                overlayPrefs.edit().putBoolean("show_handover_points", showHandoverPoints)
+                    .putBoolean("show_serving_antennas", showServingAntennas)
+                    .putBoolean("show_serving_link", showServingLink)
+                    .putBoolean("inertial_auto_enabled", inertialEnabled).apply()
+                sampler.setHandoverVisible(showHandoverPoints)
+                motionTracker.setInertialEnabled(inertialEnabled)
+                servingStation.setDisplay(showServingAntennas, showServingLink)
                 markerSampleIntervalSec = normalizeMarkerSampleIntervalSec(sampleIntervalSecInput!!)
                 saveSectorDrawConfig(sectorDrawConfig)
                 saveMarkerSampleIntervalSec(markerSampleIntervalSec)
@@ -1569,11 +2174,8 @@ class AmapMapActivity : AppCompatActivity(), LocationSource {
                 sampler.updateIntervalMs(markerSampleIntervalSec * 1000L)
                 applySectorDrawConfigToOverlays()
 
-                lteOverlay.clear()
-                nrOverlay.clear()
-                lastLteKey = null
-                lastOverlayRat = null
-                displayedSnapshots()[selectedSimSlot]?.let { triggerOverlayForState(it) }
+                servingStation.clear()
+                        displayedSnapshots()[selectedSimSlot]?.let { triggerOverlayForState(it) }
                 return true
         }
         dialog.getButton(AlertDialog.BUTTON_POSITIVE).setOnClickListener {
@@ -1668,18 +2270,6 @@ class AmapMapActivity : AppCompatActivity(), LocationSource {
         return "S${System.currentTimeMillis()}_${kotlin.random.Random.nextInt(1000, 9999)}"
     }
 
-    private fun String.toIntOrNullDash(): Int? {
-        val t = trim()
-        if (t.isEmpty() || t == "-") return null
-        return t.toIntOrNull()
-    }
-
-    private fun String.toLongOrNullDash(): Long? {
-        val t = trim()
-        if (t.isEmpty() || t == "-") return null
-        return t.toLongOrNull()
-    }
-
     private fun DrivePointEntity.toDrivePointOrNull(): DrivePoint? {
         val snap = runCatching { SnapshotJson.fromJson(snapshotJson) }
             .getOrElse { return null }
@@ -1690,7 +2280,12 @@ class AmapMapActivity : AppCompatActivity(), LocationSource {
             rsrpDbm = rsrpDbm,
             isHandover = isHandover,
             cellKey = cellKey,
-            snapshot = snap
+            snapshot = snap,
+            estimated = estimated,
+            accuracyMeters = accuracyMeters,
+            segmentStart = segmentStart,
+            rawLat = rawLat, rawLng = rawLng, rawCoordType = rawCoordType,
+            mapMatchJson = SnapshotJson.mapMatch(snapshotJson)
         )
     }
 
@@ -1716,52 +2311,6 @@ class AmapMapActivity : AppCompatActivity(), LocationSource {
         sessionTimeFormatter.format(Date(ts))
     }.getOrElse { ts.toString() }
 
-    private fun NetworkPanelUiState.pickLteForQuery(): NetworkPanelUiState? {
-        return when {
-            cellType.equals("LTE", true) -> this
-            nsaLteAnchor != null -> nsaLteAnchor
-            else -> null
-        }
-    }
-
-    private data class LteQueryArgs(
-        val tac: Int,
-        val earfcn: Int,
-        val eci: Long?,
-        val pci: Int?
-    )
-
-    private data class NrQueryArgs(
-        val gcellId: String?,
-        val nrTac: Int?,
-        val nrArfcn: Int?,
-        val nrPci: Int?
-    )
-
-    private fun NetworkPanelUiState.toLteQueryArgsOrNull(): LteQueryArgs? {
-        val lte = pickLteForQuery() ?: return null
-        val tac = lte.tac.toIntOrNullDash() ?: return null
-        val earfcn = lte.arfcn.toIntOrNullDash() ?: return null
-        val pci = lte.pci.toIntOrNullDash()
-        val eci = lte.ci.toLongOrNullDash()
-        return LteQueryArgs(tac = tac, earfcn = earfcn, eci = eci, pci = pci)
-    }
-
-    private fun NetworkPanelUiState.toNrQueryArgsOrNull(): NrQueryArgs? {
-        if (!cellType.equals("NR", true)) return null
-        val gcellId = ci.trim().takeIf { it.isNotBlank() && it != "-" }
-        val nrTac = tac.toIntOrNullDash()
-        val nrArfcn = arfcn.toIntOrNullDash()
-        val nrPci = pci.toIntOrNullDash()
-        if (gcellId == null && nrTac == null && nrArfcn == null && nrPci == null) return null
-        return NrQueryArgs(
-            gcellId = gcellId,
-            nrTac = nrTac,
-            nrArfcn = nrArfcn,
-            nrPci = nrPci
-        )
-    }
-
     private var initialTriangleTriggered = false
 
     private fun triggerTriangleOnceOnEnter() {
@@ -1780,98 +2329,11 @@ class AmapMapActivity : AppCompatActivity(), LocationSource {
         }
     }
 
-    private var lastQueryToastAt = 0L
 
-    private fun toastQueryTriggered(args: LteQueryArgs) {
-        val now = SystemClock.elapsedRealtime()
-        if (now - lastQueryToastAt < 1200L) return
-
-        lastQueryToastAt = now
-
-        val msg = buildString {
-            append("LTE query ")
-            append("tac=").append(args.tac)
-            append(" earfcn=").append(args.earfcn)
-            args.eci?.let { append(" eci=").append(it) }
-            args.pci?.let { append(" pci=").append(it) }
-        }
-        Logger.log("LTE query tac=${args.tac} earfcn=${args.earfcn} eci=${args.eci} pci=${args.pci}")
-        android.widget.Toast.makeText(this, msg, android.widget.Toast.LENGTH_SHORT).show()
-    }
-
-    private fun toastNrResult(sig: String, message: String) {
-        val now = SystemClock.elapsedRealtime()
-        val minIntervalMs = 2500L
-        if (sig == lastNrResultSig && now - lastNrResultAt < minIntervalMs) return
-        lastNrResultSig = sig
-        lastNrResultAt = now
-        android.widget.Toast.makeText(this, message, android.widget.Toast.LENGTH_SHORT).show()
-    }
-
-    private fun queryLteOverlay(args: LteQueryArgs) {
-        toastQueryTriggered(args)
-        lteOverlay.queryAndShow(
-            tac = args.tac,
-            earfcn = args.earfcn,
-            eci = args.eci,
-            pci = args.pci,
-            cellId = null
-        )
-    }
-
-    private fun queryLteOverlayIfNeeded(args: LteQueryArgs): Boolean {
-        val key = "t=${args.tac}|eci=${args.eci ?: "x"}|e=${args.earfcn}|pci=${args.pci ?: "x"}"
-        if (key == lastLteKey) return false
-        lastLteKey = key
-        queryLteOverlay(args)
-        return true
-    }
-
-    private fun queryNrOverlay(args: NrQueryArgs, lteFallback: LteQueryArgs? = null) {
-        val dispatched = nrOverlay.queryAndShow(
-            gcellId = args.gcellId,
-            nrTac = args.nrTac,
-            nrArfcn = args.nrArfcn,
-            nrPci = args.nrPci,
-            onResult = { result ->
-                when (result) {
-                    is NrCellOverlayManager.QueryResult.Rendered -> {
-                        val coordText = if (result.firstLat != null && result.firstLon != null) {
-                            " (${String.format("%.5f", result.firstLat)}, ${String.format("%.5f", result.firstLon)})"
-                        } else ""
-                        toastNrResult(
-                            sig = "ok:${result.stationCount}:${result.rowCount}",
-                            message = "NR结果: 站点=${result.stationCount}, 小区=${result.rowCount}$coordText"
-                        )
-                    }
-
-                    is NrCellOverlayManager.QueryResult.NoData -> {
-                        toastNrResult(
-                            sig = "nodata:${result.reason}",
-                            message = "NR结果: 无可绘制数据(${result.reason})"
-                        )
-                        lteFallback?.let { queryLteOverlayIfNeeded(it) }
-                    }
-
-                    is NrCellOverlayManager.QueryResult.Failed -> {
-                        toastNrResult(
-                            sig = "fail:${result.reason}",
-                            message = "NR查询失败(${result.reason})"
-                        )
-                        lteFallback?.let { queryLteOverlayIfNeeded(it) }
-                    }
-                }
-            }
-        )
-        if (dispatched) {
-            Logger.log(
-                "NR request sent gcellId=${args.gcellId} tac=${args.nrTac} nrarfcn=${args.nrArfcn} pci=${args.nrPci}"
-            )
-        }
-    }
 
     private fun toggle2D3D() {
         is3DMode = !is3DMode
+        overlayPrefs.edit().putBoolean("map_3d", is3DMode).apply()
         update2D3DFabUi()
 
         val pos = aMap.cameraPosition
@@ -1893,13 +2355,9 @@ class AmapMapActivity : AppCompatActivity(), LocationSource {
     }
 
     private fun update2D3DFabUi() {
-        if (!::fab2d3d.isInitialized) return
-        if (is3DMode) {
-            fab2d3d.setImageResource(android.R.drawable.ic_menu_compass)
-        } else {
-            fab2d3d.setImageResource(android.R.drawable.ic_dialog_map)
-        }
-        applyFabIconUi(fab2d3d)
+        if (!::viewModeButton.isInitialized) return
+        viewModeButton.text = if (is3DMode) "3D" else "2D"
+        viewModeButton.contentDescription = getString(R.string.map_control_view_mode, viewModeButton.text)
     }
 
     private fun toggleBaseMapMode() {
@@ -1922,25 +2380,16 @@ class AmapMapActivity : AppCompatActivity(), LocationSource {
                 AMap.MAP_TYPE_NORMAL
             }
         }
+        aMap.uiSettings.isZoomControlsEnabled = false
         if (aMap.mapType != targetMapType) {
             aMap.mapType = targetMapType
         }
     }
 
     private fun updateMapTypeFabUi() {
-        if (!::fabMapType.isInitialized) return
-        if (baseMapMode == BaseMapMode.SATELLITE) {
-            fabMapType.setImageResource(android.R.drawable.ic_menu_gallery)
-            fabMapType.contentDescription = "地图模式：卫星"
-        } else {
-            fabMapType.setImageResource(android.R.drawable.ic_menu_mapmode)
-            fabMapType.contentDescription = if (isSystemNightMode()) {
-                "地图模式：标准(夜间)"
-            } else {
-                "地图模式：标准(日间)"
-            }
-        }
-        applyFabIconUi(fabMapType)
+        if (!::mapTypeButton.isInitialized) return
+        mapTypeButton.setText(if (baseMapMode == BaseMapMode.SATELLITE) R.string.map_satellite else R.string.map_standard)
+        mapTypeButton.contentDescription = getString(R.string.map_control_map_type, mapTypeButton.text)
     }
 
     private fun isSystemNightMode(): Boolean {
@@ -1986,10 +2435,12 @@ class AmapMapActivity : AppCompatActivity(), LocationSource {
     }
 
     companion object {
-        private const val MAX_RESTORE_POINTS = 3000
         private const val MAX_SESSION_LIST = 80
         private const val PREF_MAP_OVERLAY = "map_overlay_prefs"
         private const val KEY_SECTOR_ANGLE = "sector_angle_deg"
+        private const val KEY_POINT_LTE_BANDS = "point_lte_bands"
+        private const val KEY_POINT_NR_BANDS = "point_nr_bands"
+        private const val KEY_SHOW_BAND_COVERAGE = "show_band_coverage"
         private const val KEY_SECTOR_RADIUS = "sector_radius_meters"
         private const val KEY_MARKER_SAMPLE_INTERVAL_SEC = "marker_sample_interval_sec"
         private const val KEY_BASE_MAP_MODE = "base_map_mode"

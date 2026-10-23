@@ -20,10 +20,13 @@ data class AppSettings(
     val hideHomeTopBar: Boolean = false,
     val customBackgroundPath: String = "",
     val customBackgroundAlpha: Float = 0.22f,
-    val suppressEngineerGuidePrompt: Boolean = false
+    val suppressEngineerGuidePrompt: Boolean = false,
+    val enableMapMatching: Boolean = false
 )
 
 object AppSettingsStore {
+    const val KEY_MAP_MATCHING = "enable_map_matching"
+    fun preferences(context: Context) = context.getSharedPreferences(SP_NAME, Context.MODE_PRIVATE)
     private const val SP_NAME = "nh_settings"
     private const val KEY_ENABLE_CHART = "enable_signal_chart"
     private const val KEY_ENABLE_ECHARTS_CHART = "enable_echarts_chart"
@@ -56,7 +59,8 @@ object AppSettingsStore {
             hideHomeTopBar = sp.getBoolean(KEY_HIDE_HOME_TOP_BAR, false),
             customBackgroundPath = sp.getString(KEY_CUSTOM_BACKGROUND_PATH, "").orEmpty(),
             customBackgroundAlpha = sp.getFloat(KEY_CUSTOM_BACKGROUND_ALPHA, 0.22f).coerceIn(0f, 1f),
-            suppressEngineerGuidePrompt = sp.getBoolean(KEY_SUPPRESS_ENGINEER_GUIDE_PROMPT, false)
+            suppressEngineerGuidePrompt = sp.getBoolean(KEY_SUPPRESS_ENGINEER_GUIDE_PROMPT, false),
+            enableMapMatching = sp.getBoolean(KEY_MAP_MATCHING, false)
         )
     }
 
@@ -78,6 +82,7 @@ object AppSettingsStore {
         setCustomBackgroundPath(context, settings.customBackgroundPath)
         setCustomBackgroundAlpha(context, settings.customBackgroundAlpha)
         setSuppressEngineerGuidePrompt(context, settings.suppressEngineerGuidePrompt)
+        preferences(context).edit { putBoolean(KEY_MAP_MATCHING, settings.enableMapMatching) }
     }
 
     fun setEnableSignalChart(context: Context, value: Boolean) {

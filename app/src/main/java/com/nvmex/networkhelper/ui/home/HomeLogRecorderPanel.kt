@@ -50,7 +50,14 @@ import com.nvmex.networkhelper.model.network.NrCaInfo
 import com.nvmex.networkhelper.model.network.NetworkPanelUiState
 import com.nvmex.networkhelper.model.network.QosData
 import com.nvmex.networkhelper.ui.base.toast
+import com.nvmex.networkhelper.util.network.NrcaBandwidthEncoding
+import com.nvmex.networkhelper.xposed.translator.NrcaTranslator
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.async
+import androidx.compose.runtime.rememberCoroutineScope
 import org.json.JSONArray
 import org.json.JSONObject
 import java.io.File
@@ -92,8 +99,10 @@ fun HomeLogRecorderPanel(
     modifier: Modifier = Modifier
 ) {
     val context = LocalContext.current
+    val scope = rememberCoroutineScope()
     val samples = remember { mutableStateListOf<HomeLogSample>() }
     var recording by remember { mutableStateOf(false) }
+    var saving by remember { mutableStateOf(false) }
     var playbackActive by remember { mutableStateOf(false) }
     var playbackRunning by remember { mutableStateOf(false) }
     var playbackIndex by remember { mutableIntStateOf(0) }
@@ -106,16 +115,15 @@ fun HomeLogRecorderPanel(
 
     val importLauncher = rememberLauncherForActivityResult(ActivityResultContracts.GetContent()) { uri ->
         if (uri == null) return@rememberLauncherForActivityResult
-        val imported = readRecordingFromUri(context, uri)
-        if (imported.isEmpty()) {
-            toast(context, context.getString(R.string.home_log_import_empty_or_failed))
-        } else {
-            samples.clear()
-            samples += imported
-            playbackSession += 1
-            playbackIndex = 0
-            playbackActive = true
-            playbackRunning = true
+        scope.launch {
+            saving = true
+            val imported = withContext(Dispatchers.IO) { readRecordingFromUri(context.applicationContext, uri) }
+            if (imported.isEmpty()) toast(context, context.getString(R.string.home_log_import_empty_or_failed))
+            else {
+                samples.clear(); samples += imported; playbackSession++; playbackIndex = 0
+                playbackActive = true; playbackRunning = true
+            }
+            saving = false
         }
     }
 
@@ -138,6 +146,14 @@ fun HomeLogRecorderPanel(
         playbackIndex = 0
         playbackActive = true
         playbackRunning = true
+    }
+
+    val manageLauncher = rememberLauncherForActivityResult(ActivityResultContracts.StartActivityForResult()) { result ->
+        val path = result.data?.getStringExtra("home_replay_path")
+        if (result.resultCode == android.app.Activity.RESULT_OK && path != null) scope.launch {
+            runCatching { withContext(Dispatchers.IO) { HomeLogFiles.read(File(path)) } }
+                .onSuccess { startPlayback(it) }.onFailure { toast(context, it.message ?: "日志读取失败") }
+        }
     }
 
     LaunchedEffect(recording) {
@@ -235,6 +251,7 @@ fun HomeLogRecorderPanel(
                 }
                 Text(
                     when {
+                        saving -> "处理中…"
                         recording -> stringResource(R.string.home_log_state_recording)
                         playbackActive -> stringResource(R.string.home_log_state_playback)
                         else -> stringResource(R.string.home_log_state_ready)
@@ -249,7 +266,7 @@ fun HomeLogRecorderPanel(
                 horizontalArrangement = Arrangement.spacedBy(6.dp)
             ) {
                 Button(
-                    enabled = !playbackActive,
+                    enabled = !playbackActive && !saving,
                     modifier = Modifier.weight(1f),
                     contentPadding = PaddingValues(horizontal = 8.dp, vertical = 8.dp),
                     onClick = {
@@ -259,8 +276,14 @@ fun HomeLogRecorderPanel(
                             recording = true
                         } else {
                             recording = false
-                            saveRecording(context, samples)
-                            askCsvExport = true
+                            val savedSamples = samples.toList()
+                            saving = true
+                            val save = HomeLogFiles.persistence.async { saveRecording(context.applicationContext, savedSamples) }
+                            scope.launch {
+                                runCatching { save.await() }
+                                    .onSuccess { askCsvExport = true }.onFailure { toast(context, it.message ?: "日志保存失败") }
+                                saving = false
+                            }
                         }
                     }
                 ) {
@@ -272,7 +295,7 @@ fun HomeLogRecorderPanel(
                     )
                 }
                 OutlinedButton(
-                    enabled = !recording && !playbackActive,
+                    enabled = !recording && !playbackActive && !saving,
                     modifier = Modifier.weight(1f),
                     contentPadding = PaddingValues(horizontal = 8.dp, vertical = 8.dp),
                     onClick = { startPlayback(loadLastRecording(context)) }
@@ -285,7 +308,7 @@ fun HomeLogRecorderPanel(
                     )
                 }
                 OutlinedButton(
-                    enabled = !recording && !playbackActive,
+                    enabled = !recording && !playbackActive && !saving,
                     modifier = Modifier.weight(1f),
                     contentPadding = PaddingValues(horizontal = 8.dp, vertical = 8.dp),
                     onClick = { importLauncher.launch("*/*") }
@@ -298,6 +321,11 @@ fun HomeLogRecorderPanel(
                     )
                 }
             }
+
+            OutlinedButton(enabled = !recording && !saving, onClick = {
+                stopPlayback()
+                manageLauncher.launch(com.nvmex.networkhelper.ui.management.DataManagementActivity.intent(context, "home"))
+            }) { Text("日志管理 · 导入 / 导出") }
 
             playback?.let {
                 val panels = it.panelBySubId.values.sortedBy { panel -> panel.subId }
@@ -322,8 +350,11 @@ fun HomeLogRecorderPanel(
                 TextButton(
                     onClick = {
                         askCsvExport = false
-                        val csv = exportHomeLogCsv(context, samples)
-                        shareFile(context, csv, "text/csv")
+                        val captured = samples.toList()
+                        scope.launch {
+                            runCatching { withContext(Dispatchers.IO) { exportHomeLogCsv(context.applicationContext, captured) } }
+                                .onSuccess { shareFile(context, it, "text/csv") }.onFailure { toast(context, it.message ?: "CSV 导出失败") }
+                        }
                     }
                 ) {
                     Text(stringResource(R.string.home_log_action_save_csv))
@@ -342,12 +373,7 @@ private fun recordingFile(context: Context): File {
     return File(context.filesDir, "home_log_recording.json")
 }
 
-private fun saveRecording(context: Context, samples: List<HomeLogSample>): File {
-    val file = recordingFile(context)
-    file.writeText(samplesToJson(samples).toString(), Charsets.UTF_8)
-    toast(context, context.getString(R.string.home_log_record_saved))
-    return file
-}
+private fun saveRecording(context: Context, samples: List<HomeLogSample>): File = HomeLogFiles.save(context.filesDir, samples)
 
 private fun loadLastRecording(context: Context): List<HomeLogSample> {
     val file = recordingFile(context)
@@ -359,11 +385,11 @@ private fun readRecordingFromUri(context: Context, uri: Uri): List<HomeLogSample
     return runCatching {
         val text = context.contentResolver.openInputStream(uri)?.bufferedReader(Charsets.UTF_8)?.use { it.readText() }
             ?: return@runCatching emptyList()
-        samplesFromJson(JSONArray(text))
+        HomeLogFiles.importText(text)
     }.getOrDefault(emptyList())
 }
 
-private fun samplesToJson(samples: List<HomeLogSample>): JSONArray {
+internal fun samplesToJson(samples: List<HomeLogSample>): JSONArray {
     return JSONArray().apply {
         samples.forEach { sample ->
             put(JSONObject().apply {
@@ -380,7 +406,7 @@ private fun samplesToJson(samples: List<HomeLogSample>): JSONArray {
     }
 }
 
-private fun samplesFromJson(array: JSONArray): List<HomeLogSample> {
+internal fun samplesFromJson(array: JSONArray): List<HomeLogSample> {
     return buildList {
         for (i in 0 until array.length()) {
             val o = array.optJSONObject(i) ?: continue
@@ -440,7 +466,7 @@ private fun panelToJson(p: NetworkPanelUiState): JSONObject {
     }
 }
 
-private fun panelFromJson(o: JSONObject): NetworkPanelUiState {
+internal fun panelFromJson(o: JSONObject): NetworkPanelUiState {
     return NetworkPanelUiState(
         operatorName = o.optString("operatorName", "-"),
         mcc = o.optString("mcc", "-"),
@@ -481,6 +507,7 @@ private fun nrCaInfoToJson(info: NrCaInfo): JSONObject {
         put("slot", info.slot)
         put("type", info.type)
         put("updatedAt", info.updatedAt)
+        put("bandwidthEncoding", info.bandwidthEncoding.wireValue)
         put("carriers", JSONArray().apply {
             info.carriers.forEach { c ->
                 put(JSONObject().apply {
@@ -533,51 +560,27 @@ private fun nrCaInfoFromJson(o: JSONObject): NrCaInfo {
         slot = o.optInt("slot"),
         type = o.optInt("type"),
         carriers = carriers,
-        updatedAt = o.optLong("updatedAt")
+        updatedAt = o.optLong("updatedAt"),
+        // Recordings predating the encoding field used the legacy table.
+        bandwidthEncoding = NrcaBandwidthEncoding.fromWireValue(o.optString("bandwidthEncoding"))
+            ?: NrcaBandwidthEncoding.LEGACY
     )
 }
 
 private fun exportHomeLogCsv(context: Context, samples: List<HomeLogSample>): File {
-    val dir = File(context.cacheDir, "exports").apply { mkdirs() }
-    val file = File(dir, "home_log_${System.currentTimeMillis()}.csv")
-    file.outputStream().writer(Charsets.UTF_8).use { out ->
-        out.write("\uFEFF")
-        val headers = mutableListOf("timestamp")
-        (1..2).forEach { idx ->
-            headers += panelCsvHeaders("Sub$idx")
-            headers += qosCsvHeaders("Sub$idx")
-        }
-        headers += globalCsvHeaders()
-        out.appendLine(
-            headers.joinToString(",") { csvEscape(it) }
-        )
-        samples.forEach { s ->
-            val panels = s.panelBySubId.values.sortedBy { it.subId }.take(2)
-            val subIds = panels.map { it.subId }
-            val row = mutableListOf(s.ts.toString())
-            (0 until 2).forEach { index ->
-                val panel = panels.getOrNull(index)
-                row += panelCsvValues(panel)
-                row += qosCsvValues(subIds.getOrNull(index)?.let { s.qosBySubId[it] })
-            }
-            row += globalCsvValues(s.globalEvent)
-            out.appendLine(
-                row.joinToString(",") { csvEscape(it) }
-            )
-        }
-    }
-    toast(context, context.getString(R.string.toast_exported_file, file.name))
+    val file = File(File(context.cacheDir, "exports").apply { mkdirs() }, "home_log_${System.currentTimeMillis()}.csv")
+    file.writeText(HomeLogFiles.csv(samples), Charsets.UTF_8)
     return file
 }
 
-private fun panelCsvHeaders(prefix: String): List<String> = listOf(
+internal fun panelCsvHeaders(prefix: String): List<String> = listOf(
     "subId", "operator", "dataNetwork", "nrMode", "cellType", "duplex",
     "tac", "pci", "ci", "arfcn", "band", "freqDl", "freqUl",
     "linkDownKbps", "linkUpKbps", "linkRate", "nrTotalActiveBw", "nrCa",
     "rssi", "rsrp", "rsrq", "sinr", "ssRsrp", "ssRsrq", "ssSinr"
 ).map { "${prefix}_$it" }
 
-private fun panelCsvValues(p: NetworkPanelUiState?): List<String> {
+internal fun panelCsvValues(p: NetworkPanelUiState?): List<String> {
     if (p == null) return List(panelCsvHeaders("x").size) { "" }
     return listOf(
         p.subId.toString(),
@@ -618,9 +621,9 @@ private val qosFields = listOf(
     "calcPower", "mtpl", "pathLoss", "fbrxCount", "linkReport", "limitSpeedFlag", "limitSpeedRate"
 )
 
-private fun qosCsvHeaders(prefix: String): List<String> = qosFields.map { "${prefix}_qos_$it" }
+internal fun qosCsvHeaders(prefix: String): List<String> = qosFields.map { "${prefix}_qos_$it" }
 
-private fun qosCsvValues(q: QosData?): List<String> {
+internal fun qosCsvValues(q: QosData?): List<String> {
     if (q == null) return List(qosFields.size) { "" }
     return listOf(
         q.rat, q.endcState, q.arfcn, q.pci, q.band, q.dlBw, q.rsrp, q.rsrq, q.snr, q.svcStatus,
@@ -633,7 +636,7 @@ private fun qosCsvValues(q: QosData?): List<String> {
     ).map { it.toString() }
 }
 
-private fun globalCsvHeaders(): List<String> = listOf(
+internal fun globalCsvHeaders(): List<String> = listOf(
     "global_rlfCount", "global_rachWithUlGrantCount", "global_cellChangeCount",
     "global_isRedirectionOccur", "global_mobilitySysMode", "global_mobilityType",
     "global_mobilityStatus", "global_mobilitySourceRat", "global_mobilityTargetRat",
@@ -641,7 +644,7 @@ private fun globalCsvHeaders(): List<String> = listOf(
     "global_mm5gState", "global_mm5gSubState", "global_plmnId"
 )
 
-private fun globalCsvValues(g: GlobalQosEvent?): List<String> {
+internal fun globalCsvValues(g: GlobalQosEvent?): List<String> {
     if (g == null) return List(globalCsvHeaders().size) { "" }
     return listOf(
         g.rlfCount, g.rachWithUlGrantCount, g.cellChangeCount, g.isRedirectionOccur,
@@ -658,33 +661,19 @@ private fun formatCsvLinkRate(p: NetworkPanelUiState): String {
 }
 
 private fun formatCsvNrBandwidth(p: NetworkPanelUiState): String {
-    val carriers = p.nrCaInfo?.carriers.orEmpty()
+    val info = p.nrCaInfo ?: return ""
+    val carriers = info.carriers
     if (carriers.isEmpty()) return ""
-    fun bw(c: NrCaCarrier): Int = when (c.dlBwRaw) {
-        1 -> 5
-        2 -> 10
-        3 -> 15
-        4 -> 20
-        5 -> 25
-        6 -> 30
-        7 -> 40
-        8 -> 50
-        9 -> 60
-        10 -> 70
-        11 -> 80
-        12 -> 90
-        13 -> 100
-        14 -> 200
-        else -> 0
-    }
+    fun bw(c: NrCaCarrier): Int = NrcaTranslator.bandwidthMhzOrNull(c.dlBwRaw, info.bandwidthEncoding) ?: 0
     val configured = carriers.filter { it.dlStateRaw == 1 || it.dlStateRaw == 2 }
     val active = carriers.filter { it.dlStateRaw == 2 }
     return "${configured.sumOf(::bw)}MHz/${active.sumOf(::bw)}MHz"
 }
 
 private fun formatCsvNrCa(p: NetworkPanelUiState): String {
-    return p.nrCaInfo?.carriers.orEmpty().joinToString("|") { c ->
-        "cc=${c.ccId};pci=${c.pci};band=${c.bandText.ifBlank { c.bandRaw.toString() }};arfcn=${c.dlArfcn};dlState=${c.dlStateRaw};dlBw=${c.dlBwText}"
+    val info = p.nrCaInfo ?: return ""
+    return info.carriers.joinToString("|") { c ->
+        "cc=${c.ccId};pci=${c.pci};band=${c.bandText.ifBlank { c.bandRaw.toString() }};arfcn=${c.dlArfcn};dlState=${c.dlStateRaw};dlBw=${NrcaTranslator.bandwidth(c.dlBwRaw, info.bandwidthEncoding)}"
     }
 }
 

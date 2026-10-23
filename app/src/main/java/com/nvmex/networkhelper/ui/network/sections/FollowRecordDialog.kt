@@ -44,7 +44,9 @@ fun FollowRecordDialog(
     onSubmitSuccess: () -> Unit,
     onVendorSelected: (FollowVendor) -> Unit,
     onSiteTypeSelected: (FollowSiteType) -> Unit,
-    onApplyQuickSuffix: () -> Unit
+    onApplyQuickSuffix: () -> Unit,
+    localOnly: Boolean = false,
+    onSaveLocal: (() -> Unit)? = null
 ) {
     if (!show) return
 
@@ -192,6 +194,8 @@ fun FollowRecordDialog(
             }
         },
         confirmButton = {
+            Row {
+            if (!localOnly && onSaveLocal != null) TextButton(enabled = !uiState.isSubmitting, onClick = onSaveLocal) { Text("保存到本地") }
             TextButton(
                 onClick = onSubmit,
                 enabled = !uiState.isSubmitting
@@ -200,11 +204,12 @@ fun FollowRecordDialog(
                     if (uiState.isSubmitting) {
                         stringResource(R.string.follow_record_submitting)
                     } else {
-                        stringResource(R.string.action_submit)
+                        if (localOnly) "保存到本地" else "提交云端"
                     },
                     style = MaterialTheme.typography.labelMedium,
                     fontWeight = FontWeight.SemiBold
                 )
+            }
             }
         },
         dismissButton = {

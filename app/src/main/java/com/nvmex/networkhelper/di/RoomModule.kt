@@ -25,7 +25,7 @@ object RoomModule {
             context,
             AppDatabase::class.java,
             "network_helper.db"
-        ).build()
+        ).addMigrations(AppDatabase.MIGRATION_1_2).build()
     }
 
     @Provides
@@ -33,4 +33,7 @@ object RoomModule {
 
     @Provides
     fun provideLteCellParamDao(db: AppDatabase): LteCellParamDao = db.lteCellParamDao()
+
+    @Provides
+    fun provideManagedCellDao(db: AppDatabase): com.nvmex.networkhelper.db.entity.ManagedCellDao = db.managedCellDao()
 }

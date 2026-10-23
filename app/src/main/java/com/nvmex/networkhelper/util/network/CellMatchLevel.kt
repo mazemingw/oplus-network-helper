@@ -7,6 +7,7 @@ private fun normalizeMatchLevel(level: String?): String {
 fun cellMatchLevelText(level: String?): String {
     return when (normalizeMatchLevel(level)) {
         "" -> "-"
+        "local_user" -> "本地用户工参"
 
         // legacy
         "primary" -> "主匹配（精确）"

@@ -55,6 +55,8 @@
         android:theme="@style/Theme.欧加网络助手"
         tools:replace="android:name,android:allowBackup,android:fullBackupContent,android:theme,android:dataExtractionRules,android:label">
 
+        <activity android:name=".ui.management.DataManagementActivity" android:exported="false" />
+
         <service
             android:name=".iperf.server.IperfServerService"
             android:exported="false"
@@ -65,6 +67,9 @@
             android:exported="false"
             android:stopWithTask="true"
             android:foregroundServiceType="location" />
+
+        <meta-data android:name="com.nvmex.networkhelper.FALCON_SERVICE_ID" android:value="${AMAP_FALCON_SID}" />
+        <service android:name="com.amap.api.track.AMapTrackService" android:exported="false" android:foregroundServiceType="location" />
 
 
         <provider
