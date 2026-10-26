@@ -1,0 +1,8 @@
+<resources>
+    <string name="map_serving_location_pending">Waiting for a valid location to match the serving station</string>
+    <string name="map_serving_too_far">Ignored serving-station records more than 50 km away</string>
+    <string name="map_history_point_station_missing">No usable serving-station snapshot for this point</string>
+    <string name="map_history_point_station_info">Serving station: %1$s\nPoint-to-station distance: %2$s (straight line)</string>
+    <string name="map_station_preview_distance">Preview distance · %1$s</string>
+    <string name="map_station_preview_location_pending">Waiting for a valid location to show the station distance</string>
+</resources>

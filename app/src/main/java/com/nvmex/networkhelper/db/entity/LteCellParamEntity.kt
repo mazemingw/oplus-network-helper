@@ -32,5 +32,7 @@ data class LteCellParamEntity(
     val antennaHeight: Double? = null,
     val source: String? = null,
     val createdAt: String? = null,
-    val importedAt: Long = System.currentTimeMillis()
+    val importedAt: Long = System.currentTimeMillis(),
+    val extraInfo: String? = null,
+    val stationType: String? = null
 )

@@ -79,7 +79,7 @@ internal object DriveCsv {
                     sinr = row["sinr_db"].orEmpty().ifBlank { "-" }, ssRsrp = row["ss_rsrp_dbm"].orEmpty().ifBlank { "-" },
                     ssRsrq = row["ss_rsrq_db"].orEmpty().ifBlank { "-" }, ssSinr = row["ss_sinr_db"].orEmpty().ifBlank { "-" })
                 val key = row["cell_key"]?.takeIf { it.isNotBlank() } ?: DriveStyle.cellKey(state)
-                val accuracy = number("accuracy_m")?.also { require(it in 0.0..100000.0) { "精度无效" } }?.toFloat()
+                val accuracy = number("accuracy_m")?.also { require(it in 0.0..1_000_000.0) { "精度无效" } }?.toFloat()
                 val stationJson = row["station_snapshot_json"]?.takeIf { it.isNotBlank() }
                 if (stationJson != null) {
                     require(DriveStationJson.decode(stationJson) != null) { "服务站快照无效" }

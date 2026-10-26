@@ -258,7 +258,9 @@ private fun ImportLteCellParam.toEntity(): LteCellParamEntity {
         siteType = site_type,
         antennaHeight = antenna_height,
         source = source,
-        createdAt = created_at
+        createdAt = created_at,
+        extraInfo = extra_info,
+        stationType = station_type
     )
 }
 
@@ -310,7 +312,9 @@ private fun LteCellParamEntity.toLteQueryResp(): LteCellQueryResp {
                 azimuth = azimuth,
                 site_type = siteType,
                 antenna_height = antennaHeight,
-                source = source
+                source = source,
+                extra_info = extraInfo,
+                station_type = stationType
             )
         )
     )
@@ -335,7 +339,9 @@ private fun LteCellQueryResp.toLteSiteQueryResp(): LteSiteQueryResp {
             site_type = row.site_type,
             antenna_height = row.antenna_height,
             source = row.source,
-            created_at = null
+            created_at = null,
+            extra_info = row.extra_info,
+            station_type = row.station_type
         )
     }
 
@@ -383,7 +389,9 @@ private fun LteCellParamRow.toLteEntity(): LteCellParamEntity {
         siteType = site_type,
         antennaHeight = antenna_height,
         source = source,
-        createdAt = null
+        createdAt = null,
+        extraInfo = extra_info,
+        stationType = station_type
     )
 }
 
@@ -404,6 +412,8 @@ private fun com.nvmex.networkhelper.network.map.LteCellParam.toLteEntity(): LteC
         siteType = site_type,
         antennaHeight = antenna_height,
         source = source,
-        createdAt = created_at
+        createdAt = created_at,
+        extraInfo = extra_info,
+        stationType = station_type
     )
 }

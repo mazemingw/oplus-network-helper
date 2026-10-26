@@ -25,7 +25,7 @@ object RoomModule {
             context,
             AppDatabase::class.java,
             "network_helper.db"
-        ).addMigrations(AppDatabase.MIGRATION_1_2).build()
+        ).addMigrations(AppDatabase.MIGRATION_1_2, AppDatabase.MIGRATION_2_3).build()
     }
 
     @Provides

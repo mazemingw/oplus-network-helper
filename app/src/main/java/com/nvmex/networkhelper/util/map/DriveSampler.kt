@@ -16,6 +16,7 @@ import com.amap.api.maps.model.PolylineOptions
 import com.nvmex.networkhelper.model.map.DrivePoint
 import com.nvmex.networkhelper.model.network.NetworkPanelUiState
 import com.nvmex.networkhelper.util.network.formatCellType
+import com.nvmex.networkhelper.util.map.matching.*
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -53,7 +54,7 @@ class DriveSampler(
     private val onPersist: (suspend (List<DrivePoint>, String) -> Unit)? = null,
     private val persistEnabled: () -> Boolean = { true },
     private val positionQuality: () -> Pair<Boolean, Float?> = { false to null },
-    private val onPointSelected: ((DrivePoint) -> Unit)? = null,
+    private val onPointSelected: ((DrivePoint) -> String?)? = null,
     private val rawPosition: () -> Triple<Double?, Double?, String?> = { Triple(null, null, null) },
     private val mapMatchJson: () -> String? = { null },
     private val onCoverageChanged: (DriveCoverage) -> Unit = {}
@@ -75,6 +76,7 @@ class DriveSampler(
     private var trackDirty = true
     private val trackLines = mutableListOf<Polyline>()
     private val contextTrackLines = mutableListOf<Polyline>()
+    private val contextCasings = mutableListOf<Polyline>()
 
     // marker -> point
     private val marker2Point = HashMap<Marker, DrivePoint>(1024)
@@ -82,6 +84,7 @@ class DriveSampler(
     // FIFO：控制数量
     private val markerQueue = ArrayDeque<Marker>(1024)
     private val markerSelection = MapMarkerSelection(density)
+    private val displayCoordinates = java.util.IdentityHashMap<DrivePoint, LatLng>()
 
     val isRunning: Boolean get() = job?.isActive == true
 
@@ -136,14 +139,15 @@ class DriveSampler(
         }
         val bounds = runCatching { aMap.projection.visibleRegion.latLngBounds }.getOrNull()
         val dots = points.mapIndexedNotNull { index, p ->
-            if (!bandFilter.matches(p.snapshot) || (bounds != null && !bounds.contains(p.latLng))) null
-            else DriveDot(index, p.latLng.latitude, p.latLng.longitude, p.isHandover)
+            val position = displayPosition(p)
+            if (!bandFilter.matches(p.snapshot) || (bounds != null && !bounds.contains(position))) null
+            else DriveDot(index, position.latitude, position.longitude, p.isHandover)
         }
         val selected = selectDriveDots(dots, aMap.cameraPosition.zoom, showHandovers, density, maxMarkers)
             .map { points[it] }.toMutableSet()
         // Camera thinning must not make the point under an open bubble disappear.
         marker2Point[lastInfoMarker]?.takeIf { bandFilter.matches(it.snapshot) && it in points &&
-            (bounds == null || bounds.contains(it.latLng)) }?.let { selected.add(it) }
+            (bounds == null || bounds.contains(displayPosition(it))) }?.let { selected.add(it) }
         marker2Point.entries.toList().forEach { (marker, p) ->
             if (p !in selected) {
                 if (lastInfoMarker == marker) clearSelection()
@@ -158,6 +162,7 @@ class DriveSampler(
 
     fun clear() {
         clearSelection()
+        displayCoordinates.clear()
         markerQueue.forEach { runCatching { it.remove() } }
         markerQueue.clear()
         marker2Point.clear()
@@ -181,12 +186,15 @@ class DriveSampler(
         trackLines.clear()
         contextTrackLines.forEach { runCatching { it.remove() } }
         contextTrackLines.clear()
+        contextCasings.forEach { runCatching { it.remove() } }; contextCasings.clear()
         trackDirty = true
     }
 
     private fun refreshTrackLines(points: List<DrivePoint>, fixes: List<DriveTrackFix>) {
         // Full valid route underneath the selected bands. Filtered gaps are context, not coverage.
-        updateTrackLayer(points, if (bandFilter.active) driveTrackSegments(fixes) else emptyList(),
+        val context = if (bandFilter.active) driveTrackSegments(fixes) else emptyList()
+        updateTrackLayer(points, context, contextCasings, signalColored = false, casing = true)
+        updateTrackLayer(points, context,
             contextTrackLines, signalColored = false)
         updateTrackLayer(points, driveTrackSegments(fixes) { bandFilter.matches(points[it].snapshot) },
             trackLines, signalColored = true)
@@ -194,18 +202,18 @@ class DriveSampler(
     }
 
     private fun updateTrackLayer(points: List<DrivePoint>, segments: List<List<Int>>,
-        lines: MutableList<Polyline>, signalColored: Boolean) {
+        lines: MutableList<Polyline>, signalColored: Boolean, casing: Boolean = false) {
         var lineIndex = 0
         segments.forEach { indices ->
             // Overlap the endpoints so SDK-sized chunks still form a continuous route.
             var offset = 0
             while (offset < indices.lastIndex) {
                 val chunk = indices.subList(offset, minOf(offset + 2000, indices.size)).map { points[it] }
-                val options = PolylineOptions().addAll(chunk.map { it.latLng })
-                    .width((if (signalColored) 3f else 2.5f) * density)
-                    .zIndex(if (signalColored) 0.5f else 0f)
+                val options = PolylineOptions().addAll(chunk.map(::displayPosition))
+                    .width((if (casing) 5.5f else 3f) * density)
+                    .zIndex(if (signalColored) 0.5f else if (casing) -.1f else 0f)
                 if (signalColored) options.colorValues(chunk.map { DriveStyle.colorByRsrp(it.rsrpDbm) }).useGradient(true)
-                else options.color(0xB08D969F.toInt())
+                else options.color(if (casing) 0xEE30213F.toInt() else 0xFFE082FF.toInt())
                 if (lineIndex < lines.size) lines[lineIndex].setOptions(options)
                 else lines.add(aMap.addPolyline(options))
                 lineIndex++
@@ -232,6 +240,44 @@ class DriveSampler(
         clearVisibleMarkers()
         trackDirty = true
         refreshVisibleMarkers()
+    }
+
+    fun recordedPoints(): List<DrivePoint> = pointsBySlot.values.flatten()
+
+    private fun displayPosition(point: DrivePoint): LatLng = displayCoordinates.getOrPut(point) {
+        val matched = if (point.estimated) null else falconRecordedPosition(point.mapMatchJson)
+        if (matched != null && driveDistanceMeters(point.latLng.latitude, point.latLng.longitude, matched.lat, matched.lng) <= 100)
+            LatLng(matched.lat, matched.lng) else point.latLng
+    }
+
+    /** Update cloud metadata and presentation only. The raw sample and coverage denominator stay intact. */
+    fun applyFalconTrace(trace: FalconTrace): List<FalconPointUpdate> {
+        val index = FalconCorrectionIndex(trace)
+        val updates = mutableListOf<FalconPointUpdate>()
+        val replaced = mutableMapOf<Pair<Int, Long>, DrivePoint>()
+        pointsBySlot.values.forEach { points ->
+            points.indices.forEach { i ->
+                val point = points[i]
+                val metadata = index.apply(point.mapMatchJson, point.ts,
+                    RoutePosition(point.latLng.latitude, point.latLng.longitude), (point.accuracyMeters ?: 100f).toDouble(), point.estimated)
+                if (metadata != null) {
+                    val updated = point.copy(mapMatchJson = metadata)
+                    points[i] = updated; displayCoordinates.remove(point)
+                    replaced[point.simSlot to point.ts] = updated
+                    updates.add(FalconPointUpdate(point.ts, point.simSlot, metadata))
+                }
+            }
+        }
+        if (updates.isNotEmpty()) {
+            marker2Point.entries.forEach { entry ->
+                replaced[entry.value.simSlot to entry.value.ts]?.let { point ->
+                    entry.setValue(point); entry.key.position = displayPosition(point)
+                }
+            }
+            trackDirty = true
+            refreshVisibleMarkers()
+        }
+        return updates
     }
 
     private fun sampleOnce() {
@@ -322,7 +368,7 @@ class DriveSampler(
 
         val marker = aMap.addMarker(
             MarkerOptions()
-                .position(p.latLng)
+                .position(displayPosition(p))
                 .icon(icon)
                 .anchor(0.5f, 0.5f)
                 .zIndex(if (p.isHandover) 10f else 1f)
@@ -336,9 +382,11 @@ class DriveSampler(
 
     private var lastInfoMarker: Marker? = null
     private var lastMarkerClickTs: Long = 0L
+    var onMapMarkerSelected: ((Marker?) -> Unit)? = null
     fun clearSelection() {
         markerSelection.clear()
         lastInfoMarker = null
+        onMapMarkerSelected?.invoke(null)
     }
 
     fun bindClickToShowInfo() {
@@ -356,6 +404,7 @@ class DriveSampler(
             // ✅ 先识别“基站红三角”（LteCellOverlayManager 已设置 m.`object` = row）
             val tag = m.`object`
             if (tag != null && marker2Point[m] == null) {
+                onMapMarkerSelected?.invoke(m)
                 // 基站 marker：你在 addMarker 时已经塞了 title/snippet，
                 // 这里直接 show 就行（也可以在这里根据 tag 拼更详细的 snippet）
                 markerSelection.select(m)
@@ -367,7 +416,8 @@ class DriveSampler(
             // ✅ 再识别采样点/切换点
             val p = marker2Point[m]
             if (p != null) {
-                onPointSelected?.invoke(p)
+                onMapMarkerSelected?.invoke(m)
+                val stationInfo = onPointSelected?.invoke(p.copy(latLng = m.position))
                 val s = p.snapshot
                 val metrics = DriveSignalMetrics.fromState(s)
                 m.title = "SIM${p.simSlot + 1}  " +
@@ -377,11 +427,12 @@ class DriveSampler(
                     "${metrics.rsrqLabel}=${metrics.rsrq?.let { "$it dB" } ?: "—"}  ${metrics.sinrLabel}=${metrics.sinr?.let { "$it dB" } ?: "—"}\n" +
                     "制式=${formatCellType(s.cellType, s.arfcn.toIntOrNull())}  网络=${s.dataNetworkType}\nTAC=${s.tac}  PCI=${s.pci}\nCI/NCI=${s.ci}\nARFCN=${s.arfcn}  BAND=${s.band}" +
                     "\n${mapChannelFrequency(s.cellType, s.arfcn.toIntOrNull())}" +
-                    (if (p.estimated) "\n惯性估算 · 误差约 ${p.accuracyMeters?.toInt() ?: "-"} m" else "") +
+                    (if (p.estimated) "\n惯导估算 · 漂移指示 ${p.accuracyMeters?.toInt() ?: "-"} m（非实测精度）" else "") +
                     (p.mapMatchJson?.let { json -> runCatching {
                         val m = com.google.gson.JsonParser.parseString(json).asJsonObject
                         "\n纠偏=${m["type"]?.asString} · ${m["status"]?.asString}\n纠偏WGS84=${m["matched_wgs84_lat"] ?: "—"}, ${m["matched_wgs84_lng"] ?: "—"}\n偏移=${m["offset_m"]}m；原始打点保留"
-                    }.getOrDefault("") } ?: "")
+                    }.getOrDefault("") } ?: "") +
+                    (stationInfo?.takeIf { it.isNotBlank() }?.let { "\n$it" } ?: "")
                 markerSelection.select(m)
                 lastInfoMarker = m
                 m.showInfoWindow()

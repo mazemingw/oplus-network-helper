@@ -21,10 +21,16 @@ data class AppSettings(
     val customBackgroundPath: String = "",
     val customBackgroundAlpha: Float = 0.22f,
     val suppressEngineerGuidePrompt: Boolean = false,
-    val enableMapMatching: Boolean = false
+    val enableMapMatching: Boolean = false,
+    val legacyBandLock: Boolean = false,
+    val rxMeasurementsExpanded: Boolean = false,
+    val mainlandBandMode: Boolean = true
 )
 
 object AppSettingsStore {
+    private const val KEY_LEGACY_BAND_LOCK = "legacy_band_lock"
+    private const val KEY_RX_MEASUREMENTS_EXPANDED = "rx_measurements_expanded"
+    private const val KEY_MAINLAND_BAND_MODE = "mainland_band_mode"
     const val KEY_MAP_MATCHING = "enable_map_matching"
     fun preferences(context: Context) = context.getSharedPreferences(SP_NAME, Context.MODE_PRIVATE)
     private const val SP_NAME = "nh_settings"
@@ -60,7 +66,10 @@ object AppSettingsStore {
             customBackgroundPath = sp.getString(KEY_CUSTOM_BACKGROUND_PATH, "").orEmpty(),
             customBackgroundAlpha = sp.getFloat(KEY_CUSTOM_BACKGROUND_ALPHA, 0.22f).coerceIn(0f, 1f),
             suppressEngineerGuidePrompt = sp.getBoolean(KEY_SUPPRESS_ENGINEER_GUIDE_PROMPT, false),
-            enableMapMatching = sp.getBoolean(KEY_MAP_MATCHING, false)
+            enableMapMatching = sp.getBoolean(KEY_MAP_MATCHING, false),
+            legacyBandLock = sp.getBoolean(KEY_LEGACY_BAND_LOCK, false),
+            rxMeasurementsExpanded = sp.getBoolean(KEY_RX_MEASUREMENTS_EXPANDED, false),
+            mainlandBandMode = sp.getBoolean(KEY_MAINLAND_BAND_MODE, true)
         )
     }
 
@@ -83,6 +92,9 @@ object AppSettingsStore {
         setCustomBackgroundAlpha(context, settings.customBackgroundAlpha)
         setSuppressEngineerGuidePrompt(context, settings.suppressEngineerGuidePrompt)
         preferences(context).edit { putBoolean(KEY_MAP_MATCHING, settings.enableMapMatching) }
+        preferences(context).edit { putBoolean(KEY_LEGACY_BAND_LOCK, settings.legacyBandLock) }
+        preferences(context).edit { putBoolean(KEY_RX_MEASUREMENTS_EXPANDED, settings.rxMeasurementsExpanded) }
+        preferences(context).edit { putBoolean(KEY_MAINLAND_BAND_MODE, settings.mainlandBandMode) }
     }
 
     fun setEnableSignalChart(context: Context, value: Boolean) {

@@ -128,6 +128,7 @@ class DeadReckoningEngineTest {
 
     @Test fun expiresAfterSixtySecondsAndAfterSensorInterruption() {
         val drive = Drive()
+        drive.engine.maxOutageMs = 60_000
         drive.warmup()
         repeat(1200) { drive.step(gps = false) }
         assertEquals(DeadReckoningEngine.Mode.ESTIMATED, drive.engine.reading(drive.at).mode)
@@ -138,6 +139,22 @@ class DeadReckoningEngineTest {
         repeat(80) { second.step(gps = false) }
         assertEquals(DeadReckoningEngine.Mode.NO_FIX, second.engine.reading(second.at + 1500).mode)
         assertEquals(DeadReckoningEngine.Calibration.FIX_REQUIRED, second.engine.calibration)
+    }
+
+    @Test fun longTunnelEstimatesContinueBeyondOldDriftAndMinuteLimitsThenHonorConfiguredLimit() {
+        val drive = Drive()
+        drive.warmup()
+        repeat(2400) { drive.step(gps = false) }
+        val twoMinutes = drive.engine.reading(drive.at)
+        assertEquals(DeadReckoningEngine.Mode.ESTIMATED, twoMinutes.mode)
+        assertEquals(120_000L, twoMinutes.outageMillis)
+        assertTrue(twoMinutes.uncertaintyMeters!! > 200)
+        repeat(9600) { drive.step(gps = false) }
+        assertEquals(DeadReckoningEngine.Mode.ESTIMATED, drive.engine.reading(drive.at).mode)
+        drive.step(gps = false)
+        assertEquals(DeadReckoningEngine.Mode.NO_FIX, drive.engine.reading(drive.at).mode)
+        assertTrue(drive.gps())
+        assertEquals(DeadReckoningEngine.Mode.GPS, drive.engine.reading(drive.at).mode)
     }
 
     @Test fun unreliableSensorsRequireFreshAutomaticAlignmentAndRecoverWithoutManualAction() {

@@ -930,8 +930,8 @@
     <string name="map_nearby_band_hint">Band filter (optional)</string>
     <string name="map_nearby_rat_hint">Radio technology (optional)</string>
     <string name="map_nearby_rat_all">All technologies</string>
-    <string name="map_nearby_band_description">Leave blank for all bands, or enter 3, B3 or n78. With all technologies selected, a number searches the same band number in 4G and 5G. Filters by stored channel number.</string>
-    <string name="map_nearby_band_invalid">Enter 3, B3 or n78, or leave blank</string>
+    <string name="map_nearby_band_description">Leave blank for all bands, or enter up to 32 comma-separated bands, e.g. B1,B3,n78. With all technologies selected, an unprefixed number searches that band in both 4G and 5G.</string>
+    <string name="map_nearby_band_invalid">Enter up to 32 comma-separated bands, e.g. B1,B3,n78, or leave blank</string>
     <string name="map_nearby_band_rat_mismatch">Technology and band do not match: use B bands for 4G and n bands for 5G.</string>
     <string name="map_nearby_band_unsupported">The backend does not support %1$s. Choose another band or leave blank.</string>
     <string name="map_nearby_description">Automatically refresh nearby LTE/NR stations from the cell database as your location changes. You can also scan once. The circle shows the search radius.</string>

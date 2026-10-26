@@ -1,0 +1,16 @@
+<resources>
+    <string name="map_station_exclusion_title">去除基站</string>
+    <string name="map_station_exclusion_description">勾选需要屏蔽的 4G 频段，或输入指定 EARFCN。只隐藏基站标记、覆盖示意及连线，不删除工参或打点数据；不屏蔽 NR 基站。</string>
+    <string name="map_station_exclusion_channels">屏蔽 4G 频点（EARFCN）</string>
+    <string name="map_station_exclusion_channels_hint">逗号分隔，例如 1650,38400；留空不限制频点</string>
+    <string name="map_station_exclusion_invalid">请输入逗号分隔的非负整数 EARFCN</string>
+    <string name="map_station_exclusion_apply">应用</string>
+    <string name="map_station_exclusion_clear">全部恢复</string>
+    <string name="map_station_exclusion_summary">已屏蔽：%1$s</string>
+    <string name="map_station_exclusion_serving">当前服务基站已按规则隐藏</string>
+    <string name="map_nearby_partial_failure"> · 部分频段探测失败，请重试</string>
+    <string name="map_nearby_loading_progress">正在探测基站（%1$d/%2$d）…</string>
+    <string name="map_station_pin">钉住天线面</string>
+    <string name="map_station_unpin">取消钉住</string>
+    <string name="map_bubble_copy_action">复制</string>
+</resources>

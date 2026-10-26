@@ -154,7 +154,7 @@ private fun LteCaCarrierCardCompact(
             CompactKeyValueRow("SCell State", c.scellStateText ?: c.scellState?.toString() ?: "-")
             CompactKeyValueRow("UL Enabled", c.ulEnabled?.toString() ?: "-")
             CompactKeyValueRow("DL EARFCN", c.dlEarfcn.toString())
-            CompactKeyValueRow("UL EARFCN", c.ulEarfcn.toString())
+            CompactKeyValueRow("UL EARFCN", c.ulEarfcn.takeIf { it >= 0 }?.toString() ?: "-")
             CompactKeyValueRow("RSRP", c.rsrp?.toString() ?: "-")
             CompactKeyValueRow("RSRQ", c.rsrq?.toString() ?: "-")
             CompactKeyValueRow("SINR", c.sinr?.toString() ?: "-")

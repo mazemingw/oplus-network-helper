@@ -60,21 +60,26 @@ class MenuCellQueryViewModel @Inject constructor(
         }
 
         viewModelScope.launch {
+            var cached: LteCellQueryResp? = null
             if (!forceRemote) {
                 val local = localRepository.queryLte(body)
                 if (local != null) {
-                    lastKey = key
                     _ui.value = CellQueryUiState.LteSuccess(local)
-                    return@launch
+                    // Refresh caches made before the metadata fields were introduced.
+                    if (local.match_level == "local_user" || local.data.all { it.station_type != null }) {
+                        lastKey = key
+                        return@launch
+                    }
+                    cached = local
                 }
             }
 
-            if (!forceRemote && key == lastKey && _ui.value is CellQueryUiState.LteSuccess) {
+            if (cached == null && !forceRemote && key == lastKey && _ui.value is CellQueryUiState.LteSuccess) {
                 return@launch
             }
             lastKey = key
 
-            _ui.value = CellQueryUiState.Loading
+            if (cached == null) _ui.value = CellQueryUiState.Loading
             runCatching { api.queryLteCellParams(body) }
                 .onSuccess { response ->
                     if (response.isSuccessful) {
@@ -85,16 +90,16 @@ class MenuCellQueryViewModel @Inject constructor(
                             } else if (forceRemote) {
                                 localRepository.evictLteByEci(body.eci)
                             }
-                            _ui.value = CellQueryUiState.LteSuccess(data)
-                        } else {
+                            if (data.data.isNotEmpty() || cached == null) _ui.value = CellQueryUiState.LteSuccess(data)
+                        } else if (cached == null) {
                             _ui.value = CellQueryUiState.Error("LTE 响应为空(body=null)")
                         }
-                    } else {
+                    } else if (cached == null) {
                         _ui.value = CellQueryUiState.Error("LTE HTTP ${response.code()} ${response.message()}")
                     }
                 }
                 .onFailure { error ->
-                    _ui.value = CellQueryUiState.Error(error.message ?: "LTE 请求失败")
+                    if (cached == null) _ui.value = CellQueryUiState.Error(error.message ?: "LTE 请求失败")
                 }
         }
     }

@@ -21,5 +21,7 @@ data class LteCellParamRow(
     val azimuth: Int? = null,
     val site_type: String? = null,
     val antenna_height: Double? = null,
-    val source: String? = null
+    val source: String? = null,
+    val extra_info: String? = null,
+    val station_type: String? = null
 )

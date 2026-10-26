@@ -10,7 +10,8 @@ data class ManagedCell(
     val tac: Int? = null, val arfcn: Int? = null, val pci: Int? = null,
     val enodebId: Int? = null, val cellId: Int? = null, val sectorId: Int? = null,
     val siteType: String? = null, val antennaHeight: Double? = null,
-    val source: String? = null, val updatedAt: Long = System.currentTimeMillis()
+    val source: String? = null, val updatedAt: Long = System.currentTimeMillis(),
+    val extraInfo: String? = null, val stationType: String? = null
 ) {
     fun validate(requireName: Boolean = true) {
         require(rat == "LTE" || rat == "NR") { "仅支持 LTE / NR" }
@@ -29,14 +30,14 @@ data class ManagedCell(
     fun lte() = LteCellParamEntity(eci = ci.toLong(), cellName = name, latitude = latitude, longitude = longitude,
         azimuth = azimuth, tac = tac, earfcn = arfcn, pci = pci, enodebId = enodebId ?: (ci.toLong() shr 8).toInt(),
         cellId = cellId ?: (ci.toLong() and 255).toInt(), sectorId = sectorId, siteType = siteType,
-        antennaHeight = antennaHeight, source = "本地用户数据")
+        antennaHeight = antennaHeight, source = "本地用户数据", extraInfo = extraInfo, stationType = stationType)
     fun nr() = NrCellParamEntity(gcellId = ci, cellName = name, latitude = latitude, longitude = longitude,
         azimuth = azimuth, nrTac = tac, nrArfcn = arfcn, nrPci = pci, siteType = siteType,
         antennaHeight = antennaHeight, source = "本地用户数据")
     companion object {
         fun from(row: LteCellParamEntity) = ManagedCell("LTE", row.eci.toString(), row.cellName.orEmpty(), row.latitude,
             row.longitude, row.azimuth, row.tac, row.earfcn, row.pci, row.enodebId, row.cellId, row.sectorId,
-            row.siteType, row.antennaHeight, row.source, row.importedAt)
+            row.siteType, row.antennaHeight, row.source, row.importedAt, row.extraInfo, row.stationType)
         fun from(row: NrCellParamEntity) = ManagedCell("NR", row.gcellId, row.cellName.orEmpty(), row.latitude,
             row.longitude, row.azimuth, row.nrTac, row.nrArfcn, row.nrPci, siteType = row.siteType,
             antennaHeight = row.antennaHeight, source = row.source, updatedAt = row.importedAt)

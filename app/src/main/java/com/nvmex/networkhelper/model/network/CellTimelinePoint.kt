@@ -9,7 +9,9 @@ data class CellTimelinePoint(
     val band: String,
     val rsrp: String,
     val rsrq: String,
-    val sinr: String
+    val sinr: String,
+    val arfcn: String = "-",
+    val mcc: String = "", val mnc: String = ""
 ) {
     fun sameCell(other: CellTimelinePoint): Boolean {
         return cellType == other.cellType &&

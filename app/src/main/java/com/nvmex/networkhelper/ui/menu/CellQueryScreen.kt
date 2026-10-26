@@ -45,6 +45,7 @@ import com.nvmex.networkhelper.model.network.NetworkPanelUiState
 import com.nvmex.networkhelper.network.model.NrCellParamItem
 import com.nvmex.networkhelper.network.model.NrQueryReq
 import com.nvmex.networkhelper.ui.base.toast
+import com.nvmex.networkhelper.ui.components.CellMetadata
 import com.nvmex.networkhelper.ui.map.AmapMapActivity
 import com.nvmex.networkhelper.util.base.formatDateTimeUtc8
 import com.nvmex.networkhelper.util.map.Gcj02
@@ -525,6 +526,7 @@ private fun CellResultCard(row: LteCellParamRow) {
 
             KeyValueRow(stringResource(R.string.cell_query_site_type), row.site_type ?: "-")
             KeyValueRow(stringResource(R.string.cell_query_source), row.source ?: "-")
+            CellMetadata(row.extra_info, row.station_type)
         }
     }
 }

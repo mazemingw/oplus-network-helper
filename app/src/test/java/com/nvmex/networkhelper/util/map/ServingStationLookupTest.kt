@@ -19,7 +19,7 @@ class ServingStationLookupTest {
     private suspend fun lookup(local: suspend () -> List<LteCellParam> = { emptyList() },
         site: suspend () -> List<LteCellParam> = { emptyList() },
         cell: suspend () -> List<LteCellParam> = { emptyList() }) = lookupServingStation(local, site, cell,
-        match = { matchServingLte(state, it) }, candidates = { servingLteCandidates(state, it) },
+        match = { matchServingLte(state, it, ServingStationReference(31.0, 121.0)) }, candidates = { servingLteCandidates(state, it) },
         hasPosition = { validStationCoordinates(it.latitude, it.longitude) })
 
     @Test fun offlineLocalCellWorksEvenWithMissingFrequencyWithoutAnyHttpRequest() = runBlocking {
@@ -56,10 +56,10 @@ class ServingStationLookupTest {
 
     @Test fun exactSiteAnchorsOutsideSectorListsAreIncludedForBothRats() {
         val lte = LteSiteQueryResp(anchor = row, data = listOf(row.copy(eci = 9999)))
-        assertEquals(row, matchServingLte(state, lte.stationRows()))
+        assertEquals(row, matchServingLte(state, lte.stationRows(), ServingStationReference(31.0, 121.0)))
         val nr = NrSiteQueryResp(anchor = NrSiteAnchor(gcell_id = "1234", nr_arfcn = 100,
             latitude = 31.0, longitude = 121.0))
-        assertNotNull(matchServingNr(state.copy(cellType = "NR"), nr.stationRows()))
+        assertNotNull(matchServingNr(state.copy(cellType = "NR"), nr.stationRows(), ServingStationReference(31.0, 121.0)))
     }
 
     @Test fun cancellationDuringSimSwitchDoesNotRunAnotherQuery() = runBlocking {

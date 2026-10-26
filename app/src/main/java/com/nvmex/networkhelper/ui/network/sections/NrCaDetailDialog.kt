@@ -67,7 +67,14 @@ fun NrCaDetailDialog(
         },
         text = {
             CompositionLocalProvider(LocalTextStyle provides MaterialTheme.typography.bodySmall) {
-                if (info == null || carriers.isEmpty()) {
+                if (info?.frequencyOnly == true) {
+                    Column(Modifier.fillMaxWidth().heightIn(max = 400.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                        Text(stringResource(R.string.qmi_nr_ca_frequency_note))
+                        carriers.forEachIndexed { index, carrier ->
+                            Text("S${index + 1} · ${carrier.bandText} · NR-ARFCN ${carrier.dlArfcn}")
+                        }
+                    }
+                } else if (info == null || carriers.isEmpty()) {
                     Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                         Text(
                             text = stringResource(R.string.ca_nr_empty),

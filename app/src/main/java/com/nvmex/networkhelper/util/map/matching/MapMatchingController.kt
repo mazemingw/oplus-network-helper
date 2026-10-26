@@ -22,7 +22,8 @@ import kotlinx.coroutines.*
 
 /** Cloud paths are separate; a delayed endpoint must never replace a newer GNSS/IMU sample. */
 class MapMatchingController(private val activity: AppCompatActivity, private val map: AMap,
-    private val scope: CoroutineScope, parent: LinearLayout, private val output: (MatchResult?, String?) -> Unit) {
+    private val scope: CoroutineScope, parent: LinearLayout, private val output: (MatchResult?, String?) -> Unit,
+    private val onTrace: (FalconTrace) -> Unit = {}) {
     private var worker: Job? = null
     private var historyWorker: Job? = null
     private var session: FalconSdkSession? = null
@@ -117,9 +118,12 @@ class MapMatchingController(private val activity: AppCompatActivity, private val
                             if (generation != epoch) break
                             trace = result
                             draw(result)
+                            onTrace(result)
                             failures = 0
                             setStatus(if (result.segments.isEmpty()) R.string.map_falcon_waiting else R.string.map_falcon_ready,
                                 if (result.segments.isEmpty()) R.string.map_falcon_waiting else R.string.map_falcon_description)
+                            if (result.segments.isNotEmpty()) status.text = activity.getString(R.string.map_falcon_ready_count,
+                                result.segments.sumOf { it.size })
                             lastFix?.let(::publish)
                         } catch (cancel: CancellationException) { throw cancel }
                         catch (error: Exception) { failures++; setError(error) }
@@ -182,7 +186,10 @@ class MapMatchingController(private val activity: AppCompatActivity, private val
             try {
                 setStatus(R.string.map_falcon_connecting, R.string.map_falcon_connecting)
                 val segments = requests.flatMap { request ->
-                    sdk.query(request.start, request.end, request.sid, request.tid, request.trid, maxPages = 100).segments
+                    val result = sdk.query(request.start, request.end, request.sid, request.tid, request.trid, maxPages = 100)
+                    ensureActive()
+                    if (generation == epoch && !active) onTrace(result)
+                    result.segments
                 }
                 ensureActive()
                 if (generation == epoch && !active) {

@@ -66,7 +66,8 @@ fun HomeScreen(
     contentBottomPadding: Dp = 0.dp,
     onOpenEngineerBandLock: () -> Unit = {},
     onOpenSignalComparison: () -> Unit = {},
-    onPlaybackBarChange: (HomePlaybackBarState?) -> Unit = {}
+    onPlaybackBarChange: (HomePlaybackBarState?) -> Unit = {},
+    networkVm: com.nvmex.networkhelper.viewmodel.signal.NetworkPanelMultiSimViewModel = androidx.lifecycle.viewmodel.compose.viewModel()
 ) {
     val scope = rememberCoroutineScope()
     val context = LocalContext.current
@@ -308,6 +309,7 @@ fun HomeScreen(
 
                 NetworkPanelWithPermissionGate {
                     NetworkPanelTabs(
+                        vm = networkVm,
                         selectedIndex = simSelectedIndex,
                         onSelectedIndexChange = { simSelectedIndex = it },
                         onCurrentState = {

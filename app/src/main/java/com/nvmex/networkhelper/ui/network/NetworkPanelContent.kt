@@ -10,9 +10,6 @@ import android.telephony.TelephonyDisplayInfo
 import android.widget.Toast
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
-import androidx.compose.animation.core.Spring
-import androidx.compose.animation.core.animateFloatAsState
-import androidx.compose.animation.core.spring
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -105,6 +102,8 @@ import com.nvmex.networkhelper.ui.network.sections.KeyChipsRow
 import com.nvmex.networkhelper.ui.network.sections.LteCellDetailDialog
 import com.nvmex.networkhelper.ui.network.sections.LteServingCellRow
 import com.nvmex.networkhelper.ui.network.sections.NetworkPanelHelpDialog
+import com.nvmex.networkhelper.ui.network.sections.RxAntennaSection
+import com.nvmex.networkhelper.ui.network.sections.NetworkSignalProgressBar
 import com.nvmex.networkhelper.ui.network.sections.NetworkQualityBadge
 import com.nvmex.networkhelper.ui.network.sections.localizedNetworkQualityText
 import com.nvmex.networkhelper.ui.network.sections.NrCaDetailDialog
@@ -117,6 +116,7 @@ import com.nvmex.networkhelper.util.network.sections.NetworkQualityAssessment
 import com.nvmex.networkhelper.util.network.sections.assessNetworkQuality
 import com.nvmex.networkhelper.util.network.utils.formatCiWithSplit
 import com.nvmex.networkhelper.viewmodel.menu.MenuCellQueryViewModel
+import com.nvmex.networkhelper.viewmodel.menu.CellQueryUiState
 import com.nvmex.networkhelper.viewmodel.signal.FollowRecordViewModel
 import com.nvmex.networkhelper.xposed.translator.NrcaTranslator
 import com.nvmex.networkhelper.util.network.NrcaBandwidthEncoding
@@ -144,7 +144,12 @@ fun NetworkPanelContent(
     modemQosCleaning: Boolean = false,
     modemQosNotice: String? = null,
     modemDiagCleanupOutput: String? = null,
-    onCleanupModemDiag: (() -> Unit)? = null
+    onCleanupModemDiag: (() -> Unit)? = null,
+    showRxMeasurements: Boolean = false,
+    rxLive: Boolean = true,
+    rxActive: Boolean = true,
+    rxExpanded: Boolean = false,
+    onRxExpandedChange: (Boolean) -> Unit = {}
 ) {
     // =========================
     // =========================
@@ -164,7 +169,7 @@ fun NetworkPanelContent(
 
     val queryVm: MenuCellQueryViewModel = hiltViewModel(key = "cell_query_${s.subId}")
     val queryUi by queryVm.ui.collectAsState()
-    var showCellDialog by rememberSaveable { mutableStateOf(false) }
+    var cellDialogQuery by remember { mutableStateOf<CellQueryUiState?>(null) }
 
     val tacInt = displayState.tac.trim().toIntOrNull()
     val earfcnInt = displayState.arfcn.trim().toIntOrNull()
@@ -327,6 +332,7 @@ fun NetworkPanelContent(
         displayState.pci,
         displayState.ci,
         displayState.band,
+        displayState.arfcn,
         displayState.rsrp,
         displayState.rsrq,
         displayState.sinr,
@@ -348,7 +354,8 @@ fun NetworkPanelContent(
             band = displayState.band,
             rsrp = if (useNrSignal) displayState.ssRsrp else displayState.rsrp,
             rsrq = if (useNrSignal) displayState.ssRsrq else displayState.rsrq,
-            sinr = if (useNrSignal) displayState.ssSinr else displayState.sinr
+            sinr = if (useNrSignal) displayState.ssSinr else displayState.sinr,
+            arfcn = displayState.arfcn, mcc = displayState.mcc, mnc = displayState.mnc
         )
 
         if (playbackFrameIndex != null) {
@@ -535,7 +542,7 @@ fun NetworkPanelContent(
                 hideSensitive = hideSensitive,
                 queryUi = queryUi,
                 devEnabled = devEnabled,
-                onOpenDetail = { showCellDialog = true },
+                onOpenDetail = { cellDialogQuery = queryUi },
                 onFollowRecord = {
                     showFollowRecordDialog = true
                     followVm.clearResultMessage()
@@ -547,9 +554,9 @@ fun NetworkPanelContent(
             )
 
             LteCellDetailDialog(
-                show = showCellDialog,
-                queryUi = queryUi,
-                onDismiss = { showCellDialog = false },
+                show = cellDialogQuery != null,
+                queryUi = cellDialogQuery ?: CellQueryUiState.Idle,
+                onDismiss = { cellDialogQuery = null },
                 onLocalCellChanged = {
                     queryVm.reset()
                     if (displayState.cellType == "LTE" && tacInt != null && earfcnInt != null)
@@ -661,6 +668,15 @@ fun NetworkPanelContent(
             )
 
             val nrBandwidthEncoding = s.nrCaInfo?.bandwidthEncoding ?: NrcaBandwidthEncoding.LEGACY
+            if (displayState.cellType == "LTE" || s.nrMode.startsWith("NSA", true)) {
+                var showLteCa by rememberSaveable(s.subId) { mutableStateOf(false) }
+                val carriers = s.lteCaInfo?.carriers.orEmpty()
+                NrCaStableRow(label = "LTE-CA", chips = if (carriers.size < 2) emptyList() else carriers.map { c ->
+                    CaChip(text = "${c.bandText ?: "B?"} ${c.dlBwText ?: "—"}", active = c.idx == 0 || c.scellState == 2)
+                }, emptyText = stringResource(if (carriers.size == 1) R.string.network_single_carrier else R.string.state_no_data),
+                    showLoading = false, onClick = { showLteCa = true })
+                com.nvmex.networkhelper.ui.network.sections.LteCaDetailDialog(showLteCa, s.lteCaInfo) { showLteCa = false }
+            }
             val nrDlBwText = remember(s.nrCaInfo, showNrBandwidth) {
                 if (!showNrBandwidth) return@remember "-"
 
@@ -721,13 +737,15 @@ fun NetworkPanelContent(
                         !nrCaLoadTimeout
 
                 val nrCaEmptyText = when {
-                    nrCarriers.size == 1 -> stringResource(R.string.network_single_carrier)
+                    nrCarriers.size == 1 && s.nrCaInfo?.frequencyOnly != true -> stringResource(R.string.network_single_carrier)
                     showNrCaLoading -> stringResource(R.string.state_loading)
                     else -> stringResource(R.string.state_no_data)
                 }
 
-                val caChips = remember(nrCarriers, nrBandwidthEncoding) {
-                    if (nrCarriers.size < 2) {
+                val caChips = remember(nrCarriers, nrBandwidthEncoding, s.nrCaInfo?.frequencyOnly) {
+                    if (s.nrCaInfo?.frequencyOnly == true) {
+                        nrCarriers.take(6).map { c -> CaChip(text = "${c.bandText} · ${c.dlArfcn}", active = false) }
+                    } else if (nrCarriers.size < 2) {
                         emptyList()
                     } else {
                         nrCarriers.take(6).map { c ->
@@ -756,6 +774,8 @@ fun NetworkPanelContent(
                     info = s.nrCaInfo,
                     onDismiss = { showCaDialog = false }
                 )
+                if (s.nrCaInfo?.frequencyOnly == true) Text(stringResource(R.string.qmi_nr_ca_frequency_note),
+                    style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
             }
 
             PanelDivider()
@@ -834,6 +854,9 @@ fun NetworkPanelContent(
                     fraction = fractionFromDb(displayState.sinr, min = -10.0, max = 30.0),
                 )
             }
+
+            if (showRxMeasurements) RxAntennaSection(subId = s.subId, live = rxLive, active = rxActive,
+                expanded = rxExpanded, onExpandedChange = onRxExpandedChange)
 
             if (!displayState.lastError.isNullOrBlank()) {
                 Spacer(Modifier.height(4.dp))
@@ -1291,7 +1314,7 @@ private fun CellTimelinePanel(
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
             } else {
-                TimelineHeader(visible.last().cellType)
+                TimelineHeader()
                 if (expanded && visible.size > 5) {
                     LazyColumn(
                         modifier = Modifier
@@ -1341,7 +1364,8 @@ private fun TimelineRow(
 ) {
     val tac = if (hideSensitive) "***" else point.tac
     val pci = if (hideSensitive) "***" else point.pci
-    val ci = if (hideSensitive) "***" else point.ci
+    val channel = if (hideSensitive) "***" else point.arfcn
+    val rsrp = com.nvmex.networkhelper.util.qmi.qmiRsrp(point.rsrp)?.toInt()?.toString() ?: "—"
     val band = timelineBandLabel(point)
     val accent = timelineCellColor(point)
     val shape = RoundedCornerShape(9.dp)
@@ -1363,16 +1387,17 @@ private fun TimelineRow(
             tint = accent.copy(alpha = if (isCurrent) 1f else 0.55f),
             modifier = Modifier.size(20.dp)
         )
-        Spacer(Modifier.width(8.dp))
-        TimelineValue(tac, Modifier.width(58.dp))
-        TimelineValue(pci, Modifier.width(44.dp))
-        TimelineValue(ci, Modifier.weight(1f))
+        Spacer(Modifier.width(6.dp))
+        TimelineValue(tac, Modifier.width(48.dp))
+        TimelineValue(pci, Modifier.width(36.dp))
+        TimelineValue(channel, Modifier.weight(1f))
         TimelineValue(
             band,
-            Modifier.width(42.dp),
+            Modifier.width(36.dp),
             accent.copy(alpha = if (isCurrent) 1f else 0.72f)
         )
-        Box(modifier = Modifier.width(43.dp), contentAlignment = Alignment.CenterEnd) {
+        TimelineValue(rsrp, Modifier.width(45.dp))
+        Box(modifier = Modifier.width(39.dp), contentAlignment = Alignment.CenterEnd) {
             if (isCurrent) {
                 Surface(
                     color = accent,
@@ -1381,7 +1406,7 @@ private fun TimelineRow(
                 ) {
                     Text(
                         text = stringResource(R.string.network_cell_timeline_current),
-                        modifier = Modifier.padding(horizontal = 7.dp, vertical = 2.dp),
+                        modifier = Modifier.padding(horizontal = 5.dp, vertical = 2.dp),
                         style = MaterialTheme.typography.labelSmall,
                         color = if (accent.luminance() > 0.48f) Color.Black else Color.White,
                         fontWeight = FontWeight.Bold,
@@ -1394,19 +1419,20 @@ private fun TimelineRow(
 }
 
 @Composable
-private fun TimelineHeader(cellType: String) {
+private fun TimelineHeader() {
     Row(
         modifier = Modifier
             .fillMaxWidth()
             .padding(horizontal = 8.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
-        Spacer(Modifier.width(28.dp))
-        TimelineHeaderText("TAC", Modifier.width(58.dp))
-        TimelineHeaderText("PCI", Modifier.width(44.dp))
-        TimelineHeaderText(if (cellType.equals("LTE", ignoreCase = true)) "ECI" else "NCI", Modifier.weight(1f))
-        TimelineHeaderText(stringResource(R.string.network_cell_timeline_band), Modifier.width(42.dp))
-        Spacer(Modifier.width(43.dp))
+        Spacer(Modifier.width(26.dp))
+        TimelineHeaderText("TAC", Modifier.width(48.dp))
+        TimelineHeaderText("PCI", Modifier.width(36.dp))
+        TimelineHeaderText(stringResource(R.string.network_cell_timeline_channel), Modifier.weight(1f))
+        TimelineHeaderText(stringResource(R.string.network_cell_timeline_band), Modifier.width(36.dp))
+        TimelineHeaderText("RSRP", Modifier.width(45.dp))
+        Spacer(Modifier.width(39.dp))
     }
 }
 
@@ -1534,19 +1560,6 @@ private fun SignalBarRow(
     valueText: String,
     fraction: Float
 ) {
-    val target = fraction.coerceIn(0f, 1f)
-
-    val animated by animateFloatAsState(
-        targetValue = target,
-        animationSpec = spring(
-            dampingRatio = Spring.DampingRatioNoBouncy, // use MediumBouncy for bouncier effect
-            stiffness = Spring.StiffnessLow
-        ),
-        label = "signalBar"
-    )
-
-    val barColor = qualityColor(animated)
-
     Row(
         modifier = Modifier.fillMaxWidth(),
         verticalAlignment = Alignment.CenterVertically
@@ -1557,33 +1570,10 @@ private fun SignalBarRow(
             style = MaterialTheme.typography.bodyMedium
         )
 
-        Box(
-            modifier = Modifier
-                .weight(1f)
-                .height(12.dp)
-                .clip(RoundedCornerShape(999.dp))
-                .background(MaterialTheme.colorScheme.surface.copy(alpha = 0.55f))
-        ) {
-            Box(
-                modifier = Modifier
-                    .fillMaxHeight()
-                    .fillMaxWidth(animated)
-                    .clip(RoundedCornerShape(999.dp))
-                    .background(
-                        if (valueText == "-" || valueText.isBlank()) {
-                            MaterialTheme.colorScheme.onSurface.copy(alpha = 0.25f)
-                        } else barColor
-                    )
-            )
-
-            Box(
-                modifier = Modifier
-                    .fillMaxHeight()
-                    .width(1.dp)
-                    .background(MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f))
-                    .align(Alignment.Center)
-            )
-        }
+        NetworkSignalProgressBar(
+            fraction = fraction.takeUnless { valueText == "-" || valueText.isBlank() },
+            modifier = Modifier.weight(1f)
+        )
 
         Spacer(Modifier.width(10.dp))
 
@@ -1631,32 +1621,3 @@ private fun fractionFromDb(text: String, min: Double, max: Double): Float {
     val v = parseFirstNumber(text) ?: return 0f
     return ((v - min) / (max - min)).toFloat().coerceIn(0f, 1f)
 }
-
-/**
- */
-private fun qualityColor(f: Float): Color {
-
-    val bad = Color(0xFFFF3B30)   // red
-    val mid = Color(0xFFFFCC00)   // yellow
-    val good = Color(0xFF34C759)  // green
-
-    return when {
-        f <= 0f -> bad
-        f >= 1f -> good
-        f < 0.5f -> lerpColor(bad, mid, f / 0.5f)
-        else -> lerpColor(mid, good, (f - 0.5f) / 0.5f)
-    }
-}
-
-
-private fun lerpColor(a: Color, b: Color, t: Float): Color {
-    val tt = t.coerceIn(0f, 1f)
-    return Color(
-        red = a.red + (b.red - a.red) * tt,
-        green = a.green + (b.green - a.green) * tt,
-        blue = a.blue + (b.blue - a.blue) * tt,
-        alpha = a.alpha + (b.alpha - a.alpha) * tt
-    )
-}
-
-

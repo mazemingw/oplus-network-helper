@@ -17,7 +17,7 @@ import androidx.sqlite.db.SupportSQLiteDatabase
         LteCellParamEntity::class,
         ManagedCell::class
     ],
-    version = 2,
+    version = 3,
     exportSchema = false
 )
 abstract class AppDatabase : RoomDatabase() {
@@ -26,6 +26,15 @@ abstract class AppDatabase : RoomDatabase() {
     abstract fun managedCellDao(): ManagedCellDao
 
     companion object {
+        val MIGRATION_2_3 = object : Migration(2, 3) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL("ALTER TABLE lte_cell_params ADD COLUMN extraInfo TEXT")
+                db.execSQL("ALTER TABLE lte_cell_params ADD COLUMN stationType TEXT")
+                db.execSQL("ALTER TABLE managed_cells ADD COLUMN extraInfo TEXT")
+                db.execSQL("ALTER TABLE managed_cells ADD COLUMN stationType TEXT")
+            }
+        }
+
         val MIGRATION_1_2 = object : Migration(1, 2) {
             override fun migrate(db: SupportSQLiteDatabase) {
                 db.execSQL("CREATE TABLE IF NOT EXISTS managed_cells (rat TEXT NOT NULL, ci TEXT NOT NULL, name TEXT NOT NULL, latitude REAL, longitude REAL, azimuth INTEGER, tac INTEGER, arfcn INTEGER, pci INTEGER, enodebId INTEGER, cellId INTEGER, sectorId INTEGER, siteType TEXT, antennaHeight REAL, source TEXT, updatedAt INTEGER NOT NULL, PRIMARY KEY(rat, ci))")

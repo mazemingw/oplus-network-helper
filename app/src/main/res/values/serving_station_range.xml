@@ -1,0 +1,8 @@
+<resources>
+    <string name="map_serving_location_pending">等待有效定位后匹配服务基站</string>
+    <string name="map_serving_too_far">已忽略距离超过 50 km 的服务站工参</string>
+    <string name="map_history_point_station_missing">该打点没有可用的服务站快照</string>
+    <string name="map_history_point_station_info">服务基站：%1$s\n点站距离：%2$s（直线）</string>
+    <string name="map_station_preview_distance">查看距离 · %1$s</string>
+    <string name="map_station_preview_location_pending">等待有效定位后显示点站距离</string>
+</resources>

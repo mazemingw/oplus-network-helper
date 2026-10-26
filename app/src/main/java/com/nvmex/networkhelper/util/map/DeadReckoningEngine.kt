@@ -7,7 +7,8 @@ internal class DeadReckoningEngine {
     enum class Mode { GPS, ESTIMATED, NO_FIX }
     enum class Calibration { FIX_REQUIRED, COLLECTING, READY }
     data class Reading(val mode: Mode, val lat: Double? = null, val lng: Double? = null,
-        val speedMps: Double? = null, val bearing: Double? = null, val uncertaintyMeters: Double? = null)
+        val speedMps: Double? = null, val bearing: Double? = null, val uncertaintyMeters: Double? = null,
+        val outageMillis: Long = 0)
     private data class Motion(val from: Long, val to: Long, val east: Double, val north: Double, val turn: Double)
 
     var enabled = false
@@ -34,6 +35,8 @@ internal class DeadReckoningEngine {
     private var learnedSeconds = 0.0
     private var sensorsReliable = true
     private val motions = ArrayDeque<Motion>()
+    var maxOutageMs = DEFAULT_OUTAGE_MS
+        set(value) { field = value.coerceIn(60_000, 1_800_000) }
 
     fun resetSensors() {
         calibration = Calibration.FIX_REQUIRED
@@ -136,7 +139,7 @@ internal class DeadReckoningEngine {
         val motion = Motion(previous, now, eastAcceleration, northAcceleration, yawRateDegrees)
         motions.addLast(motion)
         while (motions.isNotEmpty() && motions.first().to < now - 10_000) motions.removeFirst()
-        if (!enabled || !sensorsReliable || !headingAligned || fixAt < 0 || now - fixAt !in 0..MAX_OUTAGE_MS) return
+        if (!enabled || !sensorsReliable || !headingAligned || fixAt < 0 || now - fixAt !in 0..maxOutageMs) return
         integrate(motion, max(previous, positionAt))
     }
 
@@ -160,7 +163,7 @@ internal class DeadReckoningEngine {
     }
 
     fun isReady(now: Long): Boolean = enabled && calibration == Calibration.READY && headingAligned && sensorsReliable &&
-        fixAt >= 0 && now - fixAt in 0..MAX_OUTAGE_MS && sensorAt >= 0 && now - sensorAt in 0..1000
+        fixAt >= 0 && now - fixAt in 0..maxOutageMs && sensorAt >= 0 && now - sensorAt in 0..1000
 
     fun reading(now: Long): Reading {
         if (sensorAt >= 0 && now - sensorAt > 1000) resetSensors()
@@ -168,12 +171,11 @@ internal class DeadReckoningEngine {
         val age = now - fixAt
         if (age in 0..3000) return Reading(Mode.GPS, fixLat, fixLng, fixSpeed, fixBearing, fixAccuracy)
         if (!enabled || calibration != Calibration.READY || !headingAligned || !sensorsReliable ||
-            sensorAt < fixAt || now - sensorAt !in 0..1000 || age !in 3001..MAX_OUTAGE_MS) return Reading(Mode.NO_FIX)
+            sensorAt < fixAt || now - sensorAt !in 0..1000 || age !in 3001..maxOutageMs) return Reading(Mode.NO_FIX)
         val seconds = age / 1000.0
         // Drift indicator only, not a measured confidence radius.
         val uncertainty = fixAccuracy + 0.5 * seconds + 0.04 * seconds.pow(2)
-        if (uncertainty > 200) return Reading(Mode.NO_FIX)
-        return Reading(Mode.ESTIMATED, lat, lng, speed, heading, uncertainty)
+        return Reading(Mode.ESTIMATED, lat, lng, speed, heading, uncertainty, age)
     }
 
     private fun courseBetween(aLat: Double, aLng: Double, bLat: Double, bLng: Double): Double {
@@ -184,5 +186,5 @@ internal class DeadReckoningEngine {
     }
     private fun normalize(degrees: Double) = (degrees % 360 + 360) % 360
     private fun signedAngle(degrees: Double) = (degrees + 540) % 360 - 180
-    companion object { const val MAX_OUTAGE_MS = 60_000L }
+    companion object { const val DEFAULT_OUTAGE_MS = 600_000L }
 }

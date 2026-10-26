@@ -41,6 +41,7 @@ import com.nvmex.networkhelper.network.model.LteCellAdminUpdateReq
 import com.nvmex.networkhelper.network.model.NrCellAdminDeleteReq
 import com.nvmex.networkhelper.network.model.NrCellAdminUpdateReq
 import com.nvmex.networkhelper.ui.base.PanelDivider
+import com.nvmex.networkhelper.ui.components.CellMetadata
 import com.nvmex.networkhelper.ui.map.AmapMapActivity
 import com.nvmex.networkhelper.util.base.formatDateTimeUtc8
 import com.nvmex.networkhelper.util.home.DeveloperModePrefs
@@ -81,6 +82,8 @@ fun LteCellDetailDialog(
     onLocalCellChanged: (() -> Unit)? = onCellChanged
 ) {
     if (!show) return
+    // The open dialog belongs to the clicked record, not subsequent live modem queries.
+    val openedQuery = remember(show) { queryUi }
 
     val context = LocalContext.current
     val adminVm: CellAdminViewModel = hiltViewModel()
@@ -116,17 +119,17 @@ fun LteCellDetailDialog(
         }
     }
 
-    val cellCoord = remember(queryUi) {
-        when (queryUi) {
+    val cellCoord = remember(openedQuery) {
+        when (openedQuery) {
             is CellQueryUiState.LteSuccess -> {
-                val first = queryUi.resp.data.firstOrNull()
+                val first = openedQuery.resp.data.firstOrNull()
                 first?.longitude?.let { lon ->
                     first.latitude?.let { lat -> lon to lat }
                 }
             }
 
             is CellQueryUiState.NrSuccess -> {
-                val first = queryUi.resp.data.firstOrNull()
+                val first = openedQuery.resp.data.firstOrNull()
                 first?.longitude?.let { lon ->
                     first.latitude?.let { lat -> lon to lat }
                 }
@@ -136,7 +139,7 @@ fun LteCellDetailDialog(
         }
     }
 
-    var reloadToken by remember(show, queryUi) { mutableStateOf(0) }
+    var reloadToken by remember(show, openedQuery) { mutableStateOf(0) }
 
     val locationState by produceState(
         initialValue = DialogLocationState(),
@@ -248,7 +251,7 @@ fun LteCellDetailDialog(
         },
         title = {
             Text(
-                when (queryUi) {
+                when (openedQuery) {
                     is CellQueryUiState.LteSuccess -> "小区详情（LTE 工参）"
                     is CellQueryUiState.NrSuccess -> "小区详情（NR 工参）"
                     else -> "小区详情"
@@ -259,9 +262,9 @@ fun LteCellDetailDialog(
         },
         text = {
             CompositionLocalProvider(LocalTextStyle provides MaterialTheme.typography.bodySmall) {
-                when (queryUi) {
+                when (openedQuery) {
                 is CellQueryUiState.LteSuccess -> {
-                    val resp = queryUi.resp
+                    val resp = openedQuery.resp
                     val first = resp.data.firstOrNull()
 
                     if (first == null) {
@@ -285,7 +288,8 @@ fun LteCellDetailDialog(
                                 first.eci?.let { ci ->
                                     LocalCellActions(ManagedCell("LTE", ci.toString(), first.cell_name.orEmpty(), first.latitude,
                                         first.longitude, first.azimuth, first.tac, first.earfcn, first.pci, first.enodeb_id,
-                                        first.cell_id, first.sector_id, first.site_type, first.antenna_height, first.source),
+                                        first.cell_id, first.sector_id, first.site_type, first.antenna_height, first.source,
+                                        extraInfo = first.extra_info, stationType = first.station_type),
                                         legacyLocal = resp.match_level == "local",
                                         onChanged = { onLocalCellChanged?.invoke(); onDismiss() })
                                 }
@@ -381,6 +385,7 @@ fun LteCellDetailDialog(
                                     Text("站型：${first.site_type ?: "-"}")
                                     Text("天线挂高：${fmt(first.antenna_height)} m")
                                     Text("数据来源：${first.source ?: "-"}")
+                                    CellMetadata(first.extra_info, first.station_type)
                                 }
 
                                 SuperAdminEditorSection(
@@ -430,7 +435,7 @@ fun LteCellDetailDialog(
                 }
 
                 is CellQueryUiState.NrSuccess -> {
-                    val resp = queryUi.resp
+                    val resp = openedQuery.resp
                     val first = resp.data.firstOrNull()
 
                     if (first == null) {
@@ -611,7 +616,7 @@ fun LteCellDetailDialog(
 
                 CellQueryUiState.Idle -> Text("暂无查询结果")
                 CellQueryUiState.Loading -> Text("正在查询中…")
-                is CellQueryUiState.Error -> Text("查询失败：${queryUi.msg}")
+                is CellQueryUiState.Error -> Text("查询失败：${openedQuery.msg}")
             }
             }
         }

@@ -930,8 +930,8 @@
     <string name="map_nearby_band_hint">Band 筛选（可选）</string>
     <string name="map_nearby_rat_hint">制式筛选（可选）</string>
     <string name="map_nearby_rat_all">全部制式</string>
-    <string name="map_nearby_band_description">留空显示全部频段；可输入 3、B3 或 n78。制式选全部时，数字筛选 4G/5G 同号频段。按工参频点筛选。</string>
-    <string name="map_nearby_band_invalid">请输入 3、B3、n78 等格式，或留空</string>
+    <string name="map_nearby_band_description">留空显示全部频段；支持逗号分隔多项，例如 B1,B3,n78，最多 32 项。制式选全部时，不带前缀的数字筛选 4G/5G 同号频段。</string>
+    <string name="map_nearby_band_invalid">请输入逗号分隔的频段，例如 B1,B3,n78（最多 32 项），或留空</string>
     <string name="map_nearby_band_rat_mismatch">制式与 Band 不匹配：4G 使用 B 频段，5G 使用 n 频段</string>
     <string name="map_nearby_band_unsupported">后台暂不支持 %1$s 筛选，请更换 Band 或留空</string>
     <string name="map_nearby_description">开启后随当前位置自动刷新 LTE/NR 工参库中的附近基站。也可立即探测一次；地图圆圈表示查询范围。</string>

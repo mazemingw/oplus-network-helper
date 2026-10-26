@@ -91,7 +91,7 @@ fun NetworkPanelTabs(
         pageCount = { panelSubIds.size }
     )
     val scope = rememberCoroutineScope()
-    val (settings, _) = rememberAppSettings()
+    val (settings, setSettings) = rememberAppSettings()
     val isQualcommPlatform = remember { SocVendorDetector.isQualcomm() }
 
     LaunchedEffect(safeIndex) {
@@ -106,6 +106,7 @@ fun NetworkPanelTabs(
     }
 
     val currentSubId = panelSubIds[pagerState.currentPage]
+    QmiRadioObservation(vm, sims.firstOrNull { it.subscriptionId == currentSubId }?.simSlotIndex?.plus(1), overrideStates == null, currentSubId)
     val currentState = states[currentSubId] ?: NetworkPanelUiState(lastError = "加载中...", subId = currentSubId)
     LaunchedEffect(currentSubId, currentState.updatedAt) {
         onCurrentState(currentState)
@@ -285,7 +286,12 @@ fun NetworkPanelTabs(
                 modemQosNotice = modemQosState.noticeBySubId[subId] ?: modemQosState.lastNotice,
                 modemDiagCleanupOutput = modemQosState.cleanupOutput,
                 onRefreshModemQos = onRefreshModemQos?.let { refresh -> { refresh(subId) } },
-                onCleanupModemDiag = onCleanupModemDiag
+                onCleanupModemDiag = onCleanupModemDiag,
+                showRxMeasurements = isQualcommPlatform,
+                rxLive = overrideStates == null,
+                rxActive = pagerState.settledPage == page,
+                rxExpanded = settings.rxMeasurementsExpanded,
+                onRxExpandedChange = { setSettings(settings.copy(rxMeasurementsExpanded = it)) }
             )
         }
     }

@@ -20,6 +20,8 @@ import com.nvmex.networkhelper.util.map.Gcj02
 import com.nvmex.networkhelper.util.map.lteEarfcnToFreqMhzCN
 import com.nvmex.networkhelper.util.map.makeRedTriangleIcon
 import com.nvmex.networkhelper.util.map.makeTriangleIcon
+import com.nvmex.networkhelper.util.map.makeCircleIcon
+import com.nvmex.networkhelper.util.map.isOmnidirectionalStation
 import com.nvmex.networkhelper.util.map.mapChannelFrequency
 import com.nvmex.networkhelper.xposed.logger.Logger
 import kotlinx.coroutines.CoroutineScope
@@ -40,9 +42,14 @@ class LteCellOverlayManager(
     private val serverCoord: ServerCoord = ServerCoord.WGS84,
     private val maxHistoryMarkers: Int = 300,
     private val drawAntennas: Boolean = true,
+    private val showStationMarkers: Boolean = true,
 ) {
+    private val nearbyStationRows = HashMap<Marker, Pair<String, List<LteCellParam>>>()
+    fun nearbyStation(marker: Marker): Pair<String, List<LteCellParam>>? = nearbyStationRows[marker]
     private val icon by lazy { makeRedTriangleIcon(56) }
     private val linkedIcon by lazy { makeTriangleIcon(56, 0xFF159447.toInt()) }
+    private val circleIcon by lazy { makeCircleIcon(56) }
+    private val linkedCircleIcon by lazy { makeCircleIcon(56, 0xFF159447.toInt()) }
     private var linkedStationKeys = emptySet<String>()
 
     // 你之前的容器还留着（如果别处不用可删）
@@ -86,7 +93,7 @@ class LteCellOverlayManager(
     private var lastStableKey: String? = null
     // ===== azimuth 聚类参数 =====
     private val azimuthClusterTolDeg: Float = 22f
-    private val treatZeroAzimuthAsMissing: Boolean = true
+    private val treatZeroAzimuthAsMissing: Boolean = false
 
     // 上限：保留最近 N 个基站
     // 是否保留历史
@@ -104,6 +111,14 @@ class LteCellOverlayManager(
     private val history = ArrayDeque<BsNode>(128)
 
     private var antennasVisible = true
+    private var stationMarkersVisible = showStationMarkers
+    fun setStationMarkersVisible(visible: Boolean) {
+        stationMarkersVisible = showStationMarkers && visible
+        history.forEach { node ->
+            if (!stationMarkersVisible) node.marker.hideInfoWindow()
+            node.marker.isVisible = stationMarkersVisible
+        }
+    }
     private var antennaStationKeys: Set<String>? = null
     fun setAntennaVisible(visible: Boolean) {
         antennasVisible = visible
@@ -141,11 +156,13 @@ class LteCellOverlayManager(
                     requestTac = anchor.tac ?: 0, requestEarfcn = anchor.earfcn ?: 0,
                     headerMatch = "nearby"
                 )
+                historyMap[key]?.marker?.let { nearbyStationRows[it] = key to cells }
             }
         return historyMap.size
     }
 
     fun clear() {
+        nearbyStationRows.clear()
         linkedStationKeys = emptySet()
         antennaStationKeys = null
         history.forEach { node ->
@@ -420,11 +437,17 @@ class LteCellOverlayManager(
             return true
         }
 
+        val (omniRows, directionalRows) = rows.partition {
+            isOmnidirectionalStation(it.site_type, it.cell_name, it.azimuth, it.earfcn)
+        }
+        val roundMarker = omniRows.isNotEmpty() && directionalRows.isEmpty()
+        val linked = stationKey in linkedStationKeys
         val m = aMap.addMarker(
             MarkerOptions()
                 .position(pos)
-                .icon(if (stationKey in linkedStationKeys) linkedIcon else icon)
-                .anchor(0.5f, 1.0f)
+                .visible(stationMarkersVisible)
+                .icon(if (roundMarker) { if (linked) linkedCircleIcon else circleIcon } else { if (linked) linkedIcon else icon })
+                .anchor(0.5f, if (roundMarker) 0.5f else 1.0f)
                 .zIndex(if (stationKey in linkedStationKeys) 50f else triangleZ)
                 .title(title)
                 .snippet(snippet)
@@ -442,21 +465,8 @@ class LteCellOverlayManager(
             return true
         }
 
-        val azGroups = groupByAzimuthCluster(rows)
-        val groups = if (azGroups.isNotEmpty()) azGroups else groupBySectorId(rows)
-
-        if (groups.isEmpty()) {
-            val node = BsNode(stationKey, m, emptyList(), emptyList(), emptyList())
-            history.addLast(node)
-            historyMap[stationKey] = node
-            applyAntennaVisibility(node)
-            trimHistoryIfNeeded()
-            return true
-        }
-
-        val onlyOne = groups.size == 1
-        val onlyAz = groups.first().azimuth
-        val shouldDrawCircle = onlyOne && onlyAz == null
+        val azGroups = groupByAzimuthCluster(directionalRows)
+        val groups = if (azGroups.isNotEmpty()) azGroups else groupBySectorId(directionalRows)
 
         val polys = ArrayList<Polygon>(8)
         val plines = ArrayList<Polyline>(8)
@@ -468,7 +478,7 @@ class LteCellOverlayManager(
             return base + bump
         }
 
-        if (shouldDrawCircle) {
+        if (omniRows.isNotEmpty()) {
             // 微站：绘制全向圆
             val circlePts = buildCirclePoints(pos, sectorRadiusMeters, 36)
             aMap.addPolygon(
@@ -480,32 +490,6 @@ class LteCellOverlayManager(
                     .zIndex(sectorZ)
             )?.let { polys.add(it) }
 
-            // 微站标签（三角形下方）
-            val labelText = buildBandLabel(rows)
-            if (labelText.isNotBlank()) {
-                val z = aMap.cameraPosition.zoom
-                val meters = when {
-                    z >= 18f -> 10.0   // 调近
-                    z >= 16f -> 16.0
-                    else -> 25.0
-                }
-                val labelPos = moveLatLng(pos, 180f, meters)
-                aMap.addMarker(
-                    MarkerOptions()
-                        .position(labelPos)
-                        .icon(makeTextIcon(labelText))
-                        .anchor(0.5f, 0.0f)
-                        .zIndex(triangleZ + 1f)
-                        .setFlat(true)
-                )?.let { labels.add(it) }
-            }
-
-            val node = BsNode(stationKey, m, polys, plines, labels)
-            history.addLast(node)
-            historyMap[stationKey] = node
-            applyAntennaVisibility(node)
-            trimHistoryIfNeeded()
-            return true
         }
 
         // 宏站：多扇区
@@ -599,11 +583,12 @@ class LteCellOverlayManager(
                 return@forEach
             }
 
+            val roundMarker = isOmnidirectionalStation(null, it.cellName, it.azimuth, it.earfcn)
             val m = aMap.addMarker(
                 MarkerOptions()
                     .position(pos)
-                    .icon(icon)
-                    .anchor(0.5f, 1.0f)
+                    .icon(if (roundMarker) circleIcon else icon)
+                    .anchor(0.5f, if (roundMarker) 0.5f else 1.0f)
                     .zIndex(triangleZ)
                     .title(title)
                     .snippet(snippet)
@@ -614,7 +599,7 @@ class LteCellOverlayManager(
             val plines = mutableListOf<Polyline>()
             val labels = mutableListOf<Marker>()
 
-            val shouldDrawCircle = (az0 == null || az0 == 0f)
+            val shouldDrawCircle = roundMarker
             fun labelRadius(): Double = sectorRadiusMeters * 0.98
 
             val rowsForLabel = listOf(
@@ -663,7 +648,7 @@ class LteCellOverlayManager(
                             .setFlat(true)
                     )?.let { labels.add(it) }
                 }
-            } else {
+            } else if (az0 != null) {
                 val pts = buildSectorPoints(center = pos, azimuthDeg = az0, halfAngleDeg = sectorAngleDeg / 2f, radiusMeters = sectorRadiusMeters, steps = sectorSteps)
                 aMap.addPolygon(
                     PolygonOptions()
@@ -736,11 +721,12 @@ class LteCellOverlayManager(
                 return@forEach
             }
 
+            val roundMarker = isOmnidirectionalStation(null, it.cellName, it.azimuth, it.earfcn)
             val m = aMap.addMarker(
                 MarkerOptions()
                     .position(pos)
-                    .icon(icon)
-                    .anchor(0.5f, 1.0f)
+                    .icon(if (roundMarker) circleIcon else icon)
+                    .anchor(0.5f, if (roundMarker) 0.5f else 1.0f)
                     .zIndex(triangleZ)
                     .title(title)
                     .snippet(snippet)
@@ -758,7 +744,7 @@ class LteCellOverlayManager(
             val plines = mutableListOf<Polyline>()
             val labels = mutableListOf<Marker>()
 
-            val shouldDrawCircle = (az0 == null || az0 == 0f)
+            val shouldDrawCircle = roundMarker
             fun labelRadius(): Double = sectorRadiusMeters * 0.98
 
             val rowsForLabel = listOf(
@@ -807,7 +793,7 @@ class LteCellOverlayManager(
                             .setFlat(true)
                     )?.let { labels.add(it) }
                 }
-            } else {
+            } else if (az0 != null) {
                 val pts = buildSectorPoints(pos, az0, sectorAngleDeg / 2f, sectorRadiusMeters, sectorSteps)
                 aMap.addPolygon(
                     PolygonOptions()
@@ -1048,7 +1034,8 @@ class LteCellOverlayManager(
         val latitude: Double? = null,
         val azimuth: Int? = null,
         val sector_id: Int? = null,
-        val source: String? = null
+        val source: String? = null,
+        val site_type: String? = null
     )
 
     private fun LteCellParam.asRow(): LteCellParamRow = LteCellParamRow(
@@ -1063,7 +1050,8 @@ class LteCellOverlayManager(
         latitude = latitude,
         azimuth = azimuth,
         sector_id = sector_id,
-        source = source
+        source = source,
+        site_type = site_type
     )
 
     private fun validAzimuthOrNull(row: LteCellParamRow): Float? {

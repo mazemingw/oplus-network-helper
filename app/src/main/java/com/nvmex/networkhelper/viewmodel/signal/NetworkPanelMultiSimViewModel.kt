@@ -1,4 +1,4 @@
-﻿package com.nvmex.networkhelper.viewmodel.signal
+package com.nvmex.networkhelper.viewmodel.signal
 
 import android.app.Application
 import android.os.SystemClock
@@ -19,6 +19,8 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.stateIn
+import com.nvmex.networkhelper.util.qmi.*
+import kotlinx.coroutines.*
 
 data class NetworkPanelsFrame(
     val ts: Long,
@@ -31,16 +33,23 @@ class NetworkPanelMultiSimViewModel(app: Application) : AndroidViewModel(app) {
         // NRCA HAL may only force re-emit every ~6s when signature is unchanged.
         // Keep this above the slow poll interval (10s) to avoid transient CA blinking.
         private const val NRCA_STALE_MS = 12_000L
-        private const val LTECA_STALE_MS = 12_000L
-        private const val NRCA_HOLD_MS = 3_000L
     }
 
     private val snapshotter = TelephonySnapshotterMultiSim(app.applicationContext)
     private val repo = NetworkPanelRepositoryMultiSim(app.applicationContext, snapshotter)
 
     private val nrCaTracker = BroadcastNrCaTracker(app)
-    private val lteCaTracker = BroadcastLteCaTracker(app)
-    private val nrCaHoldBySubId = mutableMapOf<Int, HeldNrCa>()
+    private val _qmiBySlot = MutableStateFlow<Map<Int, QmiRadioSnapshot>>(emptyMap())
+    val qmiBySlot = _qmiBySlot.asStateFlow()
+    private val _qmiRetry = MutableStateFlow(0)
+    val qmiRetry = _qmiRetry.asStateFlow()
+    private val _qmiLoading = MutableStateFlow<Map<Int, Boolean>>(emptyMap())
+    val qmiLoading = _qmiLoading.asStateFlow()
+    private val _qmiErrors = MutableStateFlow<Map<Int, String>>(emptyMap())
+    val qmiErrors = _qmiErrors.asStateFlow()
+    private var qmiGeneration = 0L
+    private val qmiOwners = mutableMapOf<Int, Long>()
+    fun retryQmiMonitoring() { _qmiRetry.value++ }
     private val _cellTimelineBySubId = MutableStateFlow<Map<Int, List<CellTimelinePoint>>>(emptyMap())
 
     /**
@@ -55,6 +64,39 @@ class NetworkPanelMultiSimViewModel(app: Application) : AndroidViewModel(app) {
         val updated = upsertCellTimeline(current[subId].orEmpty(), point)
         if (updated == current[subId]) return
         _cellTimelineBySubId.value = current + (subId to updated)
+    }
+
+    /** Called only by a visible foreground surface; no background Root polling. */
+    suspend fun monitorQmi(sim: Int) {
+        val generation = ++qmiGeneration
+        qmiOwners[sim - 1] = generation
+        _qmiBySlot.value = _qmiBySlot.value - (sim - 1)
+        _qmiLoading.value = _qmiLoading.value + (sim - 1 to true)
+        _qmiErrors.value = _qmiErrors.value - (sim - 1)
+        val client = QmiModemClient(getApplication())
+        try {
+            while (currentCoroutineContext().isActive) {
+                val snapshot = client.radio(sim)
+                if (qmiOwners[sim - 1] == generation) {
+                    _qmiBySlot.value = _qmiBySlot.value + (snapshot.slot to snapshot)
+                    _qmiLoading.value = _qmiLoading.value + (sim - 1 to false)
+                }
+                delay(2000)
+            }
+        } catch (e: CancellationException) { throw e }
+        catch (e: Exception) {
+            if (qmiOwners[sim - 1] == generation) {
+                _qmiBySlot.value = _qmiBySlot.value - (sim - 1)
+                _qmiErrors.value = _qmiErrors.value + (sim - 1 to e.message.orEmpty())
+            }
+        }
+        finally {
+            if (qmiOwners[sim - 1] == generation) {
+                _qmiLoading.value = _qmiLoading.value + (sim - 1 to false)
+                qmiOwners.remove(sim - 1)
+            }
+            withContext(NonCancellable) { client.close() }
+        }
     }
 
     val sims: StateFlow<List<SubscriptionInfo>> = repo.observeSims()
@@ -74,16 +116,22 @@ class NetworkPanelMultiSimViewModel(app: Application) : AndroidViewModel(app) {
             sims,
             dataSubId,
             nrCaTracker.bySlot,
-            lteCaTracker.bySlot
+            _qmiBySlot
         ) { states, simsList, _, bySlot, lteBySlot ->
             val subIdToSlot = simsList.associate { it.subscriptionId to it.simSlotIndex }
             val now = SystemClock.elapsedRealtime()
             val wallNow = System.currentTimeMillis()
 
             val patched = states.mapValues { (subId, s) ->
+                listOfNotNull(s, s.nsaLteAnchor).filter { it.cellType in listOf("LTE", "NR") && it.arfcn.toIntOrNull() != null }.forEach { serving ->
+                    recordCellTimeline(subId, CellTimelinePoint(serving.updatedAt, serving.cellType, serving.tac, serving.pci,
+                        serving.ci, serving.band, if (serving.cellType == "NR") serving.ssRsrp else serving.rsrp,
+                        if (serving.cellType == "NR") serving.ssRsrq else serving.rsrq,
+                        if (serving.cellType == "NR") serving.ssSinr else serving.sinr, serving.arfcn, serving.mcc, serving.mnc))
+                }
                 val slot = subIdToSlot[subId]?.takeIf { it >= 0 }
                 val caInfo = slot?.let { bySlot[it] }
-                val lteCaInfo = slot?.let { lteBySlot[it] }
+                val radio = slot?.let { lteBySlot[it] }
 
                 // Keep only short-lived and structurally valid NRCA for this sub panel.
                 val freshCa = caInfo?.takeIf {
@@ -91,18 +139,10 @@ class NetworkPanelMultiSimViewModel(app: Application) : AndroidViewModel(app) {
                     age in 0..NRCA_STALE_MS
                 }
 
-                val freshLteCa = lteCaInfo?.takeIf {
-                    val age = wallNow - it.updatedAt
-                    age in 0..LTECA_STALE_MS
-                }
+                val freshLteCa = qmiLteCaForState(radio, s, slot, wallNow)
 
                 val validatedNrCa = validateNrCaForState(s, freshCa)
-                val nrCaForUi = pickNrCaWithHold(
-                    subId = subId,
-                    state = s,
-                    candidate = validatedNrCa,
-                    wallNow = wallNow
-                )
+                val nrCaForUi = qmiChooseNrCa(validatedNrCa, qmiNrFrequencyFallback(radio, s, wallNow), slot, wallNow)
 
                 s.copy(nrCaInfo = nrCaForUi, lteCaInfo = freshLteCa)
             }
@@ -143,46 +183,8 @@ class NetworkPanelMultiSimViewModel(app: Application) : AndroidViewModel(app) {
         return info
     }
 
-    private fun pickNrCaWithHold(
-        subId: Int,
-        state: NetworkPanelUiState,
-        candidate: com.nvmex.networkhelper.model.network.NrCaInfo?,
-        wallNow: Long
-    ): com.nvmex.networkhelper.model.network.NrCaInfo? {
-        // Switch away from NR: clear immediately, do not hold stale NRCA.
-        if (state.dataNetworkType != "NR") {
-            nrCaHoldBySubId.remove(subId)
-            return null
-        }
-
-        // Fresh valid data should always win immediately.
-        if (candidate != null) {
-            nrCaHoldBySubId[subId] = HeldNrCa(
-                info = candidate,
-                holdUntilMs = wallNow + NRCA_HOLD_MS
-            )
-            return candidate
-        }
-
-        val held = nrCaHoldBySubId[subId] ?: return null
-        if (wallNow <= held.holdUntilMs) return held.info
-
-        nrCaHoldBySubId.remove(subId)
-        return null
-    }
-
     override fun onCleared() {
-        nrCaHoldBySubId.clear()
         nrCaTracker.stop()
-        lteCaTracker.stop()
         super.onCleared()
     }
 }
-
-private data class HeldNrCa(
-    val info: com.nvmex.networkhelper.model.network.NrCaInfo,
-    val holdUntilMs: Long
-)
-
-
-

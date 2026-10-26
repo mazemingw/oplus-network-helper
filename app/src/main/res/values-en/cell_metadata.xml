@@ -1,0 +1,5 @@
+<resources>
+    <string name="cell_query_extra_info">Additional information</string>
+    <string name="cell_query_station_type">Station type</string>
+    <string name="cell_station_type_default">Standard LTE</string>
+</resources>

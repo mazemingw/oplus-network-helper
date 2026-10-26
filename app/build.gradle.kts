@@ -1,5 +1,6 @@
 
 import java.util.Properties
+import java.security.MessageDigest
 
 plugins {
     alias(libs.plugins.android.application)
@@ -33,8 +34,8 @@ android {
         applicationId = "com.nvmex.networkhelper"
         minSdk = 29
         targetSdk = 35
-        versionCode = 57
-        versionName = "1.5.7-dev"
+        versionCode = 59
+        versionName = "1.5.9"
 
         // Inject the AMap key locally; never commit API credentials.
         manifestPlaceholders["AMAP_API_KEY"] =
@@ -205,3 +206,24 @@ dependencies {
 kapt {
     correctErrorTypes = true
 }
+
+// The standalone GPL helper is built by tools/build_qmi.ps1, not linked into the app.
+val verifyQmiHelper by tasks.registering {
+    val source = layout.projectDirectory.file("src/main/cpp/qmi/nh-qmi.c")
+    val binary = layout.projectDirectory.file("src/main/assets/qmi/nh-qmi")
+    val binaryHash = layout.projectDirectory.file("src/main/assets/qmi/nh-qmi.sha256")
+    val sourceHash = layout.projectDirectory.file("src/main/assets/qmi/nh-qmi.source.sha256")
+    inputs.files(source, binary, binaryHash, sourceHash)
+    doLast {
+        fun digest(file: File): String = MessageDigest.getInstance("SHA-256")
+            .digest(file.readBytes()).joinToString("") { "%02x".format(it.toInt() and 255) }
+        val normalizedSourceHash = MessageDigest.getInstance("SHA-256")
+            .digest(source.asFile.readText(Charsets.UTF_8).replace("\r\n", "\n").toByteArray(Charsets.UTF_8))
+            .joinToString("") { "%02x".format(it.toInt() and 255) }
+        check(normalizedSourceHash == sourceHash.asFile.readText().trim() &&
+            digest(binary.asFile) == binaryHash.asFile.readText().trim()) {
+            "QMI helper is stale. Rebuild with tools/build_qmi.ps1 -NdkPath <Android NDK path>."
+        }
+    }
+}
+tasks.named("preBuild").configure { dependsOn(verifyQmiHelper) }

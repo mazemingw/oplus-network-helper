@@ -84,6 +84,17 @@ import com.nvmex.networkhelper.util.map.DriveStyle
 import com.nvmex.networkhelper.util.map.DriveBandFilter
 import com.nvmex.networkhelper.util.map.DriveCoverage
 import com.nvmex.networkhelper.util.map.MapBubbleBackground
+import com.nvmex.networkhelper.util.map.MarkerInfoWindowAdapter
+import com.nvmex.networkhelper.util.map.StationDistancePreview
+import com.nvmex.networkhelper.util.map.DriveCourse
+import com.nvmex.networkhelper.util.map.DriveLocationMarker
+import com.nvmex.networkhelper.util.map.StationExclusion
+import com.nvmex.networkhelper.util.map.nearbyProbeBands
+import com.nvmex.networkhelper.util.map.mergeNearbyProbeResults
+import com.nvmex.networkhelper.util.map.ProbeAntennaSelection
+import com.nvmex.networkhelper.util.map.ProbedStation
+import com.nvmex.networkhelper.util.map.driveBandLabel
+import com.nvmex.networkhelper.util.map.drivePreferInertial
 import com.nvmex.networkhelper.util.map.matching.*
 import android.text.TextUtils
 import android.widget.PopupMenu
@@ -97,6 +108,9 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.async
+import kotlinx.coroutines.awaitAll
+import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.flow.collect
 import kotlinx.coroutines.launch
@@ -123,7 +137,6 @@ class AmapMapActivity : AppCompatActivity(), LocationSource {
     private var lastLatLng: LatLng? = null
     private var lastRawPosition: Triple<Double?, Double?, String?> = Triple(null, null, null)
     private var mapMatching: MapMatchingController? = null
-    private var lastMatchedPosition: LatLng? = null
     private var lastMapMatchJson: String? = null
     private var lastAmapFixAt = -1L
     private var lastAmapIsGps = false
@@ -141,6 +154,10 @@ class AmapMapActivity : AppCompatActivity(), LocationSource {
     private lateinit var nrOverlay: NrCellOverlayManager
     private lateinit var nearbyLteOverlay: LteCellOverlayManager
     private lateinit var nearbyNrOverlay: NrCellOverlayManager
+    private lateinit var probeAntennaLte: LteCellOverlayManager
+    private lateinit var probeAntennaNr: NrCellOverlayManager
+    private val probeAntennas = ProbeAntennaSelection()
+    private var stationDistancePreview: StationDistancePreview? = null
     private var nearbyJob: Job? = null
     private var lastNearbyCenter: LatLng? = null
     private var lastNearbyAt = 0L
@@ -149,6 +166,10 @@ class AmapMapActivity : AppCompatActivity(), LocationSource {
     private var nearbyBand: String? = null
     private var nearbyRat: String? = null
     private var nearbyResult: NearbyCellsResponse? = null
+    private var nearbyPartialFailure = false
+    private var lastCameraOverlayRefreshAt = 0L
+    private var cameraControlAnimating = false
+    private var stationExclusion = StationExclusion()
     private var nearbyRangeCircle: com.amap.api.maps.model.Circle? = null
 
     private var cellWatchJob: kotlinx.coroutines.Job? = null
@@ -157,6 +178,7 @@ class AmapMapActivity : AppCompatActivity(), LocationSource {
     // ===== DB =====
     private lateinit var dao: DrivePointDao
     private val stationWrites = DrivePointWriteQueue<DriveStationEntity>(DrivePersistence.scope) { rows, _ -> dao.insertStations(rows) }
+    private val correctionWrites = DrivePointWriteQueue<FalconPointUpdate>(DrivePersistence.scope) { rows, sid -> dao.applyFalconCorrections(sid, rows) }
     private val linkedStationKeys = mutableSetOf<String>()
     private var restoredStations = emptyList<DriveStationEntity>()
     private var currentSessionId: String? = null
@@ -173,6 +195,7 @@ class AmapMapActivity : AppCompatActivity(), LocationSource {
         set(value) {
             field = value
             visibleHistory = value?.filteredBy(bandFilter)
+            locationMarker?.setVisible(value == null)
         }
     private var restoreJob: Job? = null
     private var lastToggleAt = 0L
@@ -186,6 +209,8 @@ class AmapMapActivity : AppCompatActivity(), LocationSource {
     // ===== 3D倾斜 =====
     private var is3DMode = false
     private var lastBearingDeg: Float? = null
+    private val driveCourse = DriveCourse()
+    private var locationMarker: DriveLocationMarker? = null
     private val followTilt3D = 55f
 
     // ===== UI =====
@@ -215,6 +240,9 @@ class AmapMapActivity : AppCompatActivity(), LocationSource {
     private lateinit var servingStation: ServingStationOverlay
     private val carrierViews = mutableMapOf<Int, TextView>()
     private var showHandoverPoints = true
+    private var showStationMarkers = true
+    private var historyStartView = false
+    private var pendingTrackStart: Boolean? = null
     private var showServingAntennas = true
     private var showServingLink = true
     private var inertialEnabled = true
@@ -332,6 +360,7 @@ class AmapMapActivity : AppCompatActivity(), LocationSource {
         aMap.setOnMapTouchListener {
             if (followMyLocation) {
                 followMyLocation = false
+                aMap.stopAnimation()
                 updateCenterFabUi()
             }
         }
@@ -339,8 +368,14 @@ class AmapMapActivity : AppCompatActivity(), LocationSource {
         aMap.setOnCameraChangeListener(object : AMap.OnCameraChangeListener {
             override fun onCameraChange(position: com.amap.api.maps.model.CameraPosition?) {}
             override fun onCameraChangeFinish(position: com.amap.api.maps.model.CameraPosition?) {
-                updateZoomControls()
-                if (!isPickMode && ::sampler.isInitialized) sampler.refreshVisibleMarkers()
+                stationDistancePreview?.onCameraChanged()
+                val now = SystemClock.elapsedRealtime()
+                if (!followMyLocation || now - lastCameraOverlayRefreshAt >= 500L) {
+                    lastCameraOverlayRefreshAt = now
+                    updateZoomControls()
+                    if (!isPickMode && ::servingStation.isInitialized) servingStation.onCameraChanged()
+                    if (!isPickMode && ::sampler.isInitialized) sampler.refreshVisibleMarkers()
+                }
                 if (ignoreCameraMoveCancelOnce) {
                     ignoreCameraMoveCancelOnce = false
                     return
@@ -377,8 +412,14 @@ class AmapMapActivity : AppCompatActivity(), LocationSource {
             nearbyRadiusKm = overlayPrefs.getInt(KEY_NEARBY_RADIUS_KM, 3).coerceIn(1, 10)
             nearbyBand = overlayPrefs.getString(KEY_NEARBY_BAND, null)?.takeIf { it.isNotBlank() }
             nearbyRat = overlayPrefs.getString(KEY_NEARBY_RAT, null)?.takeIf { it == "LTE" || it == "NR" }
+            stationExclusion = runCatching {
+                StationExclusion(DriveBandFilter.parseLte(overlayPrefs.getString(KEY_STATION_EXCLUDED_BANDS, "").orEmpty()),
+                    StationExclusion.parseChannels(overlayPrefs.getString(KEY_STATION_EXCLUDED_CHANNELS, "").orEmpty()))
+            }.getOrDefault(StationExclusion())
 
             showHandoverPoints = overlayPrefs.getBoolean("show_handover_points", true)
+            showStationMarkers = overlayPrefs.getBoolean("show_station_markers", true)
+            historyStartView = overlayPrefs.getBoolean("history_start_view", false)
             showServingAntennas = overlayPrefs.getBoolean("show_serving_antennas", true)
             showServingLink = overlayPrefs.getBoolean("show_serving_link", true)
             // The old manual-calibration preference defaulted to off. Automatic fusion has its own opt-out.
@@ -400,9 +441,14 @@ class AmapMapActivity : AppCompatActivity(), LocationSource {
                 },
                 onPointSelected = { point ->
                     if (restoredHistory != null) {
-                        servingStation.selectHistoryPoint(point)
+                        val station = servingStation.selectHistoryPoint(point)
                         updateSignalPanel(displayedSnapshots() + (point.simSlot to point.snapshot))
-                    }
+                        station.messageRes?.let { getString(it) } ?: getString(R.string.map_history_point_station_info,
+                            station.name.orEmpty(), station.distanceMeters?.let { meters ->
+                                if (meters < 1000) String.format(Locale.getDefault(), "%.0f m", meters)
+                                else String.format(Locale.getDefault(), "%.2f km", meters / 1000)
+                            }.orEmpty())
+                    } else null
                 },
                 snapshots = { snapshotAllSims() },
                 density = resources.displayMetrics.density,
@@ -478,6 +524,25 @@ class AmapMapActivity : AppCompatActivity(), LocationSource {
                 aMap = aMap, api = apiService, localRepository = localRepository, scope = scope,
                 serverCoord = ServerCoord.WGS84, maxHistoryMarkers = 1000, drawAntennas = false
             )
+            probeAntennaLte = LteCellOverlayManager(aMap, apiService, localRepository, scope,
+                AppDb.get(applicationContext).cellOverlayCacheDao(), maxHistoryMarkers = Int.MAX_VALUE,
+                showStationMarkers = false)
+            probeAntennaNr = NrCellOverlayManager(aMap, apiService, localRepository, scope,
+                maxHistoryMarkers = Int.MAX_VALUE, showStationMarkers = false)
+            stationDistancePreview = StationDistancePreview(aMap, density) { meters ->
+                getString(R.string.map_station_preview_distance, if (meters < 1000)
+                    String.format(Locale.getDefault(), "%.0f m", meters)
+                    else String.format(Locale.getDefault(), "%.2f km", meters / 1000))
+            }
+            sampler.onMapMarkerSelected = { marker ->
+                val station = marker?.let(::stationForMarker)
+                if (probeAntennas.select(station)) renderProbeAntennas()
+                if (marker != null && station != null && !isDriving && restoredHistory == null) {
+                    stationDistancePreview?.select(marker.position)
+                    stationDistancePreview?.updatePosition(stationUserPosition())
+                    if (stationUserPosition() == null) showDriveMessage(R.string.map_station_preview_location_pending)
+                } else stationDistancePreview?.clear()
+            }
             applySectorDrawConfigToOverlays()
 
             setupFabs(root)
@@ -487,23 +552,30 @@ class AmapMapActivity : AppCompatActivity(), LocationSource {
             setupSignalLegend(root)
             setupBandCoverage(root)
             sampler.setHandoverVisible(showHandoverPoints)
+            applyStationMarkerVisibility()
             servingStation = ServingStationOverlay(aMap, apiService, localRepository, scope, lteOverlay, nrOverlay, onStatus = { message, name ->
                 servingStatus.text = if (name == null) getString(message) else getString(message, name)
             }, onLinked = ::saveLinkedStation)
             servingStation.setDisplay(showServingAntennas, showServingLink)
+            servingStation.setExclusion(stationExclusion)
             motionTracker = DriveMotionTracker(this, ::onMotionReading)
             motionTracker.setInertialEnabled(inertialEnabled)
-            mapMatching = MapMatchingController(this, aMap, scope, mapStatusRow, ::onMapMatchResult)
+            motionTracker.engine.maxOutageMs = overlayPrefs.getInt("inertial_max_minutes", 10).coerceIn(1, 30) * 60_000L
+            locationMarker = DriveLocationMarker(aMap, density).apply {
+                onFrame = { point, bearing ->
+                    if (followMyLocation && mapResumed && !isFirstFix && restoredHistory == null && !cameraControlAnimating)
+                        followCameraFrame(point, bearing.toFloat())
+                }
+            }
+            mapMatching = MapMatchingController(this, aMap, scope, mapStatusRow, ::onMapMatchResult, ::onFalconTrace)
             mapMatching?.setPathVisible(!bandFilter.active)
             aMap.setOnMapLoadedListener {
                 aMap.uiSettings.isZoomControlsEnabled = false
                 updateZoomControls()
                 servingStation.onMapReady()
                 sampler.refreshVisibleMarkers()
-                nearbyResult?.let {
-                    nearbyLteOverlay.renderNearbyCells(it.lte)
-                    nearbyNrOverlay.renderNearbyCells(it.nr)
-                }
+                renderNearbyResult()
+                pendingTrackStart?.let { frameCurrentTrack(it) }
             }
             triggerTriangleOnceOnEnter()
             updateSignalPanel(snapshotAllSims())
@@ -768,17 +840,45 @@ class AmapMapActivity : AppCompatActivity(), LocationSource {
         fabDrive?.contentDescription = getString(R.string.map_control_record)
         fabMore = addFab({ anchor ->
             PopupMenu(this, anchor).apply {
+                menu.add(0, 6, 0, R.string.map_show_station_markers).apply {
+                    isCheckable = true
+                    isChecked = showStationMarkers
+                }
                 menu.add(0, 4, 0, R.string.map_band_filter_title).apply {
                     isCheckable = true
                     isChecked = bandFilter.active
                 }
                 menu.add(0, 1, 1, R.string.map_drawing_probe_settings)
-                menu.add(0, 2, 2, R.string.map_sessions)
-                menu.add(0, 3, 3, R.string.map_clear_recording)
+                menu.add(0, 5, 2, R.string.map_station_exclusion_title).apply {
+                    isCheckable = true
+                    isChecked = stationExclusion.active
+                }
+                menu.add(0, 2, 3, R.string.map_sessions)
+                menu.add(0, 3, 4, R.string.map_clear_recording)
+                menu.add(0, 7, 5, R.string.map_track_overview).isEnabled = ::sampler.isInitialized && sampler.recordedPoints().isNotEmpty()
+                menu.add(0, 8, 6, R.string.map_track_start).isEnabled = ::sampler.isInitialized && sampler.recordedPoints().isNotEmpty()
+                menu.addSubMenu(0, 9, 7, R.string.map_history_initial_view).apply {
+                    add(1, 10, 0, R.string.map_track_overview).isChecked = !historyStartView
+                    add(1, 11, 1, R.string.map_track_start).isChecked = historyStartView
+                    setGroupCheckable(1, true, true)
+                }
                 setOnMenuItemClickListener { item ->
                     when (item.itemId) {
+                        6 -> {
+                            showStationMarkers = !showStationMarkers
+                            overlayPrefs.edit().putBoolean("show_station_markers", showStationMarkers).apply()
+                            applyStationMarkerVisibility()
+                        }
+                        7 -> frameCurrentTrack(start = false)
+                        8 -> frameCurrentTrack(start = true)
+                        10, 11 -> {
+                            historyStartView = item.itemId == 11
+                            overlayPrefs.edit().putBoolean("history_start_view", historyStartView).apply()
+                            if (restoredHistory != null) frameCurrentTrack(historyStartView)
+                        }
                         4 -> showBandFilterDialog()
                         1 -> showSectorConfigDialog()
+                        5 -> showStationExclusionDialog()
                         2 -> showSessionRestoreDialog()
                         3 -> newDialogBuilder().setTitle(R.string.map_clear_recording)
                             .setMessage(R.string.map_clear_recording_confirm)
@@ -791,6 +891,12 @@ class AmapMapActivity : AppCompatActivity(), LocationSource {
             }
         }, android.R.drawable.ic_menu_more)
         fabMore.contentDescription = getString(R.string.map_control_more)
+        fabActions.removeView(fabMore)
+        fabActions.addView(fabMore, 0)
+        repeat(fabActions.childCount) { index ->
+            val child = fabActions.getChildAt(index)
+            child.layoutParams = (child.layoutParams as LinearLayout.LayoutParams).apply { topMargin = if (index > 0) dp(6) else 0 }
+        }
         updateCenterFabUi()
         applyDriveUi(isDriving)
     }
@@ -821,7 +927,10 @@ class AmapMapActivity : AppCompatActivity(), LocationSource {
                     selectedSimSlot = slot
                     sampler.setVisibleSimSlot(slot)
                     updateSignalPanel(displayedSnapshots())
-                    if (restoredHistory != null) refreshHistoryStation()
+                    if (restoredHistory != null) {
+                        refreshHistoryStation()
+                        frameCurrentTrack(historyStartView)
+                    }
                     else {
                         servingStation.clear()
                         servingStation.update(displayedSnapshots()[slot])
@@ -983,9 +1092,9 @@ class AmapMapActivity : AppCompatActivity(), LocationSource {
             setOnClickListener { action() }
             bar.addView(this, LinearLayout.LayoutParams(dp(48), dp(44)))
         }
-        zoomOutButton = button("−", R.string.map_zoom_out) { aMap.animateCamera(CameraUpdateFactory.zoomOut()) }
+        zoomOutButton = button("−", R.string.map_zoom_out) { animateMapControl(CameraUpdateFactory.zoomOut()) }
         bar.addView(View(this).apply { setBackgroundColor(0x30445566) }, LinearLayout.LayoutParams(dp(1), dp(20)))
-        zoomInButton = button("+", R.string.map_zoom_in) { aMap.animateCamera(CameraUpdateFactory.zoomIn()) }
+        zoomInButton = button("+", R.string.map_zoom_in) { animateMapControl(CameraUpdateFactory.zoomIn()) }
         root.addView(bar, FrameLayout.LayoutParams(-2, dp(44)).apply {
             gravity = Gravity.BOTTOM or Gravity.CENTER_HORIZONTAL
             bottomMargin = navigationBarHeightPx() + dp(16)
@@ -1046,47 +1155,77 @@ class AmapMapActivity : AppCompatActivity(), LocationSource {
     }
 
     private fun installWrappingInfoWindows() {
-        aMap.setOnInfoWindowClickListener { marker ->
+        fun copy(marker: Marker) {
             val text = listOfNotNull(marker.title?.takeIf { it.isNotBlank() }, marker.snippet?.takeIf { it.isNotBlank() })
                 .joinToString("\n")
             if (text.isNotEmpty()) {
                 getSystemService(android.content.ClipboardManager::class.java)
                     .setPrimaryClip(android.content.ClipData.newPlainText(marker.title.orEmpty(), text))
-                if (Build.VERSION.SDK_INT < Build.VERSION_CODES.TIRAMISU)
-                    android.widget.Toast.makeText(this, R.string.map_bubble_copied, android.widget.Toast.LENGTH_SHORT).show()
+                android.widget.Toast.makeText(this, R.string.map_bubble_copied, android.widget.Toast.LENGTH_SHORT).show()
             }
         }
-        aMap.setInfoWindowAdapter(object : AMap.InfoWindowAdapter {
-            override fun getInfoWindow(marker: Marker): View {
-                return LinearLayout(this@AmapMapActivity).apply {
-                    orientation = LinearLayout.VERTICAL
-                    setPadding(dp(12), dp(10), dp(12), dp(18))
-                    background = MapBubbleBackground(resources.displayMetrics.density, isSystemNightMode())
-                    addView(TextView(context).apply {
-                        text = marker.title.orEmpty()
-                        maxWidth = minOf(dp(280), resources.displayMetrics.widthPixels - dp(64))
-                        textSize = 14f
-                        setTextColor(overlayTextColor())
-                        setTypeface(typeface, android.graphics.Typeface.BOLD)
-                        setSingleLine(false)
-                    })
-                    addView(TextView(context).apply {
-                        text = marker.snippet.orEmpty()
-                        maxWidth = minOf(dp(280), resources.displayMetrics.widthPixels - dp(64))
-                        textSize = 12f
-                        setTextColor(overlayTextColor())
-                        setSingleLine(false)
-                    })
-                    addView(TextView(context).apply {
-                        text = getString(R.string.map_bubble_copy_hint)
-                        textSize = 10f
+        aMap.setOnInfoWindowClickListener { copy(it) }
+        aMap.setCommonInfoWindowAdapter(MarkerInfoWindowAdapter { marker ->
+            LinearLayout(this@AmapMapActivity).apply {
+                orientation = LinearLayout.VERTICAL
+                setPadding(dp(12), dp(10), dp(12), dp(18))
+                background = MapBubbleBackground(resources.displayMetrics.density, isSystemNightMode())
+                addView(TextView(context).apply {
+                    text = marker.title.orEmpty()
+                    maxWidth = minOf(dp(280), resources.displayMetrics.widthPixels - dp(64))
+                    textSize = 14f
+                    setTextColor(overlayTextColor())
+                    setTypeface(typeface, android.graphics.Typeface.BOLD)
+                    setSingleLine(false)
+                })
+                addView(TextView(context).apply {
+                    text = marker.snippet.orEmpty()
+                    maxWidth = minOf(dp(280), resources.displayMetrics.widthPixels - dp(64))
+                    textSize = 12f
+                    setTextColor(overlayTextColor())
+                    setSingleLine(false)
+                })
+                addView(LinearLayout(context).apply {
+                    gravity = Gravity.END or Gravity.CENTER_VERTICAL
+                    fun action(label: Int, click: (android.widget.Button) -> Unit) = android.widget.Button(context).apply {
+                        setText(label); textSize = 12f; isAllCaps = false
+                        backgroundTintList = android.content.res.ColorStateList.valueOf(Color.TRANSPARENT)
                         setTextColor(if (isSystemNightMode()) 0xFF70B9FF.toInt() else 0xFF1679C9.toInt())
-                        setPadding(0, dp(6), 0, 0)
-                    })
-                }
+                        minimumHeight = dp(40); minHeight = dp(40); minWidth = dp(56)
+                        setPadding(dp(8), 0, dp(8), 0)
+                        setOnClickListener { click(this) }
+                        addView(this, LinearLayout.LayoutParams(-2, dp(40)))
+                    }
+                    stationForMarker(marker)?.let { station ->
+                        action(if (probeAntennas.isPinned(station)) R.string.map_station_unpin else R.string.map_station_pin) { button ->
+                            val pinned = probeAntennas.togglePin(station)
+                            button.setText(if (pinned) R.string.map_station_unpin else R.string.map_station_pin)
+                            renderProbeAntennas()
+                        }
+                    }
+                    action(R.string.map_bubble_copy_action) { copy(marker) }
+                })
             }
-            override fun getInfoContents(marker: Marker): View? = null
         })
+    }
+
+    private fun stationForMarker(marker: Marker): ProbedStation? {
+        if (!::nearbyLteOverlay.isInitialized) return null
+        // The serving overlays also contain session stations, including those outside the probe radius.
+        (nearbyLteOverlay.nearbyStation(marker) ?: lteOverlay.nearbyStation(marker))?.let { (key, rows) ->
+            return ProbedStation("LTE|$key", lte = rows)
+        }
+        (nearbyNrOverlay.nearbyStation(marker) ?: nrOverlay.nearbyStation(marker))?.let { (key, rows) ->
+            return ProbedStation("NR|$key", nr = rows)
+        }
+        return null
+    }
+
+    private fun renderProbeAntennas() {
+        if (!::probeAntennaLte.isInitialized) return
+        val (lteRows, nrRows) = probeAntennas.displayed(stationExclusion)
+        probeAntennaLte.renderNearbyCells(lteRows)
+        probeAntennaNr.renderNearbyCells(nrRows)
     }
 
     private fun onMotionReading(reading: DeadReckoningEngine.Reading) {
@@ -1095,7 +1234,9 @@ class AmapMapActivity : AppCompatActivity(), LocationSource {
         val sdkFresh = lastAmapFixAt >= 0 && now - lastAmapFixAt in 0..3000
         val speed = (if (sdkFresh && lastAmapIsGps) lastAmapSpeed ?: reading.speedMps else reading.speedMps)
             ?.let { String.format(Locale.getDefault(), "%.1f", it * 3.6) } ?: "—"
-        val readiness = getString(if (motionTracker.engine.isReady(now)) R.string.map_inertial_ready else R.string.map_inertial_not_ready)
+        val readiness = if (reading.mode == DeadReckoningEngine.Mode.ESTIMATED)
+            getString(R.string.map_inertial_estimating, reading.outageMillis / 1000)
+            else getString(if (motionTracker.engine.isReady(now)) R.string.map_inertial_ready else R.string.map_inertial_not_ready)
         speedView.text = "$speed\nkm/h\n$readiness"
         speedView.contentDescription = "$speed km/h · $readiness"
         if (!sdkFresh && reading.lat != null && reading.lng != null && reading.mode == DeadReckoningEngine.Mode.ESTIMATED) {
@@ -1122,9 +1263,12 @@ class AmapMapActivity : AppCompatActivity(), LocationSource {
         speedReliable: Boolean = false, fixAt: Long = SystemClock.elapsedRealtime()) {
         lastLatLng = point
         lastRawPosition = raw
-        lastPositionAt = SystemClock.elapsedRealtime()
+        lastPositionAt = fixAt
         lastPositionEstimated = estimated
         lastPositionAccuracy = accuracy
+        lastBearingDeg = driveCourse.update(fixAt, point.latitude, point.longitude, (accuracy ?: 100f).toDouble(),
+            speedMps, bearing?.toDouble()?.takeIf { estimated || speedReliable },
+            estimated || lastAmapIsGps && (accuracy ?: 100f) <= 35f)?.toFloat()
         syncMapMatchingState()
         if (mapMatching?.enabled == true) {
             val wgs = if (raw.third?.startsWith("WGS84", true) == true && raw.first != null && raw.second != null)
@@ -1134,8 +1278,8 @@ class AmapMapActivity : AppCompatActivity(), LocationSource {
                 speedMps, bearing?.toDouble(), accuracy?.toDouble() ?: 999.0, speedReliable,
                 System.currentTimeMillis() - (SystemClock.elapsedRealtime() - fixAt).coerceAtLeast(0)))
         }
-        if (bearing != null) lastBearingDeg = bearing
         if (!mapResumed) return
+        locationMarker?.update(point, lastBearingDeg?.toDouble(), estimated, restoredHistory == null)
         if (isFirstFix) {
             isFirstFix = false
             if (shouldSkipFirstFixCenter) shouldSkipFirstFixCenter = false
@@ -1143,37 +1287,39 @@ class AmapMapActivity : AppCompatActivity(), LocationSource {
                 ignoreCameraMoveCancelOnce = true
                 aMap.moveCamera(CameraUpdateFactory.newLatLngZoom(point, 17f))
             }
-        } else if (followMyLocation) applyFollowCamera(point, lastBearingDeg)
+        }
         if (!isPickMode) {
             updateServingPosition()
             probeNearbyCells()
         }
     }
 
+    private fun stationUserPosition(): LatLng? =
+        if (restoredHistory != null) visibleHistory?.pointsBySlot?.get(selectedSimSlot)?.firstOrNull()?.latLng
+        else lastLatLng?.takeIf {
+            SystemClock.elapsedRealtime() - lastPositionAt in 0..5000 &&
+                (lastPositionEstimated || (lastPositionAccuracy ?: Float.MAX_VALUE) <= 100f)
+        }
+
     private fun updateServingPosition() {
-        if (::servingStation.isInitialized) servingStation.updatePosition(
-            if (restoredHistory != null) visibleHistory?.pointsBySlot?.get(selectedSimSlot)?.firstOrNull()?.latLng
-            else lastMatchedPosition ?: lastLatLng)
+        val position = stationUserPosition()
+        if (::servingStation.isInitialized) servingStation.updatePosition(position)
+        if (isDriving || restoredHistory != null) stationDistancePreview?.clear()
+        else stationDistancePreview?.updatePosition(position)
     }
 
     private fun onMapMatchResult(result: MatchResult?, metadata: String?) {
-        val previous = lastMatchedPosition
         lastMapMatchJson = metadata ?: result?.toJson()
-        lastMatchedPosition = result?.corrected?.let { p -> Gcj02.wgs84ToGcj02(p.lat, p.lng).let { LatLng(it.first, it.second) } }
-        if (!mapResumed || isPickMode || restoredHistory != null) return
-        val display = lastMatchedPosition ?: if (previous != null) lastLatLng else null
-        if (display != null) {
-            // Display only: the GPS observer and sampler continue to receive the unmodified raw fix.
-            amapListener?.onLocationChanged(Location("map_match_output").apply {
-                latitude = display.latitude; longitude = display.longitude
-                accuracy = lastPositionAccuracy ?: 100f
-                time = System.currentTimeMillis(); elapsedRealtimeNanos = SystemClock.elapsedRealtimeNanos()
-                result?.fix?.speedMps?.let { speed = it.toFloat() }
-                result?.fix?.bearing?.let { bearing = it.toFloat() }
-            })
-            if (followMyLocation) applyFollowCamera(display, lastBearingDeg)
-            updateServingPosition()
-        }
+        // Delayed cloud paths correct timestamped recorded points, never the current location marker.
+    }
+
+    private fun onFalconTrace(trace: FalconTrace) {
+        val sid = if (restoredHistory != null) restoredSessionId else persistSessionId
+        if (sid == null || !::sampler.isInitialized) return
+        val updates = sampler.applyFalconTrace(trace)
+        if (updates.isEmpty()) return
+        correctionWrites.enqueue(updates, sid)
+        if (restoredHistory != null) restoredHistory = DriveHistory(sampler.recordedPoints())
     }
 
     private fun saveLinkedStation(state: NetworkPanelUiState, snapshot: DriveStationSnapshot, position: LatLng) {
@@ -1221,7 +1367,7 @@ class AmapMapActivity : AppCompatActivity(), LocationSource {
                 text = if (restoredHistory != null && historyPoints.isNullOrEmpty()) {
                     getString(if (bandFilter.active) R.string.map_band_filter_sim_empty else R.string.map_history_sim_empty, slot + 1)
                 } else {
-                    "$rat  ${rsrp?.let { "$it dBm" } ?: "—"}"
+                    "$rat ${driveBandLabel(rat, state?.band.orEmpty())} · ${rsrp?.let { "$it dBm" } ?: "—"}"
                 }
                 setTextColor(if (selectedSimSlot == slot) fabBlue else overlayTextColor())
             }
@@ -1274,7 +1420,7 @@ class AmapMapActivity : AppCompatActivity(), LocationSource {
         }
         bandCoverageDistance = label(12f)
         bandCoverageNote = label(10f)
-        label(10f).setText(R.string.map_band_coverage_route_note)
+        label(10f).apply { setSingleLine(false); ellipsize = null; setText(R.string.map_band_coverage_route_note) }
         root.addView(bandCoveragePanel, FrameLayout.LayoutParams(dp(200), -2))
         fun fit() {
             root.post {
@@ -1372,6 +1518,35 @@ class AmapMapActivity : AppCompatActivity(), LocationSource {
         dialog.window?.setSoftInputMode(android.view.WindowManager.LayoutParams.SOFT_INPUT_ADJUST_RESIZE)
     }
 
+    private fun applyStationMarkerVisibility() {
+        if (::lteOverlay.isInitialized) lteOverlay.setStationMarkersVisible(showStationMarkers)
+        if (::nrOverlay.isInitialized) nrOverlay.setStationMarkersVisible(showStationMarkers)
+        if (::nearbyLteOverlay.isInitialized) nearbyLteOverlay.setStationMarkersVisible(showStationMarkers)
+        if (::nearbyNrOverlay.isInitialized) nearbyNrOverlay.setStationMarkersVisible(showStationMarkers)
+    }
+
+    private fun frameCurrentTrack(start: Boolean) {
+        val points = (visibleHistory?.pointsBySlot?.get(selectedSimSlot)
+            ?: if (restoredHistory == null) sampler.recordedPoints().filter { it.simSlot == selectedSimSlot && bandFilter.matches(it.snapshot) }
+            else emptyList()).filter { driveValidPosition(it.latLng.latitude, it.latLng.longitude, 0f) }
+        pendingTrackStart = null
+        if (points.isEmpty()) return
+        followMyLocation = false
+        shouldSkipFirstFixCenter = true
+        updateCenterFabUi()
+        if (mapView.width <= 0 || mapView.height <= 0) { pendingTrackStart = start; return }
+        ignoreCameraMoveCancelOnce = true
+        val first = points.minBy { it.ts }.latLng
+        if (start || points.all { it.latLng == first }) {
+            aMap.moveCamera(CameraUpdateFactory.newLatLngZoom(first, 17f))
+        } else {
+            val bounds = com.amap.api.maps.model.LatLngBounds.builder()
+            points.forEach { bounds.include(it.latLng) }
+            val padding = dp(80).coerceAtMost(minOf(mapView.width, mapView.height) / 4)
+            aMap.moveCamera(CameraUpdateFactory.newLatLngBounds(bounds.build(), mapView.width, mapView.height, padding))
+        }
+    }
+
     private fun applyBandFilter(filter: DriveBandFilter) {
         bandFilter = filter
         overlayPrefs.edit().putString(KEY_POINT_LTE_BANDS, filter.lteInput())
@@ -1384,10 +1559,7 @@ class AmapMapActivity : AppCompatActivity(), LocationSource {
             selectedSimSlot = history.initialSlot(selectedSimSlot)
             sampler.setVisibleSimSlot(selectedSimSlot)
             refreshHistoryStation()
-            history.pointsBySlot[selectedSimSlot]?.firstOrNull()?.let { first ->
-                ignoreCameraMoveCancelOnce = true
-                aMap.moveCamera(CameraUpdateFactory.newLatLngZoom(first.latLng, 17f))
-            }
+            frameCurrentTrack(historyStartView)
         }
         updateBandCoveragePanel()
         updateSignalPanel(displayedSnapshots())
@@ -1398,11 +1570,11 @@ class AmapMapActivity : AppCompatActivity(), LocationSource {
     private fun refreshHistoryStation() {
         val history = visibleHistory ?: return
         val points = history.pointsBySlot[selectedSimSlot].orEmpty()
-        val keys = points.mapTo(HashSet()) { it.cellKey }
+        val keys = points.flatMap { listOf(it.cellKey, DriveStyle.cellKey(it.snapshot)) }.toHashSet()
         val stations = restoredStations.filter { it.simSlot == selectedSimSlot && it.cellKey in keys }
         servingStation.clear()
-        if (stations.isNotEmpty()) servingStation.showHistory(stations, selectedSimSlot, points.firstOrNull())
-        else servingStation.update(history.snapshots[selectedSimSlot])
+        servingStation.updatePosition(points.firstOrNull()?.latLng)
+        servingStation.showHistory(stations, selectedSimSlot, points.firstOrNull())
     }
 
     private fun showHistoryPointCount() {
@@ -1473,7 +1645,8 @@ class AmapMapActivity : AppCompatActivity(), LocationSource {
             scope.launch {
                 val pointError = sampler.awaitPersistence()
                 val stationError = stationWrites.awaitIdle()
-                val error = pointError ?: stationError
+                val correctionError = correctionWrites.awaitIdle()
+                val error = pointError ?: stationError ?: correctionError
                 finishingDrive = false
                 if (error != null) {
                     Logger.log("Drive persistence failed: ${error.message}")
@@ -1523,6 +1696,7 @@ class AmapMapActivity : AppCompatActivity(), LocationSource {
     }
 
     private fun startDriveRecording() {
+        stationDistancePreview?.clear()
         // Location FGS must start from a visible Activity with location enabled.
         if (isDriving || isFinishing || isDestroyed ||
             !lifecycle.currentState.isAtLeast(Lifecycle.State.STARTED)
@@ -1607,7 +1781,8 @@ class AmapMapActivity : AppCompatActivity(), LocationSource {
     private fun initMyLocation() {
         aMap.setLocationSource(this)
         aMap.myLocationStyle = MyLocationStyle()
-            .myLocationType(MyLocationStyle.LOCATION_TYPE_LOCATION_ROTATE_NO_CENTER)
+            .myLocationType(MyLocationStyle.LOCATION_TYPE_FOLLOW_NO_CENTER)
+            .showMyLocation(isPickMode)
             .interval(1000L)
         aMap.isMyLocationEnabled = true
         syncMapMatchingState()
@@ -1634,6 +1809,9 @@ class AmapMapActivity : AppCompatActivity(), LocationSource {
                         val now = SystemClock.elapsedRealtime()
                         val fixAt = driveFixElapsedMillis(loc.elapsedRealtimeNanos, loc.time, now, System.currentTimeMillis())
                         if (!driveValidPosition(loc.latitude, loc.longitude, loc.accuracy) || fixAt == null) return@setLocationListener
+                        if (!isPickMode && ::motionTracker.isInitialized && drivePreferInertial(
+                                loc.locationType == AMapLocation.LOCATION_TYPE_GPS, loc.accuracy,
+                                motionTracker.engine.reading(now))) return@setLocationListener
                         val coordinate = if (loc.coordType == AMapLocation.COORD_TYPE_WGS84)
                             Gcj02.wgs84ToGcj02(loc.latitude, loc.longitude) else loc.latitude to loc.longitude
                         val point = LatLng(coordinate.first, coordinate.second)
@@ -1694,14 +1872,15 @@ class AmapMapActivity : AppCompatActivity(), LocationSource {
             restoredHistory?.let { mapMatching?.showHistory(it.pointsBySlot[selectedSimSlot].orEmpty()) }
             if (hasLocPerm()) motionTracker.start()
             if (hasLocPerm()) locClient?.startLocation()
-            if (restoredHistory == null) servingStation.update(latestSnapshots[selectedSimSlot])
             updateServingPosition()
+            if (restoredHistory == null) servingStation.update(latestSnapshots[selectedSimSlot])
         }
     }
 
     override fun onPause() {
         super.onPause()
         mapResumed = false
+        locationMarker?.pause()
         mapView.onPause()
         if (!isDriving) mapMatching?.setActive(false)
         // Keep per-SIM telemetry fresh while a running road test is backgrounded.
@@ -1713,6 +1892,8 @@ class AmapMapActivity : AppCompatActivity(), LocationSource {
     }
 
     override fun onDestroy() {
+        stationDistancePreview?.clear()
+        locationMarker?.close()
         mapMatching?.close()
         if (!isPickMode) {
             if (::sampler.isInitialized) {
@@ -1724,6 +1905,8 @@ class AmapMapActivity : AppCompatActivity(), LocationSource {
             DriveKeepAliveService.stop(this)
             if (::motionTracker.isInitialized) motionTracker.stop()
             if (::servingStation.isInitialized) servingStation.clear()
+            probeAntennas.clear()
+            if (::probeAntennaLte.isInitialized) { probeAntennaLte.clear(); probeAntennaNr.clear() }
         }
         // Already queued batches belong to DrivePersistence, not the page scope.
         // Committed points survive back navigation, task removal and process restart.
@@ -1838,10 +2021,7 @@ class AmapMapActivity : AppCompatActivity(), LocationSource {
             followMyLocation = false
             shouldSkipFirstFixCenter = true
             updateCenterFabUi()
-            visibleHistory?.pointsBySlot?.get(selectedSimSlot)?.firstOrNull()?.let { first ->
-                ignoreCameraMoveCancelOnce = true
-                aMap.moveCamera(CameraUpdateFactory.newLatLngZoom(first.latLng, 17f))
-            }
+            frameCurrentTrack(historyStartView)
             refreshHistoryStation()
             Logger.log("Drive restore session=$sessionId loaded=${points.size}")
             showHistoryPointCount()
@@ -1892,7 +2072,10 @@ class AmapMapActivity : AppCompatActivity(), LocationSource {
                 latestSnapshots = states
                 if (restoredHistory == null) {
                     updateSignalPanel(states)
-                    if (mapResumed) servingStation.update(states[selectedSimSlot])
+                    if (mapResumed) {
+                        updateServingPosition()
+                        servingStation.update(states[selectedSimSlot])
+                    }
                 }
             }
         }
@@ -1900,8 +2083,8 @@ class AmapMapActivity : AppCompatActivity(), LocationSource {
 
     private fun triggerOverlayForState(state: NetworkPanelUiState): Boolean {
         if (!::servingStation.isInitialized) return false
-        servingStation.update(state)
         updateServingPosition()
+        servingStation.update(state)
         return true
     }
 
@@ -1989,10 +2172,12 @@ class AmapMapActivity : AppCompatActivity(), LocationSource {
         if (::nearbyLteOverlay.isInitialized) {
             nearbyLteOverlay.updateSectorDrawConfig(sectorDrawConfig.angleDeg, sectorDrawConfig.radiusMeters)
             nearbyNrOverlay.updateSectorDrawConfig(sectorDrawConfig.angleDeg, sectorDrawConfig.radiusMeters)
-            nearbyResult?.let {
-                nearbyLteOverlay.renderNearbyCells(it.lte)
-                nearbyNrOverlay.renderNearbyCells(it.nr)
-            }
+            renderNearbyResult()
+        }
+        if (::probeAntennaLte.isInitialized) {
+            probeAntennaLte.updateSectorDrawConfig(sectorDrawConfig.angleDeg, sectorDrawConfig.radiusMeters)
+            probeAntennaNr.updateSectorDrawConfig(sectorDrawConfig.angleDeg, sectorDrawConfig.radiusMeters)
+            renderProbeAntennas()
         }
     }
 
@@ -2048,9 +2233,19 @@ class AmapMapActivity : AppCompatActivity(), LocationSource {
             container.addView(this)
         }
         val handoverSwitch = displaySwitch(R.string.map_show_handovers, showHandoverPoints)
+        val stationMarkersSwitch = displaySwitch(R.string.map_show_station_markers, showStationMarkers)
         val antennasSwitch = displaySwitch(R.string.map_show_serving_antennas, showServingAntennas)
         val linkSwitch = displaySwitch(R.string.map_show_serving_link, showServingLink)
         val inertialSwitch = displaySwitch(R.string.map_inertial_enable, inertialEnabled)
+        val inertialMinutes = TextInputEditText(this).apply {
+            inputType = InputType.TYPE_CLASS_NUMBER
+            setText((motionTracker.engine.maxOutageMs / 60_000).toString())
+        }
+        val inertialMinutesLayout = TextInputLayout(this).apply {
+            setHint(R.string.map_inertial_max_minutes)
+            addView(inertialMinutes)
+        }
+        container.addView(inertialMinutesLayout)
         container.addView(TextView(this).apply {
             setText(R.string.map_inertial_description)
             textSize = 12f
@@ -2122,15 +2317,15 @@ class AmapMapActivity : AppCompatActivity(), LocationSource {
                 val angle = angleEdit.text?.toString()?.trim()?.toFloatOrNull()
                 val radius = distanceEdit.text?.toString()?.trim()?.toDoubleOrNull()
                 val sampleIntervalSecInput = sampleIntervalEdit.text?.toString()?.trim()?.toLongOrNull()
+                val outageMinutes = inertialMinutes.text?.toString()?.trim()?.toIntOrNull()
+                inertialMinutesLayout.error = if (outageMinutes == null || outageMinutes !in 1..30)
+                    getString(R.string.map_parameter_invalid) else null
                 val bandInput = bandEdit.text?.toString()?.trim().orEmpty()
                 val rat = when (ratSelector.selectedItemPosition) { 1 -> "LTE"; 2 -> "NR"; else -> null }
-                val bandMatch = Regex("^([bBnN])?([1-9]\\d{0,2})$").matchEntire(bandInput)
-                val prefix = bandMatch?.groupValues?.get(1).orEmpty()
-                val bandRat = when (prefix.lowercase(Locale.ROOT)) { "b" -> "LTE"; "n" -> "NR"; else -> null }
-                bandLayout.error = when {
-                    bandInput.isNotEmpty() && bandMatch == null -> getString(R.string.map_nearby_band_invalid)
-                    rat != null && bandRat != null && rat != bandRat -> getString(R.string.map_nearby_band_rat_mismatch)
-                    else -> null
+                val parsedBands = runCatching { nearbyProbeBands(bandInput, rat) }
+                bandLayout.error = parsedBands.exceptionOrNull()?.let {
+                    getString(if (it.message == "band_rat_mismatch") R.string.map_nearby_band_rat_mismatch
+                        else R.string.map_nearby_band_invalid)
                 }
                 angleLayout.error = if (angle == null || !angle.isFinite() || angle !in 20f..180f)
                     getString(R.string.map_parameter_invalid) else null
@@ -2140,27 +2335,30 @@ class AmapMapActivity : AppCompatActivity(), LocationSource {
                     sampleIntervalSecInput !in MIN_MARKER_SAMPLE_INTERVAL_SEC..MAX_MARKER_SAMPLE_INTERVAL_SEC)
                     getString(R.string.map_parameter_invalid) else null
                 if (angleLayout.error != null || distanceLayout.error != null || sampleIntervalLayout.error != null ||
-                    bandLayout.error != null)
+                    bandLayout.error != null || inertialMinutesLayout.error != null)
                     return false
 
                 sectorDrawConfig = normalizeSectorDrawConfig(angle!!, radius!!)
                 showHandoverPoints = handoverSwitch.isChecked
+                showStationMarkers = stationMarkersSwitch.isChecked
                 showServingAntennas = antennasSwitch.isChecked
                 showServingLink = linkSwitch.isChecked
                 inertialEnabled = inertialSwitch.isChecked
                 overlayPrefs.edit().putBoolean("show_handover_points", showHandoverPoints)
+                    .putBoolean("show_station_markers", showStationMarkers)
                     .putBoolean("show_serving_antennas", showServingAntennas)
                     .putBoolean("show_serving_link", showServingLink)
                     .putBoolean("inertial_auto_enabled", inertialEnabled).apply()
                 sampler.setHandoverVisible(showHandoverPoints)
+                applyStationMarkerVisibility()
                 motionTracker.setInertialEnabled(inertialEnabled)
+                motionTracker.engine.maxOutageMs = outageMinutes!! * 60_000L
+                overlayPrefs.edit().putInt("inertial_max_minutes", outageMinutes).apply()
                 servingStation.setDisplay(showServingAntennas, showServingLink)
                 markerSampleIntervalSec = normalizeMarkerSampleIntervalSec(sampleIntervalSecInput!!)
                 saveSectorDrawConfig(sectorDrawConfig)
                 saveMarkerSampleIntervalSec(markerSampleIntervalSec)
-                val band = bandMatch?.let {
-                    (when (bandRat) { "LTE" -> "B"; "NR" -> "n"; else -> "" }) + it.groupValues[2]
-                }
+                val band = parsedBands.getOrThrow().filterNotNull().joinToString(",").takeIf { it.isNotEmpty() }
                 val probeChanged = nearbyEnabled != enableProbe.isChecked ||
                     nearbyRadiusKm != radiusSlider.progress + 1 || nearbyBand != band || nearbyRat != rat
                 nearbyEnabled = enableProbe.isChecked
@@ -2192,17 +2390,103 @@ class AmapMapActivity : AppCompatActivity(), LocationSource {
         }
     }
 
+    private fun showStationExclusionDialog() {
+        val selected = stationExclusion.bands.toMutableSet()
+        val container = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding(dp(18), dp(8), dp(18), dp(8))
+        }
+        container.addView(TextView(this).apply {
+            setText(R.string.map_station_exclusion_description)
+            textSize = 12f
+            setPadding(0, 0, 0, dp(8))
+        })
+        StationExclusion.selectableBands.chunked(3).forEach { bands ->
+            val row = LinearLayout(this)
+            bands.forEach { band ->
+                row.addView(androidx.appcompat.widget.AppCompatCheckBox(this).apply {
+                    text = "B$band"
+                    isChecked = band in selected
+                    setOnCheckedChangeListener { _, checked -> if (checked) selected.add(band) else selected.remove(band) }
+                }, LinearLayout.LayoutParams(0, dp(48), 1f))
+            }
+            container.addView(row)
+        }
+        val channels = TextInputEditText(this).apply {
+            inputType = InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_FLAG_NO_SUGGESTIONS
+            maxLines = 3
+            setText(stationExclusion.channelInput())
+        }
+        val field = TextInputLayout(this).apply {
+            setHint(R.string.map_station_exclusion_channels)
+            helperText = getString(R.string.map_station_exclusion_channels_hint)
+            addView(channels)
+        }
+        container.addView(field)
+        val dialog = newDialogBuilder().setTitle(R.string.map_station_exclusion_title)
+            .setView(ScrollView(this).apply { addView(container) })
+            .setPositiveButton(R.string.map_station_exclusion_apply, null)
+            .setNeutralButton(R.string.map_station_exclusion_clear) { _, _ -> applyStationExclusion(StationExclusion()) }
+            .setNegativeButton(android.R.string.cancel, null).show()
+        dialog.getButton(AlertDialog.BUTTON_POSITIVE).setOnClickListener {
+            val parsed = runCatching { StationExclusion.parseChannels(channels.text?.toString().orEmpty()) }
+            if (parsed.isFailure) field.error = getString(R.string.map_station_exclusion_invalid)
+            else {
+                applyStationExclusion(StationExclusion(selected.toSet(), parsed.getOrThrow()))
+                dialog.dismiss()
+            }
+        }
+    }
+
+    private fun applyStationExclusion(value: StationExclusion) {
+        if (stationExclusion == value) return
+        stationExclusion = value
+        overlayPrefs.edit().putString(KEY_STATION_EXCLUDED_BANDS, value.bandInput())
+            .putString(KEY_STATION_EXCLUDED_CHANNELS, value.channelInput()).apply()
+        sampler.clearSelection()
+        servingStation.setExclusion(value)
+        renderProbeAntennas()
+        renderNearbyResult()
+    }
+
+    private fun renderNearbyResult() {
+        if (!::nearbyLteOverlay.isInitialized || !::nearbyStatus.isInitialized) return
+        val result = nearbyResult
+        val summary = if (stationExclusion.active) getString(R.string.map_station_exclusion_summary, stationExclusion.summary()) else ""
+        val message = if (result == null) summary else {
+            sampler.clearSelection()
+            val visibleLte = result.lte.filterNot { stationExclusion.excludes(it) }
+            val lteCount = nearbyLteOverlay.renderNearbyCells(visibleLte.take(1000))
+            val nrCount = nearbyNrOverlay.renderNearbyCells(result.nr.take(1000))
+            getString(R.string.map_nearby_result, nearbyRadiusKm, lteCount, nrCount) +
+                (nearbyRat?.let { if (it == "LTE") " · 4G" else " · 5G" } ?: "") +
+                (nearbyBand?.let { " · $it" } ?: "") +
+                (if (result.truncated || visibleLte.size > 1000 || result.nr.size > 1000) getString(R.string.map_nearby_truncated) else "") +
+                (if (nearbyPartialFailure) getString(R.string.map_nearby_partial_failure) else "") +
+                (if (summary.isNotEmpty()) "\n$summary" else "")
+        }
+        nearbyStatus.setSingleLine(false)
+        nearbyStatus.maxLines = 3
+        nearbyStatus.text = message
+        nearbyStatus.contentDescription = message
+        nearbyStatus.visibility = if (message.isEmpty()) View.GONE else View.VISIBLE
+    }
+
+    private data class NearbyAttempt(val result: NearbyCellsResponse?, val error: String? = null)
+
     private fun clearNearbyCells() {
         nearbyJob?.cancel()
         nearbyJob = null
         lastNearbyAt = 0L
         lastNearbyCenter = null
         nearbyResult = null
+        nearbyPartialFailure = false
+        sampler.clearSelection()
         nearbyLteOverlay.clear()
         nearbyNrOverlay.clear()
         nearbyRangeCircle?.remove()
         nearbyRangeCircle = null
-        nearbyStatus.visibility = View.GONE
+        renderNearbyResult()
     }
 
     private fun probeNearbyCells(force: Boolean = false) {
@@ -2231,32 +2515,42 @@ class AmapMapActivity : AppCompatActivity(), LocationSource {
         nearbyJob = scope.launch {
             try {
                 val (latitude, longitude) = Gcj02.gcj02ToWgs84(center.latitude, center.longitude)
-                val response = apiService.queryNearbyCells(NearbyCellsRequest(
-                    latitude, longitude, radius, band = band, rat = rat))
-                val result = response.body()
-                if (!response.isSuccessful || result?.ok != true) {
-                    val error = response.errorBody()?.string()?.let {
-                        runCatching { org.json.JSONObject(it).optString("error") }.getOrNull()
+                val queries = nearbyProbeBands(band, rat)
+                val attempts = mutableListOf<NearbyAttempt>()
+                for (batch in queries.chunked(3)) {
+                    attempts += coroutineScope {
+                        batch.map { requestedBand -> async {
+                            try {
+                                val response = apiService.queryNearbyCells(NearbyCellsRequest(
+                                    latitude, longitude, radius, band = requestedBand, rat = rat))
+                                val body = response.body()
+                                if (response.isSuccessful && body?.ok == true) NearbyAttempt(body)
+                                else NearbyAttempt(null, response.errorBody()?.string()?.let {
+                                    runCatching { org.json.JSONObject(it).optString("error") }.getOrNull()
+                                })
+                            } catch (cancelled: CancellationException) { throw cancelled }
+                            catch (_: Exception) { NearbyAttempt(null) }
+                        } }.awaitAll()
                     }
-                    nearbyStatus.text = when (error) {
+                    nearbyStatus.text = getString(R.string.map_nearby_loading_progress, attempts.size, queries.size)
+                }
+                val responses = attempts.mapNotNull { it.result }
+                if (responses.isEmpty()) {
+                    nearbyStatus.text = when (attempts.firstOrNull()?.error) {
                         "invalid_band" -> getString(R.string.map_nearby_band_unsupported, band.orEmpty())
                         "band_rat_mismatch" -> getString(R.string.map_nearby_band_rat_mismatch)
                         else -> getString(R.string.map_nearby_failed)
                     }
                     return@launch
                 }
-                nearbyResult = result
+                nearbyResult = mergeNearbyProbeResults(responses, latitude, longitude)
+                nearbyPartialFailure = attempts.any { it.result == null }
                 lastNearbyCenter = center
-                val lteCount = nearbyLteOverlay.renderNearbyCells(result.lte)
-                val nrCount = nearbyNrOverlay.renderNearbyCells(result.nr)
                 nearbyRangeCircle?.remove()
                 nearbyRangeCircle = aMap.addCircle(com.amap.api.maps.model.CircleOptions()
                     .center(center).radius(radius * 1000.0)
                     .strokeColor(0x88448AFF.toInt()).strokeWidth(2f).fillColor(0x08448AFF))
-                nearbyStatus.text = getString(R.string.map_nearby_result, radius, lteCount, nrCount) +
-                    (rat?.let { if (it == "LTE") " · 4G" else " · 5G" } ?: "") +
-                    (band?.let { " · $it" } ?: "") +
-                    if (result.truncated) getString(R.string.map_nearby_truncated) else ""
+                renderNearbyResult()
             } catch (cancelled: CancellationException) {
                 throw cancelled
             } catch (error: Exception) {
@@ -2347,11 +2641,7 @@ class AmapMapActivity : AppCompatActivity(), LocationSource {
             targetBearing
         )
         ignoreCameraMoveCancelOnce = true
-        aMap.animateCamera(CameraUpdateFactory.newCameraPosition(cam))
-
-        if (followMyLocation) {
-            lastLatLng?.let { ll -> applyFollowCamera(ll, lastBearingDeg) }
-        }
+        animateMapControl(CameraUpdateFactory.newCameraPosition(cam))
     }
 
     private fun update2D3DFabUi() {
@@ -2409,6 +2699,10 @@ class AmapMapActivity : AppCompatActivity(), LocationSource {
     }
 
     private fun applyFollowCamera(latLng: LatLng, bearing: Float?) {
+        followCameraFrame(locationMarker?.displayedPosition() ?: latLng, bearing)
+    }
+
+    private fun followCameraFrame(latLng: LatLng, bearing: Float?) {
         val pos = aMap.cameraPosition
         val zoom = pos.zoom
         val tilt = if (is3DMode) followTilt3D else 0f
@@ -2422,6 +2716,14 @@ class AmapMapActivity : AppCompatActivity(), LocationSource {
         )
         ignoreCameraMoveCancelOnce = true
         aMap.moveCamera(CameraUpdateFactory.newCameraPosition(cam))
+    }
+
+    private fun animateMapControl(update: com.amap.api.maps.CameraUpdate) {
+        cameraControlAnimating = true
+        aMap.animateCamera(update, 250L, object : AMap.CancelableCallback {
+            override fun onFinish() { cameraControlAnimating = false }
+            override fun onCancel() { cameraControlAnimating = false }
+        })
     }
 
     private data class SectorDrawConfig(
@@ -2448,6 +2750,8 @@ class AmapMapActivity : AppCompatActivity(), LocationSource {
         private const val KEY_NEARBY_RADIUS_KM = "nearby_radius_km"
         private const val KEY_NEARBY_BAND = "nearby_band"
         private const val KEY_NEARBY_RAT = "nearby_rat"
+        private const val KEY_STATION_EXCLUDED_BANDS = "station_excluded_lte_bands"
+        private const val KEY_STATION_EXCLUDED_CHANNELS = "station_excluded_lte_earfcns"
         private const val DEFAULT_SECTOR_ANGLE_DEG = 120f
         private const val DEFAULT_SECTOR_RADIUS_METERS = 200.0
         private const val MIN_MARKER_SAMPLE_INTERVAL_SEC = 1L

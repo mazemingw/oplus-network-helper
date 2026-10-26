@@ -1,0 +1,16 @@
+<resources>
+    <string name="map_station_exclusion_title">Hide base stations</string>
+    <string name="map_station_exclusion_description">Select LTE bands or enter EARFCNs to hide station markers, coverage shapes and links. Engineering data and recorded points are kept. NR stations stay visible.</string>
+    <string name="map_station_exclusion_channels">Blocked LTE channels (EARFCN)</string>
+    <string name="map_station_exclusion_channels_hint">Comma-separated, e.g. 1650,38400. Leave blank for no channel exclusions.</string>
+    <string name="map_station_exclusion_invalid">Enter comma-separated nonnegative integer EARFCNs</string>
+    <string name="map_station_exclusion_apply">Apply</string>
+    <string name="map_station_exclusion_clear">Restore all</string>
+    <string name="map_station_exclusion_summary">Hidden: %1$s</string>
+    <string name="map_station_exclusion_serving">Serving station hidden by your filters</string>
+    <string name="map_nearby_partial_failure"> · Some band queries failed. Please retry.</string>
+    <string name="map_nearby_loading_progress">Finding stations (%1$d/%2$d)…</string>
+    <string name="map_station_pin">Pin antennas</string>
+    <string name="map_station_unpin">Unpin</string>
+    <string name="map_bubble_copy_action">Copy</string>
+</resources>

@@ -39,6 +39,25 @@ Some layouts and resources are derived from Android Open Source Project/AndroidX
 and carry Apache License 2.0 notices in their file headers. Refer to each
 source header and the [Apache License 2.0](https://www.apache.org/licenses/LICENSE-2.0).
 
+## Qualcomm QMI helper
+
+`app/src/main/cpp/qmi/nh-qmi.c` is adapted from
+[Fronsipswu/qcom-band-menu](https://github.com/Fronsipswu/qcom-band-menu), commit
+`bff702b5b4916f68feb3bf9308b91be56846f2e6`, with contributions from h3nnes.
+It is a separate root executable, licensed under GPL-3.0; its license is retained
+at `app/src/main/cpp/qmi/LICENSE-GPL-3.0` and packaged in `assets/qmi/COPYING`.
+The corresponding modified source is included in this repository. Build steps
+and changes are documented in `docs/qmi-controls.md`. The app uses its local
+NDJSON interface; the UI remains native to Network Helper.
+`util/qmi/QmiRadioSnapshot.kt` adapts NAS neighbor, LTE CA and NR frequency
+message layouts and decoding from upstream `network/NasDecode.kt` at the same
+commit, under GPL-3.0. It retains only reported measurements and uses Network
+Helper's own models, validation, source selection and presentation.
+Upstream changes through `d199690ec5a052553302ee4b4b460d681cbab1eb` were reviewed
+on 2026-10-26. NR-mode rejection and partial-success behavior were ported into
+the app-side QMI client/UI; upstream native sources and NAS layouts are unchanged
+from the source base above. See `app/src/main/cpp/qmi/UPSTREAM.md` for scope.
+
 ## Other dependencies
 
 Gradle/Maven dependencies retain the licenses chosen by their respective

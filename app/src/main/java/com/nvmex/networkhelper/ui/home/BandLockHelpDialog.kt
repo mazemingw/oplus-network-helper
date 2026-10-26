@@ -25,6 +25,11 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -34,6 +39,9 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.res.stringResource
 import com.nvmex.networkhelper.R
 import com.nvmex.networkhelper.model.network.NetworkPanelUiState
+import com.nvmex.networkhelper.util.network.SocVendorDetector
+import com.nvmex.networkhelper.util.qmi.*
+import kotlinx.coroutines.CancellationException
 
 @Composable
 fun BandLockHelpDialog(
@@ -45,6 +53,24 @@ fun BandLockHelpDialog(
 
     val carrier = detectCarrier(state)
     val spec = lockSpecFor(carrier)
+    val context = LocalContext.current
+    var hardware by remember { mutableStateOf(QmiHardwareCapabilities.peek()) }
+    var reading by remember { mutableStateOf(false) }
+    LaunchedEffect(Unit) {
+        if (hardware != null || !SocVendorDetector.isQualcomm()) return@LaunchedEffect
+        reading = true
+        try { hardware = QmiHardwareCapabilities.load(context) }
+        catch (e: CancellationException) { throw e }
+        catch (_: Exception) { /* Keep the original carrier reference when root/capabilities are unavailable. */ }
+        finally { reading = false }
+    }
+    fun rows(domain: QmiBand, fallback: List<LockRow>): List<LockRow> {
+        if (hardware == null) return fallback
+        val reference = fallback.mapNotNull { row -> row.band.drop(1).toIntOrNull()?.let { it to row } }.toMap()
+        val bands = qmiHelpBandNumbers(domain, hardware?.get(domain), reference.keys, state.mcc, state.mnc)
+        return bands.sorted().map { band -> reference[band] ?: LockRow(
+            (if (domain.rat == "nr") "N" else "B") + band, "-", R.string.band_lock_note_common) }
+    }
 
     val currentNrBand = remember(state.cellType, state.band) {
         if (state.cellType.equals("NR", ignoreCase = true) && state.band.isNotBlank() && state.band != "-") {
@@ -92,13 +118,15 @@ fun BandLockHelpDialog(
                         .verticalScroll(rememberScrollState()),
                     verticalArrangement = Arrangement.spacedBy(10.dp)
                 ) {
-                    if (spec == null) {
+                    Text(stringResource(if (reading) R.string.qmi_reading else if (hardware != null) R.string.qmi_help_hardware else R.string.qmi_help_fallback),
+                        style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    if (spec == null && hardware == null) {
                         UnknownCarrierBlock(state = state)
                         return@Column
                     }
 
                     CurrentBandSummaryCard(
-                        carrierTitle = stringResource(spec.titleRes),
+                        carrierTitle = spec?.let { stringResource(it.titleRes) } ?: state.operatorName,
                         state = state,
                         currentNrBand = currentNrBand,
                         currentLteBand = currentLteBand
@@ -106,13 +134,13 @@ fun BandLockHelpDialog(
 
                     BandSectionCard(
                         title = "5G NR",
-                        rows = spec.nr,
+                        rows = rows(QmiBand.NR_SA, spec?.nr.orEmpty()),
                         currentBand = currentNrBand
                     )
 
                     BandSectionCard(
                         title = "4G LTE",
-                        rows = spec.lte,
+                        rows = rows(QmiBand.LTE, spec?.lte.orEmpty()),
                         currentBand = currentLteBand
                     )
 
@@ -239,6 +267,7 @@ private fun BandSectionCard(
                     isCurrent = isCurrent
                 )
             }
+            if (rows.isEmpty()) Text(stringResource(R.string.qmi_no_bands), style = MaterialTheme.typography.bodySmall)
         }
     }
 }
@@ -273,7 +302,8 @@ private fun BandRowCard(
     }
 
     val bandWithBw = buildString {
-        append(row.band)
+        val number = row.band.drop(1).toIntOrNull()
+        append(if (number != null) qmiBandButtonLabel(if (row.band.startsWith("N")) QmiBand.NR_SA else QmiBand.LTE, number) else row.band)
         if (row.bw.isNotBlank() && row.bw != "-") {
             append(" · ")
             append(row.bw)
@@ -335,7 +365,7 @@ private data class LockRow(
 )
 
 private fun lockSpecFor(carrier: Carrier): LockSpec? {
-    return when (carrier) {
+    val original = when (carrier) {
         Carrier.CMCC -> LockSpec(
             titleRes = R.string.band_lock_carrier_cmcc,
             nr = listOf(
@@ -412,7 +442,16 @@ private fun lockSpecFor(carrier: Carrier): LockSpec? {
         )
 
         Carrier.UNKNOWN -> null
+    } ?: return null
+    val rule = when (carrier) {
+        Carrier.CMCC, Carrier.CBN -> mainlandBandRule("460", "00")
+        Carrier.CUCC, Carrier.CTCC -> mainlandBandRule("460", "01")
+        else -> null
+    } ?: return original
+    fun complete(bands: Set<Int>, previous: List<LockRow>, prefix: String): List<LockRow> = bands.sorted().map { band ->
+        previous.firstOrNull { it.band == "$prefix$band" } ?: LockRow("$prefix$band", "-", R.string.band_lock_note_common)
     }
+    return original.copy(nr = complete(rule.nr, original.nr, "N"), lte = complete(rule.lte, original.lte, "B"))
 }
 
 /* =========================
@@ -423,7 +462,7 @@ enum class Carrier { CMCC, CUCC, CTCC, CBN, TIETONG, UNKNOWN }
 
 fun detectCarrier(state: NetworkPanelUiState): Carrier {
     val mcc = state.mcc.trim()
-    val mnc = state.mnc.trim()
+    val mnc = state.mnc.trim().takeIf { it.matches(Regex("[0-9]{1,3}")) }?.padStart(2, '0') ?: return Carrier.UNKNOWN
 
     if (mcc != "460") return Carrier.UNKNOWN
 

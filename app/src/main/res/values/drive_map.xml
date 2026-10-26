@@ -5,7 +5,7 @@
     <string name="map_band_coverage_title">频段覆盖 · %1$s</string>
     <string name="map_band_coverage_distance">覆盖 %1$s / 总计 %2$s</string>
     <string name="map_band_coverage_note">SIM%1$d · 按相邻打点估算</string>
-    <string name="map_band_coverage_route_note">灰线为路测路径，不计入覆盖</string>
+    <string name="map_band_coverage_route_note">紫色描边线为路测路径，不计入覆盖</string>
     <string name="map_band_coverage_method">覆盖率 = 匹配频段的连线距离 ÷ 当前 SIM 的有效路测距离。仅相邻两点都命中时计入覆盖；不跨过未匹配点、续录空档或异常定位连线，小于 2 米的抖动不计。切换 SIM 或回读记录后自动重算；没有有效距离时显示“—”。</string>
     <string name="map_band_filter_description">分别输入 4G、5G 频段，用逗号分隔，例如 41,28。应用后，实时打点和历史回读只显示填入的频段；未填写的制式不显示。两框都留空或清除筛选可恢复全部。筛选只影响显示，完整录制数据保留。</string>
     <string name="map_band_filter_lte">4G 频段（例如 3,41）</string>
@@ -62,8 +62,14 @@
     <string name="map_recording_deleted">已删除所选路测记录</string>
     <string name="map_display_options">打点与服务基站显示</string>
     <string name="map_show_handovers">显示基站切换点</string>
+    <string name="map_show_station_markers">显示基站标记（三角标）</string>
+    <string name="map_track_overview">轨迹全览</string>
+    <string name="map_track_start">回到起点</string>
+    <string name="map_history_initial_view">回读初始视角</string>
     <string name="map_show_serving_antennas">显示当前服务基站的扇区</string>
     <string name="map_show_serving_link">显示服务基站红线及距离</string>
     <string name="map_inertial_enable">自动隧道惯性估算</string>
-    <string name="map_inertial_description">进入地图后自动融合 GPS、加速度计和陀螺仪，行驶中持续校准，无需停车。请固定手机；失锁后根据转向和加减速估算轨迹，GPS 恢复后自动校正。超过 60 秒或传感器中断时停止估算，估算打点保留标识。</string>
+    <string name="map_inertial_description">进入地图后自动融合 GPS、加速度计和陀螺仪，行驶中持续校准。请固定手机；失锁后根据转向和加减速估算轨迹，默认最长 10 分钟，可设置 1–30 分钟。漂移随时间累积，点位保留惯导估算与漂移指示，不作为实测位置；GPS 恢复后重新校正。传感器中断或不可靠时仍停止推算，与猎鹰是否开启无关。</string>
+    <string name="map_inertial_max_minutes">惯导最长推算分钟数（1–30）</string>
+    <string name="map_inertial_estimating">推算 %1$d s</string>
 </resources>

@@ -1,0 +1,5 @@
+<resources>
+    <string name="cell_query_extra_info">附加信息</string>
+    <string name="cell_query_station_type">基站类型</string>
+    <string name="cell_station_type_default">普通 LTE</string>
+</resources>

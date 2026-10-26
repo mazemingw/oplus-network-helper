@@ -161,6 +161,13 @@ fun SettingsScreen(
         item {
             ThinListContainer {
                 SwitchSettingItem(
+                    title = stringResource(R.string.settings_legacy_band_lock),
+                    desc = stringResource(R.string.settings_legacy_band_lock_desc),
+                    checked = settings.legacyBandLock,
+                    onCheckedChange = { setSettings(settings.copy(legacyBandLock = it)) }
+                )
+                ThinDivider()
+                SwitchSettingItem(
                     title = stringResource(R.string.map_matching_title),
                     desc = stringResource(R.string.map_matching_description),
                     checked = settings.enableMapMatching,

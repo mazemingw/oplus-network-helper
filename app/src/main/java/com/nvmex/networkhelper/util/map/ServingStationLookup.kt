@@ -4,7 +4,8 @@ import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.ensureActive
 import kotlin.coroutines.coroutineContext
 
-internal data class ServingStationLookup<T>(val rows: List<T>, val anchor: T?, val matchedWithoutPosition: Boolean)
+internal data class ServingStationLookup<T>(val rows: List<T>, val anchor: T?, val matchedWithoutPosition: Boolean,
+    val rejectedByDistance: Boolean = false)
 
 /** A site endpoint may be absent, incomplete or fail while the home panel's cell endpoint works. */
 internal suspend fun <T> lookupServingStation(
@@ -13,9 +14,11 @@ internal suspend fun <T> lookupServingStation(
     cell: suspend () -> List<T>,
     match: (List<T>) -> T?,
     candidates: (List<T>) -> List<T>,
-    hasPosition: (T) -> Boolean
+    hasPosition: (T) -> Boolean,
+    isWithinRange: (T) -> Boolean = { true }
 ): ServingStationLookup<T> {
     var missingPosition = false
+    var rejectedByDistance = false
     var remoteSucceeded = false
     var remoteError: Exception? = null
     for ((index, query) in listOf(local, site, cell).withIndex()) {
@@ -31,7 +34,8 @@ internal suspend fun <T> lookupServingStation(
         val anchor = match(rows)
         if (anchor != null) return ServingStationLookup(rows, anchor, false)
         if (candidates(rows).any { !hasPosition(it) }) missingPosition = true
+        if (candidates(rows).any { hasPosition(it) && !isWithinRange(it) }) rejectedByDistance = true
     }
-    if (!remoteSucceeded && !missingPosition) remoteError?.let { throw it }
-    return ServingStationLookup(emptyList(), null, missingPosition)
+    if (!remoteSucceeded && !missingPosition && !rejectedByDistance) remoteError?.let { throw it }
+    return ServingStationLookup(emptyList(), null, missingPosition, rejectedByDistance)
 }

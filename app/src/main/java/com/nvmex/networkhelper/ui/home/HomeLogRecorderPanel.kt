@@ -508,6 +508,7 @@ private fun nrCaInfoToJson(info: NrCaInfo): JSONObject {
         put("type", info.type)
         put("updatedAt", info.updatedAt)
         put("bandwidthEncoding", info.bandwidthEncoding.wireValue)
+        put("frequencyOnly", info.frequencyOnly)
         put("carriers", JSONArray().apply {
             info.carriers.forEach { c ->
                 put(JSONObject().apply {
@@ -563,7 +564,8 @@ private fun nrCaInfoFromJson(o: JSONObject): NrCaInfo {
         updatedAt = o.optLong("updatedAt"),
         // Recordings predating the encoding field used the legacy table.
         bandwidthEncoding = NrcaBandwidthEncoding.fromWireValue(o.optString("bandwidthEncoding"))
-            ?: NrcaBandwidthEncoding.LEGACY
+            ?: NrcaBandwidthEncoding.LEGACY,
+        frequencyOnly = o.optBoolean("frequencyOnly", false)
     )
 }
 
@@ -662,6 +664,7 @@ private fun formatCsvLinkRate(p: NetworkPanelUiState): String {
 
 private fun formatCsvNrBandwidth(p: NetworkPanelUiState): String {
     val info = p.nrCaInfo ?: return ""
+    if (info.frequencyOnly) return ""
     val carriers = info.carriers
     if (carriers.isEmpty()) return ""
     fun bw(c: NrCaCarrier): Int = NrcaTranslator.bandwidthMhzOrNull(c.dlBwRaw, info.bandwidthEncoding) ?: 0
@@ -672,6 +675,7 @@ private fun formatCsvNrBandwidth(p: NetworkPanelUiState): String {
 
 private fun formatCsvNrCa(p: NetworkPanelUiState): String {
     val info = p.nrCaInfo ?: return ""
+    if (info.frequencyOnly) return info.carriers.joinToString("|") { "source=QMI;band=${it.bandText};arfcn=${it.dlArfcn}" }
     return info.carriers.joinToString("|") { c ->
         "cc=${c.ccId};pci=${c.pci};band=${c.bandText.ifBlank { c.bandRaw.toString() }};arfcn=${c.dlArfcn};dlState=${c.dlStateRaw};dlBw=${NrcaTranslator.bandwidth(c.dlBwRaw, info.bandwidthEncoding)}"
     }

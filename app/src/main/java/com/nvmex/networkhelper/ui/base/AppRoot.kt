@@ -77,6 +77,7 @@ import com.nvmex.networkhelper.ui.menu.CellQueryScreen
 import com.nvmex.networkhelper.ui.menu.BleScannerScreen
 import com.nvmex.networkhelper.ui.menu.EngineerBandLockDialog
 import com.nvmex.networkhelper.ui.menu.EngineerBandLockScreen
+import com.nvmex.networkhelper.ui.menu.QmiBandLockScreen
 import com.nvmex.networkhelper.ui.menu.FrequencyCalculatorScreen
 import com.nvmex.networkhelper.ui.menu.IndoorDriveTestScreen
 import com.nvmex.networkhelper.ui.menu.MenuScreen
@@ -106,7 +107,7 @@ fun AppRoot(
     targetActivity: String,
     navController: NavHostController = rememberNavController()
 ) {
-
+    val sharedNetworkVm: com.nvmex.networkhelper.viewmodel.signal.NetworkPanelMultiSimViewModel = androidx.lifecycle.viewmodel.compose.viewModel()
     var sharedPanelState by remember { mutableStateOf(NetworkPanelUiState()) }
     var playbackBarState by remember { mutableStateOf<HomePlaybackBarState?>(null) }
     var showEngineerBandLockDialog by remember { mutableStateOf(false) }
@@ -205,13 +206,15 @@ fun AppRoot(
                 exitTransition = { slideOutHorizontally(targetOffsetX = { -it }) + fadeOut() }
             ) {
                 HomeScreen(
+                    networkVm = sharedNetworkVm,
                     targetPkg = targetPkg,
                     targetActivity = targetActivity,
                     vendor = vendor,
                     onPanelState = { sharedPanelState = it },
                     contentBottomPadding = bottomPageInset,
                     onOpenEngineerBandLock = {
-                        showEngineerBandLockDialog = true
+                        if (appSettings.legacyBandLock) showEngineerBandLockDialog = true
+                        else navController.navigate(Routes.ENGINEER_BAND_LOCK) { launchSingleTop = true }
                     },
                     onOpenSignalComparison = {
                         navController.navigate(Routes.SIGNAL_COMPARISON) {
@@ -261,9 +264,11 @@ fun AppRoot(
                 enterTransition = { slideInHorizontally(initialOffsetX = { it }) + fadeIn() },
                 exitTransition = { slideOutHorizontally(targetOffsetX = { -it }) + fadeOut() }
             ) {
-                EngineerBandLockScreen(
-                    onBack = { navController.popBackStack() }
-                )
+                if (appSettings.legacyBandLock) {
+                    EngineerBandLockScreen(onBack = { navController.popBackStack() })
+                } else {
+                    QmiBandLockScreen(onBack = { navController.popBackStack() }, networkVm = sharedNetworkVm)
+                }
             }
 
             composable(
@@ -386,7 +391,7 @@ fun AppRoot(
             }
 
             EngineerBandLockDialog(
-                show = showEngineerBandLockDialog,
+                show = showEngineerBandLockDialog && appSettings.legacyBandLock,
                 onDismiss = { showEngineerBandLockDialog = false },
                 onOpenFullPanel = {
                     showEngineerBandLockDialog = false

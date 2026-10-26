@@ -54,6 +54,7 @@ import androidx.core.content.ContextCompat
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.nvmex.networkhelper.model.network.NetworkPanelUiState
 import com.nvmex.networkhelper.R
+import com.nvmex.networkhelper.util.qmi.mainlandBandRule
 import com.nvmex.networkhelper.util.windows.WindowUtils
 import com.nvmex.networkhelper.viewmodel.signal.NetworkPanelMultiSimViewModel
 import com.nvmex.networkhelper.xposed.config.Config
@@ -842,22 +843,8 @@ private data class BandLockCarrierRule(
 }
 
 private fun bandLockCarrierRuleFor(state: NetworkPanelUiState): BandLockCarrierRule? {
-    if (state.mcc.trim() != "460") return null
-    return when (state.mnc.trim()) {
-        "00", "02", "07", "15" -> BandLockCarrierRule(
-            nrBands = setOf(28, 41, 78, 79),
-            lteBands = setOf(3, 8, 34, 38, 39, 40, 41)
-        )
-        "01", "06", "09" -> BandLockCarrierRule(
-            nrBands = setOf(1, 3, 5, 8, 78),
-            lteBands = setOf(1, 3, 8)
-        )
-        "03", "05", "11" -> BandLockCarrierRule(
-            nrBands = setOf(1, 3, 5, 8, 78),
-            lteBands = setOf(1, 3, 5)
-        )
-        else -> null
-    }
+    val rule = mainlandBandRule(state.mcc, state.mnc) ?: return null
+    return BandLockCarrierRule(nrBands = rule.nr, lteBands = rule.lte)
 }
 
 private fun currentBandsForTab(tab: BandRat, state: NetworkPanelUiState?): Set<Int> {

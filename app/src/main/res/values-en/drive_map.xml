@@ -8,7 +8,7 @@
     <string name="map_band_coverage_title">Band coverage · %1$s</string>
     <string name="map_band_coverage_distance">Covered %1$s / %2$s total</string>
     <string name="map_band_coverage_note">SIM%1$d · Estimated from adjacent points</string>
-    <string name="map_band_coverage_route_note">Gray: route outside band coverage</string>
+    <string name="map_band_coverage_route_note">Outlined purple: route outside band coverage</string>
     <string name="map_band_coverage_method">Coverage = matching track distance ÷ valid route distance for the selected SIM. Both adjacent points must match. Excluded points, recording gaps and invalid fixes are not bridged; movements under 2 m are ignored. Switching SIM or loading history recalculates coverage. No valid distance is shown as “—”.</string>
     <string name="map_band_filter_description">Enter 4G and 5G bands separately, separated by commas, e.g. 41,28. Live points and history show only the listed bands; an empty field excludes that technology. Leave both fields empty or clear the filter to show everything. Filtering affects display only; complete recordings are kept.</string>
     <string name="map_band_filter_lte">4G bands (e.g. 3,41)</string>
@@ -65,5 +65,11 @@
     <string name="map_show_serving_antennas">Show current serving-station sectors</string>
     <string name="map_show_serving_link">Show red station link and distance</string>
     <string name="map_inertial_enable">Automatic tunnel IMU estimates</string>
-    <string name="map_inertial_description">GPS, accelerometer and gyroscope fusion starts on opening the map and calibrates while driving. Keep the phone fixed. During GPS loss, turns and acceleration update the track; GPS recovery corrects it automatically. Estimation stops after 60 seconds or a sensor interruption. Estimated points retain their source flag.</string>
+    <string name="map_inertial_description">GPS and IMU fusion calibrates while driving. Keep the phone fixed. GPS outages use estimated turns and speed for up to 10 minutes by default, configurable from 1–30 minutes. Drift grows with time; estimated points retain their source and drift indicator. GPS recovery corrects the estimate. Missing or unreliable sensors still stop estimation, independently of Falcon.</string>
+    <string name="map_inertial_max_minutes">Maximum IMU estimate duration (1–30 min)</string>
+    <string name="map_inertial_estimating">Est. %1$d s</string>
+    <string name="map_show_station_markers">Show station markers (triangles)</string>
+    <string name="map_track_overview">Fit entire track</string>
+    <string name="map_track_start">Go to track start</string>
+    <string name="map_history_initial_view">Initial replay view</string>
 </resources>

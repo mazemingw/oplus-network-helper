@@ -13,7 +13,7 @@ object SnapshotJson {
         val root = JsonParser.parseString(snapshotJson).asJsonObject
         val match = JsonParser.parseString(matchJson)
         require(match.isJsonObject) { "路网纠偏快照格式无效" }
-        listOf("raw_wgs84", "matched_wgs84").forEach { prefix ->
+        listOf("raw_wgs84", "matched_wgs84", "matched_gcj02").forEach { prefix ->
             val lat = match.asJsonObject["${prefix}_lat"]?.asDouble
             val lng = match.asJsonObject["${prefix}_lng"]?.asDouble
             require((lat == null) == (lng == null) && (lat == null ||

@@ -103,7 +103,9 @@ data class NrCaInfo(
     val type: Int,
     val carriers: List<NrCaCarrier>,
     val updatedAt: Long,
-    val bandwidthEncoding: NrcaBandwidthEncoding = NrcaBandwidthEncoding.LEGACY
+    val bandwidthEncoding: NrcaBandwidthEncoding = NrcaBandwidthEncoding.LEGACY,
+    /** QMI reports only secondary frequencies, without PCI, bandwidth or activity. */
+    val frequencyOnly: Boolean = false
 )
 
 data class LteCaCarrier(

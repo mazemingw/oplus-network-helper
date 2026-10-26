@@ -5,6 +5,7 @@ import androidx.room.Insert
 import androidx.room.OnConflictStrategy
 import androidx.room.Query
 import androidx.room.Transaction
+import com.nvmex.networkhelper.util.map.matching.FalconPointUpdate
 
 @Dao
 interface DrivePointDao {
@@ -67,6 +68,23 @@ interface DrivePointDao {
 
     @Query("SELECT * FROM drive_points WHERE sessionId = :sessionId ORDER BY ts ASC, id ASC")
     suspend fun getBySession(sessionId: String): List<DrivePointEntity>
+
+    @Query("SELECT * FROM drive_points WHERE sessionId = :sessionId AND ts BETWEEN :start AND :end")
+    suspend fun getPointRange(sessionId: String, start: Long, end: Long): List<DrivePointEntity>
+
+    @Query("UPDATE drive_points SET snapshotJson = :snapshot WHERE id = :id")
+    suspend fun updatePointSnapshot(id: Long, snapshot: String)
+
+    @Transaction
+    suspend fun applyFalconCorrections(sessionId: String, updates: List<FalconPointUpdate>) {
+        if (updates.isEmpty()) return
+        val changes = updates.associateBy { it.simSlot to it.timestamp }
+        getPointRange(sessionId, updates.minOf { it.timestamp }, updates.maxOf { it.timestamp }).forEach { point ->
+            changes[point.simSlot to point.ts]?.let { update ->
+                updatePointSnapshot(point.id, SnapshotJson.withMapMatch(point.snapshotJson, update.metadata))
+            }
+        }
+    }
 
     @Query("SELECT * FROM drive_points ORDER BY ts DESC LIMIT :limit")
     suspend fun getRecent(limit: Int): List<DrivePointEntity>

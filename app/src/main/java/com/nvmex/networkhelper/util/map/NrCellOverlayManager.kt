@@ -17,6 +17,8 @@ import com.nvmex.networkhelper.repository.CellParamLocalRepository
 import com.nvmex.networkhelper.util.map.Gcj02
 import com.nvmex.networkhelper.util.map.makeRedTriangleIcon
 import com.nvmex.networkhelper.util.map.makeTriangleIcon
+import com.nvmex.networkhelper.util.map.makeCircleIcon
+import com.nvmex.networkhelper.util.map.isOmnidirectionalStation
 import com.nvmex.networkhelper.util.network.telephony.nrGuessBandByDlMhzCN
 import com.nvmex.networkhelper.util.network.utils.nrArfcnToMhz
 import com.nvmex.networkhelper.util.map.mapChannelFrequency
@@ -33,8 +35,11 @@ class NrCellOverlayManager(
     private val scope: CoroutineScope,
     private val serverCoord: ServerCoord = ServerCoord.WGS84,
     private val maxHistoryMarkers: Int = 300,
-    private val drawAntennas: Boolean = true
+    private val drawAntennas: Boolean = true,
+    private val showStationMarkers: Boolean = true
 ) {
+    private val nearbyStationRows = HashMap<Marker, Pair<String, List<NrCellParamItem>>>()
+    fun nearbyStation(marker: Marker): Pair<String, List<NrCellParamItem>>? = nearbyStationRows[marker]
     sealed interface QueryResult {
         data class Rendered(
             val stationCount: Int,
@@ -48,6 +53,8 @@ class NrCellOverlayManager(
 
     private val icon by lazy { makeRedTriangleIcon(56) }
     private val linkedIcon by lazy { makeTriangleIcon(56, 0xFF159447.toInt()) }
+    private val circleIcon by lazy { makeCircleIcon(56) }
+    private val linkedCircleIcon by lazy { makeCircleIcon(56, 0xFF159447.toInt()) }
     private var linkedStationKeys = emptySet<String>()
 
     private var sectorRadiusMeters: Double = 200.0
@@ -90,6 +97,14 @@ class NrCellOverlayManager(
     private val history = ArrayDeque<BsNode>(128)
 
     private var antennasVisible = true
+    private var stationMarkersVisible = showStationMarkers
+    fun setStationMarkersVisible(visible: Boolean) {
+        stationMarkersVisible = showStationMarkers && visible
+        history.forEach { node ->
+            if (!stationMarkersVisible) node.marker.hideInfoWindow()
+            node.marker.isVisible = stationMarkersVisible
+        }
+    }
     private var antennaStationKeys: Set<String>? = null
     fun setAntennaVisible(visible: Boolean) {
         antennasVisible = visible
@@ -126,11 +141,13 @@ class NrCellOverlayManager(
                     requestTac = anchor.nr_tac, requestArfcn = anchor.nr_arfcn,
                     requestPci = anchor.nr_pci, headerMatch = "nearby"
                 )
+                historyMap[key]?.marker?.let { nearbyStationRows[it] = key to cells }
             }
         return historyMap.size
     }
 
     fun clear() {
+        nearbyStationRows.clear()
         linkedStationKeys = emptySet()
         antennaStationKeys = null
         history.forEach { node ->
@@ -433,11 +450,15 @@ class NrCellOverlayManager(
             }
         }
 
+        val (omniRows, directionalRows) = rows.partition { isOmnidirectionalStation(it.site_type, it.cell_name, it.azimuth) }
+        val roundMarker = omniRows.isNotEmpty() && directionalRows.isEmpty()
+        val linked = stationKey in linkedStationKeys
         val marker = aMap.addMarker(
             MarkerOptions()
                 .position(pos)
-                .icon(if (stationKey in linkedStationKeys) linkedIcon else icon)
-                .anchor(0.5f, 1.0f)
+                .visible(stationMarkersVisible)
+                .icon(if (roundMarker) { if (linked) linkedCircleIcon else circleIcon } else { if (linked) linkedIcon else icon })
+                .anchor(0.5f, if (roundMarker) 0.5f else 1.0f)
                 .zIndex(if (stationKey in linkedStationKeys) 50f else triangleZ)
                 .title(title)
                 .snippet(snippet)
@@ -454,14 +475,13 @@ class NrCellOverlayManager(
             trimHistoryIfNeeded()
             return true
         }
-        val groups = groupByAzimuthCluster(rows)
-        val shouldDrawCircle = groups.size == 1 && groups.first().azimuth == null
+        val groups = if (directionalRows.isEmpty()) emptyList() else groupByAzimuthCluster(directionalRows)
 
         val polys = ArrayList<Polygon>(8)
         val plines = ArrayList<Polyline>(8)
         val labels = ArrayList<Marker>(8)
 
-        if (shouldDrawCircle) {
+        if (omniRows.isNotEmpty()) {
             val circlePts = buildCirclePoints(pos, sectorRadiusMeters, 36)
             aMap.addPolygon(
                 PolygonOptions()
@@ -471,7 +491,8 @@ class NrCellOverlayManager(
                     .fillColor(sectorFillColor)
                     .zIndex(sectorZ)
             )?.let { polys.add(it) }
-        } else {
+        }
+        run {
             val halfAngle = sectorAngleDeg / 2f
             groups.forEach { group ->
                 val az = group.azimuth ?: return@forEach

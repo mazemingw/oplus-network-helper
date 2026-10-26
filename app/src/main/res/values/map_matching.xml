@@ -1,12 +1,13 @@
 <resources>
     <string name="map_matching_title">猎鹰轨迹纠偏</string>
     <string name="map_matching_description">使用高德猎鹰对驾车轨迹去噪和绑路。开启后向高德上传定位轨迹，原始路测与双卡信号记录独立保存。</string>
-    <string name="map_matching_coverage">无需导入线路。青色线为云端纠偏结果，带信号颜色的轨迹与打点保留原始定位。当前支持驾车道路纠偏；不用于铁路或地铁绑线。</string>
+    <string name="map_matching_coverage">无需导入线路。青色线为云端纠偏结果，已录制打点按时间匹配后显示纠偏位置，原始坐标与信号独立保留。当前支持驾车道路纠偏；不用于铁路或地铁绑线。</string>
     <string name="map_falcon_connecting">纠偏 · 连接中</string>
     <string name="map_falcon_waiting">纠偏 · 待采集</string>
     <string name="map_falcon_idle">纠偏 · 待录制</string>
     <string name="map_falcon_idle_description">开始路测打点后启动猎鹰采集；停止打点后结束采集并移除实时纠偏线。仅浏览地图不会上传轨迹。</string>
     <string name="map_falcon_ready">纠偏 · 已同步</string>
+    <string name="map_falcon_ready_count">纠偏 · %1$d 点</string>
     <string name="map_falcon_unavailable">纠偏 · 未配置</string>
     <string name="map_falcon_not_configured">轨迹纠偏服务尚未配置，请联系管理员。</string>
     <string name="map_falcon_retrying">纠偏 · 重试中</string>
@@ -14,7 +15,7 @@
     <string name="map_falcon_history">纠偏 · 历史轨迹</string>
     <string name="map_falcon_history_no_data">此记录没有猎鹰轨迹信息，显示原始路测打点。</string>
     <string name="map_falcon_history_description">已查询录制时的猎鹰轨迹，不会上传历史打点或启动定位采集。</string>
-    <string name="map_falcon_description">高德猎鹰驾车轨迹纠偏已接入。定位按 2 秒采集、10 秒同步，约每 15 秒更新最近 3 分钟的云端结果。青色线表示云端道路轨迹；网络延迟、点数不足或服务不可用时保留原始定位，不将旧轨迹端点当作当前位置。此服务不提供铁路或地铁纠偏。</string>
+    <string name="map_falcon_description">猎鹰按 2 秒采集、10 秒同步，约每 15 秒查询最近 3 分钟。青色线为云端道路轨迹，状态中的点数为本次收到的轨迹点。延迟结果按原始定位时间回填已录制打点，打点及轨迹显示纠偏位置，原始坐标和双卡信号独立保留。惯导点不强制绑路，云端旧点不移动当前位置。回读时也会查询并保存可用纠偏结果；当前不支持铁路或地铁纠偏。</string>
     <string name="map_falcon_network_error">云端连接暂不可用，将自动重试。原始定位和路测记录继续保存。</string>
     <string name="map_falcon_error_code">猎鹰服务暂不可用（错误码 %1$d），将自动重试。原始定位和路测记录继续保存。</string>
     <string name="map_falcon_notification">路测轨迹纠偏</string>
