@@ -8,10 +8,11 @@ Compose and includes a separate VPN/hotspot library module.
 
 ## Source version and downloads
 
-- Current source: `v1.5.9` (versionCode `59`). This update publishes source only; no matching Release has been published.
+- Current version: `v1.5.9` (versionCode `59`).
+- [v1.5.9 signed ARM64 APK and release notes](https://github.com/mazemingw/oplus-network-helper/releases/tag/v1.5.9)
 - [Historical v1.5.7-dev ARM64 APK and release notes](https://github.com/mazemingw/oplus-network-helper/releases/tag/v1.5.7-dev) (prerelease)
 - Architecture: `arm64-v8a`
-- Historical prerelease APK SHA-256: `bd952a7b29a2b16ce4f337474b1bbafc05f720b4d24fa16a730a6bdd2883e8ae`
+- v1.5.9 APK SHA-256: `e2dc847d1c4fe4d7d02c309c7a218c9aaa22383e856a10fcc5696f77af8cee73`
 
 ## Features
 
@@ -138,7 +139,7 @@ Run local unit tests and build without connecting a device:
 .\gradlew.bat :app:testDebugUnitTest :app:assembleDebug
 ```
 
-Verified on 2026-10-26: Debug APK build succeeded; 336 unit tests, 333 passed, 3 skipped for missing local real-world samples, 0 failures. Native QMI sessions and the recovery script have separate mocked tests; commands are in the [QMI guide (Chinese)](docs/qmi-controls.md). The APK was kept locally without installation. Dual-SIM writes, locking and actual registration still require device acceptance testing.
+Verified on 2026-10-26: Debug APK build succeeded; 336 unit tests, 333 passed, 3 skipped for missing local real-world samples, 0 failures. Native QMI sessions and the recovery script have separate mocked tests; commands are in the [QMI guide (Chinese)](docs/qmi-controls.md). The v1.5.9 Release uses the user-supplied signed APK, with its signature and embedded version verified. It was not installed during these checks. Dual-SIM writes, locking and actual registration still require device acceptance testing.
 
 See the [existing compatibility verification record](docs/2026-09-18-compatibility-verification.md) and the [drive-map checks and manual test steps](docs/drive-test-map.md).
 

@@ -7,10 +7,11 @@
 
 ## 版本与安装包
 
-- 当前源码：`v1.5.9`（versionCode `59`），本次仅更新源码，尚未发布对应 Release。
+- 当前版本：`v1.5.9`（versionCode `59`）。
+- [v1.5.9 已签名 ARM64 安装包与发布说明](https://github.com/mazemingw/oplus-network-helper/releases/tag/v1.5.9)
 - [历史 v1.5.7-dev ARM64 安装包与发布说明](https://github.com/mazemingw/oplus-network-helper/releases/tag/v1.5.7-dev)（预发布）
 - 架构：`arm64-v8a`
-- 上述历史预发布 APK SHA-256：`bd952a7b29a2b16ce4f337474b1bbafc05f720b4d24fa16a730a6bdd2883e8ae`
+- v1.5.9 APK SHA-256：`e2dc847d1c4fe4d7d02c309c7a218c9aaa22383e856a10fcc5696f77af8cee73`
 
 ## 主要功能
 
@@ -136,7 +137,7 @@ Windows PowerShell：
 .\gradlew.bat :app:testDebugUnitTest :app:assembleDebug
 ```
 
-2026-10-26 验证：Debug APK 构建成功；单元测试共 336 项，333 项通过、3 项因缺少本地真实样本跳过、0 失败。QMI 原生会话和恢复脚本另有独立模拟测试，命令见 [QMI 控制说明](docs/qmi-controls.md)。本次安装包仅在本地保留，未覆盖安装；双卡写入、锁定及实际驻留效果仍需真机验收。
+2026-10-26 验证：Debug APK 构建成功；单元测试共 336 项，333 项通过、3 项因缺少本地真实样本跳过、0 失败。QMI 原生会话和恢复脚本另有独立模拟测试，命令见 [QMI 控制说明](docs/qmi-controls.md)。v1.5.9 Release 使用用户提供的已签名安装包，签名与 APK 版本检查通过；该轮未覆盖安装，双卡写入、锁定及实际驻留效果仍需真机验收。
 
 兼容修复的既有验证记录见 [2026-09-18 说明](docs/2026-09-18-compatibility-verification.md)；路测检查与手工测试步骤见 [路测地图说明](docs/drive-test-map.md)。
 
