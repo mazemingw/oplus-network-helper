@@ -18,7 +18,8 @@ data class QmiRadioSnapshot(
     val slot: Int, val updatedAt: Long,
     val neighbors: List<QmiCellCandidate> = emptyList(),
     val lteCa: LteCaInfo? = null, val nrServingChannels: List<Int> = emptyList(),
-    val nrPrimaryChannel: Int? = null, val nrPrimaryPci: Int? = null
+    val nrPrimaryChannel: Int? = null, val nrPrimaryPci: Int? = null,
+    val locks: QmiLiveLocks? = null
 )
 
 internal fun qmiLteBand(channel: Int): Int? = LTE_GLOBAL_BANDS.firstOrNull { channel in it.earfcnStart..it.earfcnEnd }?.band
@@ -35,7 +36,7 @@ internal fun qmiNrBand(channel: Int): Int? {
 
 /** GET formats follow qcom-band-menu's NasDecode (GPL-3.0), with bounded independent decoding. */
 object QmiRadioDecoder {
-    val reads = listOf("0043", "00ac", "00d2")
+    val reads = listOf("0043", "00ac", "00d2", "0034", "00d7", "010f")
     private fun ByteArray.reader() = ByteBuffer.wrap(this).order(ByteOrder.LITTLE_ENDIAN)
     private fun ByteBuffer.u8() = get().toInt() and 255
     private fun ByteBuffer.u16() = short.toInt() and 65535
@@ -126,7 +127,7 @@ object QmiRadioDecoder {
             carriers.takeIf { it.isNotEmpty() }?.let { LteCaInfo(slot, it, now) }
         }.getOrNull() }
         return QmiRadioSnapshot(slot, now, neighbors.distinctBy { it.key }.sortedByDescending { it.rsrp ?: -999.0 },
-            lteCa, nrServing, nrPrimaryChannel, nrPrimaryPci)
+            lteCa, nrServing, nrPrimaryChannel, nrPrimaryPci, qmiDecodeLiveLocks(replies))
     }
 }
 
@@ -140,8 +141,8 @@ fun qmiCellCandidates(neighbors: List<QmiCellCandidate>, history: List<CellTimel
         val bandNumber = band.trim().removePrefix("n").removePrefix("N").removePrefix("B").toIntOrNull()?.takeIf { it in 1..512 }
         // NR PCI locks require an actual band. Do not guess where channel ranges overlap.
         if (nr && bandNumber == null) return null
-        return QmiCellCandidate(QmiCellInput(if (nr) QmiCellMode.NR_PCI else QmiCellMode.LTE, ch.toString(), id.toString(),
-            bandNumber?.toString().orEmpty()), source)
+        return QmiCellCandidate(qmiCellWithDefaultScs(QmiCellInput(if (nr) QmiCellMode.NR_PCI else QmiCellMode.LTE, ch.toString(), id.toString(),
+            bandNumber?.toString().orEmpty())), source)
     }
     val operatorKnown = state?.mcc?.matches(Regex("[0-9]{3}")) == true && state.mnc.matches(Regex("[0-9]{2,3}"))
     val servingCells = qmiServingCells(state, now)
@@ -196,11 +197,13 @@ fun qmiNrFrequencyFallback(snapshot: QmiRadioSnapshot?, state: NetworkPanelUiSta
     val primary = snapshot.nrPrimaryChannel?.takeIf { snapshot.nrPrimaryPci != null && snapshot.nrPrimaryPci == state.pci.toIntOrNull() }
         ?: state.arfcn.toIntOrNull() ?: return null
     if (primary !in snapshot.nrServingChannels) return null // Reject another cell's cached response.
-    val secondary = snapshot.nrServingChannels.filter { it != primary }
+    val secondary = snapshot.nrServingChannels.filter { it != primary }.distinct()
     if (secondary.isEmpty()) return null
-    return NrCaInfo(snapshot.slot, -1, secondary.mapIndexed { index, channel ->
-        val band = qmiNrBand(channel)
-        NrCaCarrier(index + 1, index, -1, -1, band?.let { "N$it" } ?: "—", channel,
+    return NrCaInfo(snapshot.slot, -1, (listOf(primary) + secondary).mapIndexed { index, channel ->
+        val bands = qmiNrBandsForChannel(channel, state.mcc, state.mnc)
+        val primaryBand = state.band.removePrefix("N").removePrefix("n").toIntOrNull()?.takeIf { it in 1..512 }
+        NrCaCarrier(index, index - 1, if (index == 0) state.pci.toIntOrNull()?.takeIf { it in 0..1007 } ?: -1 else -1,
+            -1, if (index == 0 && primaryBand != null) "N$primaryBand" else bands.joinToString("/") { "N$it" }.ifEmpty { "N?" }, channel,
             -1, "—", -1, "—", -1, "—", -1, "—")
     }, snapshot.updatedAt, frequencyOnly = true)
 }

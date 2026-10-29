@@ -37,6 +37,11 @@ internal class DriveMotionTracker(context: Context,
     private var gyroReliable = true
     private var absoluteReliable = true
     private var gameReliable = true
+    private var accelerationReliable = true
+    private var sensorState = "not_started"
+    fun diagnostic(now: Long): String = engine.diagnostic(now) +
+        " registered=$sensorsRegistered frameAligned=${frameRotation != null} sensorState=$sensorState " +
+        "rotationAt=$rotationAt gyroAt=$gyroAt gameReliable=$gameReliable absoluteReliable=$absoluteReliable accelerationReliable=$accelerationReliable"
     private val handler = Handler(Looper.getMainLooper())
     private val ticker = object : Runnable {
         override fun run() {
@@ -69,6 +74,8 @@ internal class DriveMotionTracker(context: Context,
         val accelerationOk = sensors.registerListener(this, acceleration, SensorManager.SENSOR_DELAY_GAME)
         val gyroOk = sensors.registerListener(this, gyroscope, SensorManager.SENSOR_DELAY_GAME)
         sensorsRegistered = attitudeOk && absoluteOk && accelerationOk && gyroOk
+        sensorState = if (sensorsRegistered) "waiting_for_frame" else "registration_failed"
+        driveLog("IMU register attitude=$attitudeOk absolute=$absoluteOk acceleration=$accelerationOk gyro=$gyroOk")
         if (!sensorsRegistered) {
             sensors.unregisterListener(this)
             engine.sensorReliability(false)
@@ -83,21 +90,28 @@ internal class DriveMotionTracker(context: Context,
         gyroReliable = true
         absoluteReliable = true
         gameReliable = true
+        accelerationReliable = true
         engine.resetSensors()
         engine.sensorReliability(true)
     }
 
-    fun acceptGps(fix: Location) {
+    fun acceptGps(fix: Location): Boolean {
         val now = SystemClock.elapsedRealtime()
         val at = fix.elapsedRealtimeNanos / 1_000_000
-        if (at <= 0 || now - at !in 0..3000 || !fix.hasAccuracy()) return
+        if (at <= 0 || now - at !in 0..3000 || !fix.hasAccuracy()) {
+            driveLog("IMU GPS reject=stale_or_missing_accuracy ageMs=${now - at}")
+            return false
+        }
         if (engine.onGps(at, fix.latitude, fix.longitude,
                 if (fix.hasSpeed() && (!fix.hasSpeedAccuracy() || fix.speedAccuracyMetersPerSecond <= 1.5f)) fix.speed.toDouble() else null,
                 if (fix.hasBearing() && (!fix.hasBearingAccuracy() || fix.bearingAccuracyDegrees <= 15)) fix.bearing.toDouble() else null,
                 fix.accuracy.toDouble())) {
             declination = GeomagneticField(fix.latitude.toFloat(), fix.longitude.toFloat(), fix.altitude.toFloat(), fix.time).declination.toDouble()
             onReading(engine.reading(now))
+            return true
         }
+        driveLog("IMU GPS reject=quality_time_or_jump ageMs=${now - at} accuracy=${fix.accuracy}")
+        return false
     }
 
     override fun onSensorChanged(event: SensorEvent) {
@@ -119,7 +133,10 @@ internal class DriveMotionTracker(context: Context,
             alignFrames()
             return
         }
-        if (rotationAt < 0 || at - rotationAt !in 0..200 || frameRotation == null) return
+        if (!driveSensorReferenceFresh(at, rotationAt) || frameRotation == null) {
+            sensorState = if (frameRotation == null) "frame_not_aligned" else "attitude_stale"
+            return
+        }
         val x = event.values[0]
         val y = event.values[1]
         val z = event.values[2]
@@ -129,11 +146,12 @@ internal class DriveMotionTracker(context: Context,
             gyroAt = at
             return
         }
-        if (gyroAt < 0 || at - gyroAt !in 0..200) return
+        if (!driveSensorReferenceFresh(at, gyroAt)) { sensorState = "gyro_stale"; return }
         // Raw accelerometer gravity maps to Earth up, leaving the horizontal components gravity-free.
         val angle = frameRotation!! - Math.toRadians(declination)
         val (trueEast, trueNorth) = driveHorizontalAcceleration(matrix, x, y, z, angle)
         engine.onMotion(at, trueEast, trueNorth, yawRate)
+        sensorState = "motion"
     }
 
     private fun alignFrames() {
@@ -141,16 +159,25 @@ internal class DriveMotionTracker(context: Context,
             kotlin.math.abs(rotationAt - absoluteAt) > 100 || !absoluteReliable || !gameReliable) return
         // Anchor the gyro/gravity frame once, then ignore magnetic yaw changes in tunnels.
         frameRotation = driveFrameRotation(absoluteMatrix, matrix)
+        updateReliability()
     }
 
     override fun onAccuracyChanged(sensor: Sensor?, accuracy: Int) {
         val reliable = accuracy != SensorManager.SENSOR_STATUS_UNRELIABLE
         when (sensor?.type) {
             Sensor.TYPE_GYROSCOPE -> gyroReliable = reliable
-            Sensor.TYPE_GAME_ROTATION_VECTOR -> gameReliable = reliable
+            Sensor.TYPE_GAME_ROTATION_VECTOR -> {
+                gameReliable = reliable
+                if (!reliable) frameRotation = null
+            }
             Sensor.TYPE_ROTATION_VECTOR -> absoluteReliable = reliable
+            Sensor.TYPE_LINEAR_ACCELERATION, Sensor.TYPE_ACCELEROMETER -> accelerationReliable = reliable
         }
-        engine.sensorReliability(gyroReliable && if (gameRotation == null) absoluteReliable
+        updateReliability()
+    }
+
+    private fun updateReliability() {
+        engine.sensorReliability(accelerationReliable && gyroReliable && if (gameRotation == null) absoluteReliable
             else gameReliable && (frameRotation != null || absoluteReliable))
     }
 
@@ -162,6 +189,10 @@ internal class DriveMotionTracker(context: Context,
         resetSensorFrame()
     }
 }
+
+/** Independent sensor streams can be delivered in either order; keep the same 200 ms bound. */
+internal fun driveSensorReferenceFresh(sampleAt: Long, referenceAt: Long): Boolean =
+    referenceAt >= 0 && kotlin.math.abs(sampleAt - referenceAt) <= 200
 
 internal fun driveGyroYawRate(matrix: FloatArray, x: Float, y: Float, z: Float): Double =
     Math.toDegrees(-(matrix[6] * x + matrix[7] * y + matrix[8] * z).toDouble())

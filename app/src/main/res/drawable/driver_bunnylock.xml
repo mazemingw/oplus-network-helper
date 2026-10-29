@@ -1,0 +1,18 @@
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+    <!-- bunny ears as the shackle -->
+    <path
+        android:fillColor="#FFFFFF"
+        android:pathData="M44,26 A5,5 0 0 1 49,31 V54 A5,5 0 0 1 39,54 V31 A5,5 0 0 1 44,26 Z" />
+    <path
+        android:fillColor="#FFFFFF"
+        android:pathData="M64,26 A5,5 0 0 1 69,31 V54 A5,5 0 0 1 59,54 V31 A5,5 0 0 1 64,26 Z" />
+    <!-- lock body with a bunny face (eyes and nose) cut out -->
+    <path
+        android:fillColor="#FFFFFF"
+        android:fillType="evenOdd"
+        android:pathData="M42,50 H66 A9,9 0 0 1 75,59 V73 A9,9 0 0 1 66,82 H42 A9,9 0 0 1 33,73 V59 A9,9 0 0 1 42,50 Z M44.5,63 A2.75,2.75 0 1 0 50,63 A2.75,2.75 0 1 0 44.5,63 Z M58,63 A2.75,2.75 0 1 0 63.5,63 A2.75,2.75 0 1 0 58,63 Z M50.5,69.5 H57.5 L54,73.5 Z" />
+</vector>

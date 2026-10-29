@@ -9,6 +9,7 @@ data class ProbedStation(val key: String, val lte: List<LteCellParam> = emptyLis
 class ProbeAntennaSelection {
     private val pinned = linkedMapOf<String, ProbedStation>()
     private var selected: ProbedStation? = null
+    val selectedStationKey: String? get() = selected?.key
     fun select(station: ProbedStation?): Boolean {
         if (selected == station) return false
         selected = station

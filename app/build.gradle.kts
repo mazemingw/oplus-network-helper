@@ -34,8 +34,8 @@ android {
         applicationId = "com.nvmex.networkhelper"
         minSdk = 29
         targetSdk = 35
-        versionCode = 59
-        versionName = "1.5.9"
+        versionCode = 61
+        versionName = "1.6.1"
 
         // Inject the AMap key locally; never commit API credentials.
         manifestPlaceholders["AMAP_API_KEY"] =
@@ -45,7 +45,7 @@ android {
             project.findProperty("AMAP_FALCON_SID")?.toString()
                 ?: localConfig.getProperty("AMAP_FALCON_SID", "0")
 
-        testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
+        testInstrumentationRunner = "com.nvmex.networkhelper.util.map.DriveDatabaseTestRunner"
 
         // 开启 NDK 构建：先只编 arm64-v8a
         ndk {
@@ -87,9 +87,12 @@ android {
 
     buildFeatures {
         compose = true
+        buildConfig = true
     }
 
     packaging {
+        // app_process/Shizuku loads the vendored QRTR library by its extracted path.
+        jniLibs.useLegacyPackaging = true
         resources {
             merges += "META-INF/xposed/*"
         }
@@ -110,6 +113,7 @@ android {
 
 
 dependencies {
+    implementation(project(":bunny-modem"))
     implementation(libs.androidx.core.ktx)
     implementation(libs.androidx.appcompat)
     implementation(libs.material)
@@ -201,6 +205,8 @@ dependencies {
 
     testImplementation(libs.junit)
     testImplementation("org.json:json:20240303")
+    androidTestImplementation(libs.androidx.junit)
+    androidTestImplementation("androidx.test:runner:1.7.0")
 }
 
 kapt {

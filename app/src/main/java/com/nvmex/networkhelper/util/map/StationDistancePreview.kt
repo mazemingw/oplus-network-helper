@@ -12,19 +12,19 @@ import kotlin.math.hypot
 /** A temporary manual measurement. It never changes the matched serving station or saved records. */
 internal class StationDistancePreview(private val map: AMap, private val density: Float,
     private val caption: (Double) -> String) {
-    private var origin: LatLng? = null
-    private var site: LatLng? = null
+    private val selection = StationDistanceSelection()
+    val hasPosition: Boolean get() = selection.origin != null
     private var line: Polyline? = null
     private var middleLabel: Text? = null
     private var nearLabel: Text? = null
     private var distanceMeters: Double? = null
     private val color = 0xFF198FEC.toInt()
 
-    fun select(position: LatLng) { site = position; redraw() }
-    fun updatePosition(position: LatLng?) { origin = position; redraw() }
+    fun select(position: LatLng) { selection.select(position); redraw() }
+    fun updatePosition(position: LatLng?) { selection.updatePosition(position); redraw() }
 
     fun clear() {
-        site = null
+        selection.clear()
         clearDrawing()
     }
 
@@ -36,8 +36,8 @@ internal class StationDistancePreview(private val map: AMap, private val density
     }
 
     private fun redraw() {
-        val from = origin
-        val to = site
+        val from = selection.origin
+        val to = selection.station
         val a = servingStationReference(from?.latitude, from?.longitude)
         val b = servingStationReference(to?.latitude, to?.longitude)
         if (from == null || to == null || a == null || b == null) { clearDrawing(); return }
@@ -57,8 +57,8 @@ internal class StationDistancePreview(private val map: AMap, private val density
     }
 
     fun onCameraChanged() {
-        val from = origin ?: return
-        val to = site ?: return
+        val from = selection.origin ?: return
+        val to = selection.station ?: return
         if (distanceMeters == null) return
         val projection = map.projection
         val a = projection.toScreenLocation(from)

@@ -1,0 +1,41 @@
+<resources>
+    <string name="system_notify_channel_name">生效中的锁定</string>
+    <string name="system_notify_channel_description">显示 bunnylock 锁定了哪些频段、小区或网络。</string>
+    <string name="system_notify_title">bunnylock：已锁定</string>
+    <string name="system_notify_line_separator">；</string>
+    <string name="system_notify_line_bands">%1$s：%2$s</string>
+    <string name="system_notify_line_network">网络：%1$s</string>
+    <string name="system_notify_line_lte_cell">LTE 小区：%1$s</string>
+    <string name="system_notify_line_nr_cell">NR 小区：%1$s</string>
+    <string name="system_notify_line_legacy_cell">2G/3G 小区：%1$s</string>
+
+    <string name="system_helper_not_running">辅助进程未运行，没有做任何更改。正在重新连接…</string>
+    <string name="system_at_replied">基带已回复，结果见下方。</string>
+    <string name="system_qmi_replied">已发送消息 0x%1$04X，基带回复：%2$s。</string>
+    <string name="system_clip_label_diagnostics">bunnylock 诊断信息</string>
+    <string name="system_diagnostics_copied">诊断信息已复制到剪贴板。</string>
+
+    <string name="system_shizuku_step_root">正在请求 Root 权限…</string>
+    <string name="system_shizuku_step_looking">正在查找 Shizuku…</string>
+    <string name="system_shizuku_step_connecting">正在连接 Shizuku，如有弹窗请允许 bunnylock…</string>
+
+    <string name="system_shizuku_root_failed">无法获取 Root 权限：%1$s</string>
+    <string name="system_shizuku_root_denied">Root 权限被拒绝。</string>
+    <string name="system_shizuku_not_installed">Shizuku 也未安装。请授予 Root 权限，或安装并启动 Shizuku 后重试。</string>
+    <string name="system_shizuku_not_running">Shizuku 已安装，但没有连接到 bunnylock，可能未在运行。请打开 Shizuku 检查后重试。</string>
+    <string name="system_shizuku_failed">Shizuku 也无法使用：%1$s</string>
+    <string name="system_shizuku_failed_no_reason">Shizuku 也无法使用（未提供原因）。</string>
+
+    <string name="system_shizuku_lost">Shizuku 服务已停止，重试即可重新启动。</string>
+    <string name="system_shizuku_too_old">Shizuku 版本过旧，请更新后重试。</string>
+    <string name="system_shizuku_stopped">Shizuku 已停止。</string>
+    <string name="system_shizuku_no_shell">Shizuku 无法打开 shell（%1$s）。</string>
+    <string name="system_shizuku_denied_earlier">之前已拒绝 Shizuku 授权。请在 Shizuku 中允许 bunnylock 后重试。</string>
+    <string name="system_shizuku_denied">Shizuku 授权被拒绝。</string>
+    <string name="system_shizuku_prompt_unanswered">Shizuku 授权弹窗未得到响应。如果弹窗没有出现，请在 Shizuku 中允许 bunnylock 后返回。</string>
+    <string name="system_shizuku_service_no_response">Shizuku 服务已启动，但没有响应。</string>
+    <string name="system_shizuku_service_start_timeout">Shizuku 服务启动超时。</string>
+    <string name="system_shizuku_service_not_running">Shizuku 服务未运行。</string>
+    <string name="system_shizuku_service_timeout">Shizuku 服务响应超时。</string>
+    <string name="system_shizuku_service_died">Shizuku 服务意外停止。</string>
+</resources>

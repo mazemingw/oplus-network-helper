@@ -11,11 +11,19 @@ internal class DriveCourse {
     private var previous: Fix? = null
     var bearing: Double? = null
         private set
+    var isMoving: Boolean = false
+        private set
 
     fun update(time: Long, lat: Double, lng: Double, accuracy: Double, speed: Double?, course: Double?, trusted: Boolean): Double? {
         if (!lat.isFinite() || !lng.isFinite() || !accuracy.isFinite()) return bearing
         val old = previous
         if (old != null && time <= old.time) return bearing
+        if (trusted) {
+            isMoving = if (speed?.isFinite() == true) speed >= 1.5
+                else old != null && time - old.time in 1..10_000 &&
+                    driveDistanceMeters(old.lat, old.lng, lat, lng) >= max(5.0, old.accuracy + accuracy) &&
+                    driveDistanceMeters(old.lat, old.lng, lat, lng) / ((time - old.time) / 1000.0) >= 1.5
+        }
         if (trusted && speed != null && speed >= 1.5 && course?.isFinite() == true) {
             bearing = driveNormalizeAngle(course)
             previous = Fix(time, lat, lng, accuracy)
@@ -29,11 +37,6 @@ internal class DriveCourse {
         return bearing
     }
 }
-
-/** Coarse network fixes must not interrupt a better calibrated tunnel estimate. */
-internal fun drivePreferInertial(isGps: Boolean, sdkAccuracy: Float, estimate: DeadReckoningEngine.Reading): Boolean =
-    !isGps && estimate.mode == DeadReckoningEngine.Mode.ESTIMATED &&
-        sdkAccuracy > (estimate.uncertaintyMeters ?: 50.0).coerceAtMost(50.0)
 
 internal fun driveBandLabel(rat: String, band: String): String {
     val raw = band.trim().takeUnless { it.isEmpty() || it == "-" } ?: return "—"

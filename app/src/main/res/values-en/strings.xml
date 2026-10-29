@@ -99,7 +99,7 @@
     <string name="settings_coolapk_subtitle">Open the Coolapk profile</string>
     <string name="settings_github_title">GitHub</string>
     <string name="settings_github_subtitle">View source code and project updates</string>
-    <string name="settings_font_size_title">Font Size</string>
+    <string name="settings_font_size_title">Display size</string>
     <string name="settings_font_size_current">Current: %1$s</string>
     <string name="settings_language_title">Language</string>
     <string name="settings_language_subtitle">Current: %1$s</string>
@@ -240,6 +240,7 @@
     <string name="band_lock_note_common">Common</string>
     <string name="band_lock_note_village_weak">Rural / low-capacity</string>
     <string name="band_lock_note_rare">Rare</string>
+    <string name="band_lock_note_uncommon">Uncommon</string>
     <string name="band_lock_note_basement">Basements</string>
     <string name="band_lock_note_low_supplement">Low-band supplement\nUsually slower</string>
     <string name="band_lock_note_weak_shared_ctcc">Low-capacity coverage, shared with China Telecom</string>
@@ -571,8 +572,8 @@
     <string name="hotspot_config_apply_done">Configuration written: %1$s ch=%2$d bw=%3$s%4$s</string>
     <string name="hotspot_config_apply_failed">Configuration write failed (system + root)</string>
     <string name="hotspot_channel_label">Channel</string>
-    <string name="font_size_title">Font Size</string>
-    <string name="font_size_current">Current size</string>
+    <string name="font_size_title">Display size</string>
+    <string name="font_size_current">Current display size</string>
     <string name="font_size_extra_small">XS</string>
     <string name="font_size_small">S</string>
     <string name="font_size_medium">M</string>
@@ -580,13 +581,13 @@
     <string name="font_size_large">L</string>
     <string name="font_size_extra_large">XL</string>
     <string name="font_size_huge">XXL</string>
-    <string name="font_size_desc_extra_small">Very small text</string>
-    <string name="font_size_desc_small">For sharp eyesight</string>
-    <string name="font_size_desc_medium">Default size</string>
-    <string name="font_size_desc_large">Slightly larger</string>
-    <string name="font_size_desc_extra_large">Clearly larger</string>
-    <string name="font_size_desc_huge">For low vision</string>
-    <string name="font_size_hint">Font size changes take effect immediately. Return to Home to inspect the full UI.</string>
+    <string name="font_size_desc_extra_small">80%</string>
+    <string name="font_size_desc_small">90%</string>
+    <string name="font_size_desc_medium">100% · System default</string>
+    <string name="font_size_desc_large">110%</string>
+    <string name="font_size_desc_extra_large">120%</string>
+    <string name="font_size_desc_huge">130%</string>
+    <string name="font_size_hint">Scales controls, spacing and text together. 100% follows system display size; smaller values show more content. Applies when you release the slider and does not change system settings.</string>
     <string name="font_preview_title">Network Panel (Preview)</string>
     <string name="font_preview_operator">China Mobile VIP</string>
     <string name="font_preview_serving_cell">Daxin Detian Scenic Area TEST-H5H-9</string>

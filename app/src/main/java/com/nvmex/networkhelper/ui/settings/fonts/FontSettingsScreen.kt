@@ -8,6 +8,7 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import kotlin.math.roundToInt
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.material3.Card
@@ -30,13 +31,11 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
-import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.nvmex.networkhelper.R
-import com.nvmex.networkhelper.util.windows.WindowUtils
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -44,8 +43,6 @@ fun FontSettingsScreen(
     onBackPressed: () -> Unit
 ) {
     val currentLevel by FontSizeConfig.currentLevel.collectAsState()
-    val context = LocalContext.current
-    val statusBarHeight = WindowUtils.getStatusBarHeight(context)
 
     // 将枚举值映射到滑动条的位置 (0-5)
     val sliderPositions = remember {
@@ -60,7 +57,7 @@ fun FontSettingsScreen(
     }
 
     // 滑动条变化回调
-    var sliderValue by remember { mutableFloatStateOf(currentSliderPosition) }
+    var sliderValue by remember(currentLevel) { mutableFloatStateOf(currentSliderPosition) }
 
     Scaffold(
 
@@ -68,8 +65,7 @@ fun FontSettingsScreen(
         LazyColumn(
             modifier = Modifier
                 .fillMaxSize()
-                .padding(paddingValues)
-            .padding(top = statusBarHeight),
+                .padding(paddingValues),
             contentPadding = PaddingValues(16.dp),
             verticalArrangement = Arrangement.spacedBy(16.dp)
         ) {
@@ -146,14 +142,10 @@ fun FontSettingsScreen(
                         // 滑动条
                         Slider(
                             value = sliderValue,
-                            onValueChange = { newValue ->
-                                sliderValue = newValue
-                                // 根据滑动位置选择对应的档位
-                                val index = newValue.toInt().coerceIn(0, FontSizeConfig.FontSizeLevel.entries.size - 1)
-                                val newLevel = FontSizeConfig.FontSizeLevel.entries[index]
-                                if (newLevel != currentLevel) {
-                                    FontSizeConfig.setLevel(newLevel)
-                                }
+                            onValueChange = { sliderValue = it },
+                            onValueChangeFinished = {
+                                val index = sliderValue.roundToInt().coerceIn(0, FontSizeConfig.FontSizeLevel.entries.lastIndex)
+                                FontSizeConfig.setLevel(FontSizeConfig.FontSizeLevel.entries[index])
                             },
                             valueRange = 0f..(FontSizeConfig.FontSizeLevel.entries.size - 1).toFloat(),
                             steps = FontSizeConfig.FontSizeLevel.entries.size - 2, // 步数 = 档位数 - 1

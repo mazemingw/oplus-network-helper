@@ -1,0 +1,25 @@
+<resources>
+    <string name="at_open_failed">无法打开 %1$s（%2$s）。</string>
+    <string name="at_not_accepted">基带未接受 %1$s，返回：%2$s</string>
+    <string name="at_read_failed">无法读取 %1$s（%2$s）。</string>
+    <string name="at_no_reply">%2$s 未响应命令 %1$s。</string>
+
+    <string name="mtk_no_network_mode">基带未返回网络模式。</string>
+    <string name="mtk_erat_no_mode">AT+ERAT 不支持这种制式组合。</string>
+    <string name="mtk_epbse_unreadable">%1$s（%2$s 返回：%3$s）。</string>
+    <string name="mtk_no_band_lock">AT 端口 %1$s 不支持锁频段</string>
+    <string name="mtk_current_bands_unreadable">无法从 %1$s 读取当前频段</string>
+    <string name="mtk_no_epbseh">该基带不支持 AT+EPBSEH，可能不支持 5G。</string>
+
+    <string name="oem_working_through">正在通过 %1$s 工作。</string>
+    <string name="oem_no_passthrough">此手机上没有响应的 OEM 请求透传通道。</string>
+    <string name="oem_no_ril_passthrough">此手机上没有可用的 RIL 透传通道。</string>
+    <string name="oem_no_raw_route">此手机没有可尝试的 OEM 请求通道。</string>
+    <string name="oem_no_callback_reply">%1$s 未收到回调响应。</string>
+    <string name="oem_timeout">基带未及时响应 %1$s。</string>
+    <string name="oem_service_refused">服务拒绝了 %1$s（%2$s）。</string>
+
+    <string name="oem_probe_failed">%1$s 失败：%2$s</string>
+    <string name="oem_probe_replied">%1$s 返回：%2$s</string>
+    <string name="oem_probe_silent">%1$s 无响应。</string>
+</resources>

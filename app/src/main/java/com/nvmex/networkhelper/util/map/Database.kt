@@ -14,7 +14,7 @@ import androidx.sqlite.db.SupportSQLiteDatabase
         DriveStationEntity::class,
         CellOverlayCacheEntity::class, // ✅新增
     ],
-    version = 6,
+    version = 7,
     exportSchema = false  // 你原来就是 false，保持不变
 )
 abstract class AppDb : RoomDatabase() {
@@ -85,6 +85,24 @@ abstract class AppDb : RoomDatabase() {
             }
         }
 
+        val MIGRATION_6_7 = object : Migration(6, 7) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                // SQLite cannot drop NOT NULL in place. Preserve every old row and its primary key.
+                db.execSQL("""CREATE TABLE drive_points_v7 (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, sessionId TEXT NOT NULL, ts INTEGER NOT NULL,
+                    simSlot INTEGER NOT NULL, lat REAL, lng REAL, rsrpDbm INTEGER, isHandover INTEGER NOT NULL,
+                    cellKey TEXT NOT NULL, snapshotJson TEXT NOT NULL, estimated INTEGER NOT NULL DEFAULT 0,
+                    accuracyMeters REAL, segmentStart INTEGER NOT NULL DEFAULT 0, rawLat REAL, rawLng REAL,
+                    rawCoordType TEXT, positionSource TEXT NOT NULL DEFAULT 'SDK')""")
+                db.execSQL("""INSERT INTO drive_points_v7 SELECT id, sessionId, ts, simSlot, lat, lng, rsrpDbm,
+                    isHandover, cellKey, snapshotJson, estimated, accuracyMeters, segmentStart, rawLat, rawLng,
+                    rawCoordType, CASE WHEN estimated = 1 THEN 'INERTIAL' ELSE 'SDK' END FROM drive_points""")
+                db.execSQL("DROP TABLE drive_points")
+                db.execSQL("ALTER TABLE drive_points_v7 RENAME TO drive_points")
+                db.execSQL("CREATE INDEX index_drive_points_sessionId_ts ON drive_points (sessionId, ts)")
+            }
+        }
+
         fun get(context: Context): AppDb =
             INS ?: synchronized(this) {
                 INS ?: Room.databaseBuilder(
@@ -92,7 +110,7 @@ abstract class AppDb : RoomDatabase() {
                     AppDb::class.java,
                     "networkhelper.db"
                 )
-                    .addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6)
+                    .addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6, MIGRATION_6_7)
                     .build()
                     .also { INS = it }
             }

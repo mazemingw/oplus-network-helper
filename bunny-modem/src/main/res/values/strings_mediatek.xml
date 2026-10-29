@@ -1,0 +1,25 @@
+<resources>
+    <string name="at_open_failed">Couldn\'t open %1$s (%2$s).</string>
+    <string name="at_not_accepted">The modem didn\'t accept %1$s. It replied: %2$s</string>
+    <string name="at_read_failed">Couldn\'t read from %1$s (%2$s).</string>
+    <string name="at_no_reply">The command %1$s got no reply from %2$s.</string>
+
+    <string name="mtk_no_network_mode">The modem didn\'t report its network mode.</string>
+    <string name="mtk_erat_no_mode">AT+ERAT has no mode for that combination.</string>
+    <string name="mtk_epbse_unreadable">%1$s (%2$s replied: %3$s).</string>
+    <string name="mtk_no_band_lock">The AT port %1$s doesn\'t support band locking</string>
+    <string name="mtk_current_bands_unreadable">Couldn\'t read the current bands from %1$s</string>
+    <string name="mtk_no_epbseh">This modem doesn\'t support AT+EPBSEH, so it may not have 5G.</string>
+
+    <string name="oem_working_through">Working through %1$s.</string>
+    <string name="oem_no_passthrough">No OEM request passthrough answered on this phone.</string>
+    <string name="oem_no_ril_passthrough">No RIL passthrough is available on this phone.</string>
+    <string name="oem_no_raw_route">This phone has no OEM request route to try.</string>
+    <string name="oem_no_callback_reply">No callback reply for %1$s.</string>
+    <string name="oem_timeout">The modem didn\'t answer %1$s in time.</string>
+    <string name="oem_service_refused">The service refused %1$s (%2$s).</string>
+
+    <string name="oem_probe_failed">%1$s failed: %2$s</string>
+    <string name="oem_probe_replied">%1$s replied: %2$s</string>
+    <string name="oem_probe_silent">%1$s didn\'t reply.</string>
+</resources>

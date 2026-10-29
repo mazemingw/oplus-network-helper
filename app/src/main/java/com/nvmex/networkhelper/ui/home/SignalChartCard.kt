@@ -172,7 +172,7 @@ fun SignalChartCard(
     modifier: Modifier = Modifier,
     windowSeconds: Int = 60,
     autoRange: Boolean = false,
-    useEChartsChart: Boolean = false,
+    useEChartsChart: Boolean = true,
     playbackSampleKey: Long? = null,
     playbackFrameIndex: Int? = null,
     playbackSessionKey: Int? = null,

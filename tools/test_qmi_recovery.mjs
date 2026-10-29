@@ -4,8 +4,8 @@ import { spawnSync } from 'node:child_process';
 // Run the actual packaged shell functions with mocked Android commands/signals.
 // No real process is signalled and no modem is accessed.
 const asset = new URL('../app/src/main/assets/qmi/recover-bandmenu-session.sh', import.meta.url);
-const source = await readFile(asset, 'utf8');
-const entry = '\nbandmenu_recover "$@"';
+const source = (await readFile(asset, 'utf8')).replaceAll('\r\n', '\n');
+const entry = '\nbandmenu_recover "$@" || exit $?\nbunny_recover "$@"';
 if (!source.trimEnd().endsWith(entry)) throw new Error('Recovery entry point changed');
 const library = source.trimEnd().slice(0, -entry.length);
 const shell = process.argv[2] ?? (process.platform === 'win32' ? 'C:/Program Files/Git/bin/bash.exe' : 'sh');
@@ -82,5 +82,59 @@ test "$test_am" = 0 && test "$test_kill" = 0
 run('package UID must belong to the requested Android user', mocks + `
 bandmenu_recover 10
 test $? = 14 && test "$test_am" = 0 && test "$test_kill" = 0
+`);
+const bunnyApk = '/data/app/~~test/dev.ririxi.bunnylock-abcd/base.apk';
+const bunnyMocks = `
+test_am=0; test_kill=0; test_exited=0
+cmd() { printf '%s\\n' 'package:${bunnyApk}'; }
+ps() { printf '%s bunnylockd\\n' "$$"; }
+bandmenu_read_cmdline() { [ "$test_exited" = 0 ] && printf '%s' 'bunnylockd '; }
+dd() { printf 'CLASSPATH=${bunnyApk}\\000'; }
+awk() { return 1; }
+am() { test_am=$((test_am + 1)); }
+kill() { test_kill=$((test_kill + 1)); test_exited=1; }
+sleep() { :; }
+`;
+run('bunnylock identity uses APK classpath as ownership evidence', bunnyMocks + `
+bunny_matches $$ ${quote(bunnyApk)} || exit 1
+`);
+run('our embedded helper with same process name is never matched', bunnyMocks + `
+dd() { printf 'CLASSPATH=/data/app/host/base.apk\\000'; }
+bunny_matches $$ ${quote(bunnyApk)}
+test $? = 1
+`);
+run('mere mentions of the target APK do not establish ownership', bunnyMocks + `
+dd() { printf 'OTHER_CLASSPATH=${bunnyApk}\\000CLASSPATH=${bunnyApk}.unrelated\\000'; }
+bunny_matches $$ ${quote(bunnyApk)}
+test $? = 1
+`);
+run('verified bunny service stopped then rechecked and released', bunnyMocks + `
+bunny_recover 0 || exit 1
+test "$test_am" = 1 && test "$test_kill" = 1
+`);
+run('bunny PID reused after force-stop is never signalled', bunnyMocks + `
+am() { test_am=1; test_exited=1; }
+bunny_recover 0 || exit 1
+test "$test_am" = 1 && test "$test_kill" = 0
+`);
+run('bunny force-stop denial never signals the helper', bunnyMocks + `
+am() { return 1; }
+bunny_recover 0
+test $? = 20 && test "$test_kill" = 0
+`);
+run('bunny process exit timeout is bounded', bunnyMocks + `
+kill() { test_kill=$((test_kill + 1)); }
+bunny_recover 0
+test $? = 22 && test "$test_kill" = 1
+`);
+run('missing bunny package does not stop any application', bunnyMocks + `
+cmd() { :; }
+bunny_recover 0 || exit 1
+test "$test_am" = 0 && test "$test_kill" = 0
+`);
+run('unrelated process names are not inspected or killed', bunnyMocks + `
+ps() { printf '%s unrelated\\n' "$$"; }
+bunny_recover 0 || exit 1
+test "$test_am" = 0 && test "$test_kill" = 0
 `);
 console.log(`${passed} shell recovery scenarios passed (mock Android commands and signals).`);

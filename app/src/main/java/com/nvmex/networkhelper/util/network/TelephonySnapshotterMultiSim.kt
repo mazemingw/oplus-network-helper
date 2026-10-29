@@ -92,6 +92,7 @@ class TelephonySnapshotterMultiSim(private val context: Context) {
         )
 
         return snapWithLinkRate.copy(
+            neighborCells = if (hasLoc && locEnabled) telephonyNeighbors(cellInfosOverride.orEmpty(), snapWithLinkRate) else emptyList(),
             subId = subId,
             updatedAt = System.currentTimeMillis(),
             hasPhonePermission = true,

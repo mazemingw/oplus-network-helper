@@ -13,12 +13,12 @@ object FontSizeConfig {
     enum class FontSizeLevel(
         val scale: Float
     ) {
-        EXTRA_SMALL(0.6f),
-        SMALL(0.8f),
+        EXTRA_SMALL(0.8f),
+        SMALL(0.9f),
         MEDIUM(1.0f),
-        LARGE(1.2f),
-        EXTRA_LARGE(1.4f),
-        HUGE(1.6f)
+        LARGE(1.1f),
+        EXTRA_LARGE(1.2f),
+        HUGE(1.3f)
     }
 
     private val _currentLevel = MutableStateFlow(FontSizeLevel.MEDIUM)

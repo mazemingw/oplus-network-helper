@@ -278,8 +278,8 @@ private fun DriveRecordsPage(open: (String, Boolean) -> Unit) {
         LazyColumn(Modifier.heightIn(max = 440.dp)) {
             items(points.take(previewLimit)) { p ->
                 val wgs = if (p.rawCoordType?.startsWith("WGS84", true) == true && p.rawLat != null && p.rawLng != null)
-                    p.rawLat to p.rawLng else Gcj02.gcj02ToWgs84(p.lat, p.lng)
-                Text("${stamp(p.ts)} · SIM${p.simSlot + 1}\n原始：${p.rawCoordType ?: "未保存"} ${p.rawLat ?: "—"}, ${p.rawLng ?: "—"}\nWGS84：${wgs.first}, ${wgs.second}\nGCJ02：${p.lat}, ${p.lng}", Modifier.padding(vertical = 6.dp), style = MaterialTheme.typography.bodySmall)
+                    p.rawLat to p.rawLng else if (p.lat != null && p.lng != null) Gcj02.gcj02ToWgs84(p.lat, p.lng) else null to null
+                Text("${stamp(p.ts)} · SIM${p.simSlot + 1} · ${p.positionSource}\n原始：${p.rawCoordType ?: "未保存"} ${p.rawLat ?: "—"}, ${p.rawLng ?: "—"}\nWGS84：${wgs.first ?: "—"}, ${wgs.second ?: "—"}\nGCJ02：${p.lat ?: "—"}, ${p.lng ?: "—"}", Modifier.padding(vertical = 6.dp), style = MaterialTheme.typography.bodySmall)
             }
             if (points.size > previewLimit) item { TextButton(onClick = { previewLimit += 100 }) { Text("加载更多") } }
         }

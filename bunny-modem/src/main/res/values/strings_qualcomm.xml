@@ -1,0 +1,72 @@
+<resources>
+    <string name="qmi_refused">The modem refused %1$s: %2$s.</string>
+    <string name="qmi_reply_too_short">The modem\'s reply was shorter than expected.</string>
+    <string name="qmi_hex_odd_digits">The hex payload has an odd number of digits.</string>
+
+    <string name="qmi_error_no_result">no result from the modem</string>
+    <string name="qmi_error_none">no error (0x00)</string>
+    <string name="qmi_error_malformed">a malformed request (0x01)</string>
+    <string name="qmi_error_no_memory">out of memory (0x02)</string>
+    <string name="qmi_error_internal">an internal error (0x03)</string>
+    <string name="qmi_error_no_free_client">no free QMI client; release existing owners and retry (0x05)</string>
+    <string name="qmi_error_call_failed">call failed (0x0E)</string>
+    <string name="qmi_error_not_provisioned">not provisioned (0x10)</string>
+    <string name="qmi_error_missing_arg">a missing value (0x11)</string>
+    <string name="qmi_error_arg_too_long">a value that\'s too long (0x13)</string>
+    <string name="qmi_error_not_supported_modem">not supported by this modem (0x19)</string>
+    <string name="qmi_error_no_effect">no change needed (0x1A)</string>
+    <string name="qmi_error_invalid_profile_type">an invalid profile type (0x1E)</string>
+    <string name="qmi_error_invalid_service_type">an invalid service type (0x1F)</string>
+    <string name="qmi_error_invalid_qos_id">an invalid QoS ID (0x29)</string>
+    <string name="qmi_error_unknown">an unknown error (0x2F)</string>
+    <string name="qmi_error_invalid_arg">an invalid value (0x30)</string>
+    <string name="qmi_error_not_ready">not ready yet (0x34)</string>
+    <string name="qmi_error_invalid_transition">an invalid state change (0x3C)</string>
+    <string name="qmi_error_info_unavailable">info not available (0x4A)</string>
+    <string name="qmi_error_access_denied">access denied (0x52)</string>
+    <string name="qmi_error_incompatible_state">not possible in the modem\'s current state (0x5A)</string>
+    <string name="qmi_error_not_supported">not supported (0x5E)</string>
+    <string name="qmi_error_other">error %1$s</string>
+
+    <string name="qc_op_band_caps_query">the band capability query</string>
+    <string name="qc_op_ssp_query">the system selection query</string>
+    <string name="qc_op_lte_cell_lock_query">the LTE cell lock query</string>
+    <string name="qc_op_nr_cell_lock_query">the NR cell lock query</string>
+    <string name="qc_op_legacy_band_query">the 2G and 3G band query</string>
+    <string name="qc_op_lte_band_lock">the LTE band lock</string>
+    <string name="qc_op_nr_band_lock">the NR band lock</string>
+    <string name="qc_op_gsm_band_lock">the GSM band lock</string>
+    <string name="qc_op_wcdma_band_lock">the WCDMA band lock</string>
+    <string name="qc_op_lte_band_restore">restoring the LTE bands</string>
+    <string name="qc_op_network_mode">the network mode change</string>
+    <string name="qc_op_nr_mode">the 5G mode change</string>
+    <string name="qc_op_plmn_lock">the PLMN lock</string>
+    <string name="qc_op_plmn_unlock">the PLMN unlock</string>
+    <string name="qc_op_lte_cell_lock">the LTE cell lock</string>
+    <string name="qc_op_lte_cell_unlock">the LTE cell unlock</string>
+    <string name="qc_op_nr_cell_lock">the NR cell lock</string>
+    <string name="qc_op_nr_cell_unlock">the NR cell unlock</string>
+    <string name="qc_op_offline">the offline request</string>
+    <string name="qc_op_reboot">the reboot request</string>
+    <string name="qc_op_data_detach">the data detach</string>
+    <string name="qc_op_data_attach">the data attach</string>
+
+    <string name="qc_sim_switch_failed">The modem wouldn\'t switch to SIM %1$d: %2$s.</string>
+    <string name="qc_lte_lock_too_many_pcis">The modem refused %1$s: it takes fewer PCIs. Older modems take at most %2$d.</string>
+    <string name="qc_note_nr_bands_combined">This modem can\'t set %1$s bands on their own, so the bands were applied to both SA and NSA.</string>
+    <string name="qc_invalid_scs">%1$d kHz isn\'t a valid subcarrier spacing.</string>
+    <string name="qc_unknown_band_group">Unknown band group: %1$s.</string>
+    <string name="qc_pci_count">Enter between 1 and %1$d PCIs.</string>
+    <string name="qc_needs_nr_band">This lock needs an NR band.</string>
+    <string name="qc_unknown_nr_lock_type">Unknown NR lock type: %1$s.</string>
+
+    <string name="qrtr_failed">%1$s (%2$s).</string>
+    <string name="qrtr_lookup">Couldn\'t find the modem\'s QMI service</string>
+    <string name="qrtr_socket">Couldn\'t open a QRTR socket</string>
+    <string name="qrtr_connect">Couldn\'t connect to the modem\'s QMI service</string>
+    <string name="qrtr_length">The QMI request has an invalid length</string>
+    <string name="qrtr_send">Couldn\'t send the QMI request</string>
+    <string name="qrtr_timeout">The modem didn\'t answer the QMI request in time</string>
+    <string name="qrtr_wait">Couldn\'t wait for the QMI reply</string>
+    <string name="qrtr_recv">Couldn\'t read the QMI reply</string>
+</resources>

@@ -46,6 +46,7 @@ class LteCellOverlayManager(
 ) {
     private val nearbyStationRows = HashMap<Marker, Pair<String, List<LteCellParam>>>()
     fun nearbyStation(marker: Marker): Pair<String, List<LteCellParam>>? = nearbyStationRows[marker]
+    fun stationMarker(key: String): Marker? = nearbyStationRows.entries.firstOrNull { it.value.first == key }?.key
     private val icon by lazy { makeRedTriangleIcon(56) }
     private val linkedIcon by lazy { makeTriangleIcon(56, 0xFF159447.toInt()) }
     private val circleIcon by lazy { makeCircleIcon(56) }

@@ -1,0 +1,44 @@
+<resources>
+    <string name="aosp_sentences">%1$s %2$s</string>
+    <string name="aosp_with_details">%1$s (%2$s)</string>
+    <string name="aosp_unknown_error">nieznany błąd</string>
+
+    <string name="aosp_no_method">Ta wersja Androida nie ma ITelephony.%1$s.</string>
+
+    <string name="aosp_held_back">Android na razie wyłącza %1$s, bo %2$s.</string>
+    <string name="aosp_held_back_power">włączone jest oszczędzanie energii (Oszczędzanie baterii albo Łączność adaptacyjna)</string>
+    <string name="aosp_held_back_carrier">ustawienia operatora pomijają %1$s</string>
+    <string name="aosp_held_back_2g">opcja „Zezwalaj na 2G” jest wyłączona</string>
+
+    <string name="aosp_plmn_not_registered">Nie udało się zarejestrować w sieci %1$s %2$s. Może jest poza zasięgiem albo nie wpuszcza tej karty SIM.</string>
+
+    <string name="aosp_mode_refused">Radio odrzuciło ten tryb sieci.</string>
+    <string name="aosp_mode_refused_restored">Radio odrzuciło ten tryb sieci, więc przywrócono poprzedni.</string>
+    <string name="aosp_mode_refused_radio_off">Radio odrzuciło tryb sieci także przy wyłączonym radiu.</string>
+
+    <string name="aosp_nr_dc_unavailable">Radio jest teraz niedostępne.</string>
+    <string name="aosp_nr_dc_error">Radio zwróciło błąd. Może nie obsługuje przełączania EN-DC.</string>
+    <string name="aosp_nr_dc_refused">Radio nie przyjęło tego stanu EN-DC.</string>
+    <string name="aosp_nr_dc_code">Radio zwróciło błąd %1$d.</string>
+
+    <string name="aosp_no_subscription">Android nie widzi aktywnej subskrypcji dla tej karty SIM, więc nie ma dokąd wysłać blokady. Sprawdź, czy karta jest włożona i włączona oraz czy aplikacja ma uprawnienie „Telefon”.</string>
+    <string name="aosp_channels_rejected">Usługa radiowa Androida odrzuciła tę blokadę.</string>
+    <string name="aosp_channels_rejected_fewer">Usługa radiowa Androida odrzuciła tę blokadę. Na tym telefonie może zadziałać wybranie do %1$d pasm.</string>
+    <string name="aosp_channels_rejected_split">Usługa radiowa Androida odrzuciła tę blokadę, nawet po podzieleniu pasm na grupy po %1$d. Na tym telefonie może zadziałać wybranie do %1$d pasm.</string>
+    <string name="aosp_channels_not_started">Usługa radiowa Androida nie mogła wystartować z blokadą.</string>
+
+    <string name="aosp_reboot_refused">HAL radia odmówił restartu modemu.</string>
+    <string name="aosp_no_sim_radio_restart">Ta wersja Androida nie umie zrestartować radia pojedynczej karty SIM.</string>
+    <string name="aosp_sim_radio_off">Radio tej karty SIM jest wyłączone.</string>
+    <string name="aosp_radio_not_on">Radio nie chciało się z powrotem włączyć: %1$s.</string>
+    <string name="aosp_radio_not_off">Radio nie chciało się wyłączyć: %1$s.</string>
+
+    <string name="sys_samsung_menu_denied">Ten telefon pozwala otwierać menu pasm tylko aplikacjom Samsunga, więc potrzebny jest root.</string>
+    <string name="sys_samsung_menu_missing">Nie znaleziono menu pasm Samsunga na tym telefonie.</string>
+
+    <string name="samsung_no_nr_mode">Ten telefon nie ma samsungowego przełącznika trybu 5G.</string>
+    <string name="samsung_nr_mode_refused">Usługa telefonii Samsunga nie przyjęła tego trybu 5G.</string>
+
+    <string name="server_unknown_subscription">Subskrypcja tej karty SIM jest nieznana.</string>
+    <string name="server_unknown_command">Nieznane polecenie: %1$s.</string>
+</resources>

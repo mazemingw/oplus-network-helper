@@ -21,6 +21,8 @@ import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.stateIn
 import com.nvmex.networkhelper.util.qmi.*
 import kotlinx.coroutines.*
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 
 data class NetworkPanelsFrame(
     val ts: Long,
@@ -28,6 +30,7 @@ data class NetworkPanelsFrame(
 )
 
 class NetworkPanelMultiSimViewModel(app: Application) : AndroidViewModel(app) {
+    init { com.nvmex.networkhelper.util.modem.SystemQmiServices.registerDisconnector(this) { stopQmiMonitoring() } }
 
     companion object {
         // NRCA HAL may only force re-emit every ~6s when signature is unchanged.
@@ -39,6 +42,8 @@ class NetworkPanelMultiSimViewModel(app: Application) : AndroidViewModel(app) {
     private val repo = NetworkPanelRepositoryMultiSim(app.applicationContext, snapshotter)
 
     private val nrCaTracker = BroadcastNrCaTracker(app)
+    private val nrCaArbiter = NrCaSourceArbiter()
+    private val nrCaSources = mutableMapOf<Int, String>()
     private val _qmiBySlot = MutableStateFlow<Map<Int, QmiRadioSnapshot>>(emptyMap())
     val qmiBySlot = _qmiBySlot.asStateFlow()
     private val _qmiRetry = MutableStateFlow(0)
@@ -47,8 +52,17 @@ class NetworkPanelMultiSimViewModel(app: Application) : AndroidViewModel(app) {
     val qmiLoading = _qmiLoading.asStateFlow()
     private val _qmiErrors = MutableStateFlow<Map<Int, String>>(emptyMap())
     val qmiErrors = _qmiErrors.asStateFlow()
+    private val _qmiRxBySlot = MutableStateFlow<Map<Int, List<QmiRxGroup>>>(emptyMap())
+    val qmiRxBySlot = _qmiRxBySlot.asStateFlow()
+    private val qmiMonitorMutex = Mutex()
     private var qmiGeneration = 0L
     private val qmiOwners = mutableMapOf<Int, Long>()
+    private val qmiJobs = mutableMapOf<Long, Job>()
+
+    /** Driver handoff waits until foreground monitor sockets have really closed. */
+    suspend fun stopQmiMonitoring() {
+        qmiJobs.values.toList().forEach { it.cancelAndJoin() }
+    }
     fun retryQmiMonitoring() { _qmiRetry.value++ }
     private val _cellTimelineBySubId = MutableStateFlow<Map<Int, List<CellTimelinePoint>>>(emptyMap())
 
@@ -67,35 +81,54 @@ class NetworkPanelMultiSimViewModel(app: Application) : AndroidViewModel(app) {
     }
 
     /** Called only by a visible foreground surface; no background Root polling. */
-    suspend fun monitorQmi(sim: Int) {
+    suspend fun monitorQmi(sim: Int, includeRx: Boolean = false) {
+        if (com.nvmex.networkhelper.util.modem.SystemQmiServices.channelsBlocked.value) return
         val generation = ++qmiGeneration
+        currentCoroutineContext()[Job]?.let { qmiJobs[generation] = it }
         qmiOwners[sim - 1] = generation
         _qmiBySlot.value = _qmiBySlot.value - (sim - 1)
+        _qmiRxBySlot.value = _qmiRxBySlot.value - (sim - 1)
         _qmiLoading.value = _qmiLoading.value + (sim - 1 to true)
         _qmiErrors.value = _qmiErrors.value - (sim - 1)
-        val client = QmiModemClient(getApplication())
         try {
-            while (currentCoroutineContext().isActive) {
-                val snapshot = client.radio(sim)
-                if (qmiOwners[sim - 1] == generation) {
-                    _qmiBySlot.value = _qmiBySlot.value + (snapshot.slot to snapshot)
-                    _qmiLoading.value = _qmiLoading.value + (sim - 1 to false)
-                }
-                delay(2000)
+            // Navigation, SIM and expansion changes await the old owner's complete close.
+            qmiMonitorMutex.withLock {
+                if (qmiOwners[sim - 1] != generation) return@withLock
+                var client = QmiModemClient(getApplication())
+                try {
+                    while (currentCoroutineContext().isActive && qmiOwners[sim - 1] == generation) {
+                        val snapshot = qmiRecoverMonitoring(read = { client.monitor(sim, includeRx) }, reopen = {
+                            if (qmiOwners[sim - 1] == generation) {
+                                _qmiLoading.value = _qmiLoading.value + (sim - 1 to true)
+                                _qmiBySlot.value = _qmiBySlot.value - (sim - 1)
+                                _qmiRxBySlot.value = _qmiRxBySlot.value - (sim - 1)
+                            }
+                            client.close()
+                            client = QmiModemClient(getApplication())
+                        }, pause = { delay(it) })
+                        if (qmiOwners[sim - 1] == generation) {
+                            _qmiBySlot.value = _qmiBySlot.value + (snapshot.radio.slot to snapshot.radio)
+                            _qmiRxBySlot.value = _qmiRxBySlot.value + (sim - 1 to snapshot.rx)
+                            _qmiLoading.value = _qmiLoading.value + (sim - 1 to false)
+                        }
+                        delay(if (includeRx) 1000 else 2000)
+                    }
+                } finally { withContext(NonCancellable) { client.close() } }
             }
         } catch (e: CancellationException) { throw e }
         catch (e: Exception) {
             if (qmiOwners[sim - 1] == generation) {
                 _qmiBySlot.value = _qmiBySlot.value - (sim - 1)
+                _qmiRxBySlot.value = _qmiRxBySlot.value - (sim - 1)
                 _qmiErrors.value = _qmiErrors.value + (sim - 1 to e.message.orEmpty())
             }
         }
         finally {
+            qmiJobs.remove(generation)
             if (qmiOwners[sim - 1] == generation) {
                 _qmiLoading.value = _qmiLoading.value + (sim - 1 to false)
                 qmiOwners.remove(sim - 1)
             }
-            withContext(NonCancellable) { client.close() }
         }
     }
 
@@ -142,7 +175,12 @@ class NetworkPanelMultiSimViewModel(app: Application) : AndroidViewModel(app) {
                 val freshLteCa = qmiLteCaForState(radio, s, slot, wallNow)
 
                 val validatedNrCa = validateNrCaForState(s, freshCa)
-                val nrCaForUi = qmiChooseNrCa(validatedNrCa, qmiNrFrequencyFallback(radio, s, wallNow), slot, wallNow)
+                val nrCaForUi = nrCaArbiter.choose(validatedNrCa, qmiNrFrequencyFallback(radio, s, wallNow), slot,
+                    "$subId:${s.dataNetworkType}:${s.mcc}:${s.mnc}:${s.arfcn}:${s.pci}", wallNow)
+                if (slot != null) {
+                    val source = when { nrCaForUi == null -> "NONE"; nrCaForUi.frequencyOnly -> "QMI"; else -> "ENGINEERING" }
+                    if (nrCaSources.put(slot, source) != source) android.util.Log.d("NrCaSource", "slot=$slot source=$source age=${nrCaForUi?.let { wallNow - it.updatedAt }}")
+                }
 
                 s.copy(nrCaInfo = nrCaForUi, lteCaInfo = freshLteCa)
             }
@@ -163,15 +201,16 @@ class NetworkPanelMultiSimViewModel(app: Application) : AndroidViewModel(app) {
         val hasConfiguredCarrier = carriers.any {
             it.dlStateRaw == 1 || it.dlStateRaw == 2 || it.ulStateRaw == 1 || it.ulStateRaw == 2
         }
-        if (!hasConfiguredCarrier) return null
+        val hasPrimary = carriers.any { it.ccId == 0 && it.pci in 0..1007 && it.dlArfcn in 1..3279165 }
+        if (!hasConfiguredCarrier && !hasPrimary) return null
 
         val hasPositiveDlBw = carriers.any {
             (NrcaTranslator.bandwidthMhzOrNull(it.dlBwRaw, info.bandwidthEncoding) ?: 0) > 0
         }
         val hasAnyActiveCarrier = carriers.any { it.dlStateRaw == 2 || it.ulStateRaw == 2 }
-        if (!hasPositiveDlBw && !hasAnyActiveCarrier) return null
+        if (!hasPositiveDlBw && !hasAnyActiveCarrier && !hasPrimary) return null
 
-        val servingBand = state.band.toIntOrNull()
+        val servingBand = state.band.trim().removePrefix("N").removePrefix("n").toIntOrNull()
         if (servingBand != null && servingBand > 0) {
             val hasBandMatch = carriers.any { carrier ->
                 val normalized = NrcaTranslator.bandShort(carrier.bandRaw).toIntOrNull()
@@ -184,6 +223,7 @@ class NetworkPanelMultiSimViewModel(app: Application) : AndroidViewModel(app) {
     }
 
     override fun onCleared() {
+        com.nvmex.networkhelper.util.modem.SystemQmiServices.unregisterDisconnector(this)
         nrCaTracker.stop()
         super.onCleared()
     }

@@ -1,6 +1,7 @@
 package com.nvmex.networkhelper.viewmodel.menu
 
 import android.app.Application
+import android.telephony.SubscriptionManager
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.nvmex.networkhelper.R
@@ -28,11 +29,21 @@ data class QmiBandUiState(
     val mainlandMode: Boolean = true, val mcc: String = "", val mnc: String = "",
     val activeBands: Map<QmiBand, Set<Int>> = emptyMap(),
     val servingCells: List<QmiServingCell> = emptyList(),
-    val cellLockState: QmiCellLockState = QmiCellLockState.UNKNOWN
+    val cellLockState: QmiCellLockState = QmiCellLockState.UNKNOWN,
+    val quickPrefill: QmiQuickLockRequest? = null
 )
 
 class QmiBandLockViewModel(app: Application) : AndroidViewModel(app) {
-    private val client = QmiModemClient(app)
+    private var client = QmiModemClient(app)
+    init { com.nvmex.networkhelper.util.modem.SystemQmiServices.registerDisconnector(this) { releaseDriver() } }
+
+    /** Switching driver releases only this owner's session, without changing modem locks. */
+    suspend fun releaseDriver() {
+        cancelVerification()
+        client.close()
+        client = QmiModemClient(getApplication())
+        mutable.update { it.copy(device = null, draft = null, error = null, message = null) }
+    }
     private val mutable = MutableStateFlow(QmiBandUiState())
     val state = mutable.asStateFlow()
     private var alertJob: Job? = null
@@ -43,6 +54,9 @@ class QmiBandLockViewModel(app: Application) : AndroidViewModel(app) {
     private var pendingCell: PendingCellRegistration? = null
     private var recentCellTargets: Pair<Int, List<QmiCellTarget>>? = null
     private var networkSubId = -1
+    private var requestedQuickId: String? = null
+    private var pendingQuick: QmiQuickLockRequest? = null
+    private var quickSubscription: Pair<Int, Int>? = null
     private val cellRestore = app.getSharedPreferences("qmi_cell_rat_restore", Application.MODE_PRIVATE)
 
     fun updateNetwork(sim: Int, network: NetworkPanelUiState?) {
@@ -52,7 +66,7 @@ class QmiBandLockViewModel(app: Application) : AndroidViewModel(app) {
         val serving = qmiServingCells(network, System.currentTimeMillis())
         mutable.update { ui ->
             val mcc = network?.mcc.orEmpty(); val mnc = network?.mnc.orEmpty()
-            ui.copy(mcc = mcc, mnc = mnc, activeBands = QmiBand.entries.associateWith(observation::active),
+            ui.copy(mcc = mcc, mnc = mnc, activeBands = QmiBand.entries.associateWith(observation::highlighted),
                 servingCells = serving, cellLockState = qmiCellLockState(ui.device, serving, recentTargets(sim)),
                 draft = ui.draft?.let { qmiPruneSelection(it, ui.device?.hardware, ui.mainlandMode, mcc, mnc) })
         }
@@ -76,6 +90,9 @@ class QmiBandLockViewModel(app: Application) : AndroidViewModel(app) {
 
     fun refresh(sim: Int = state.value.sim) {
         if (state.value.busy) return
+        if (sim != state.value.sim) networkSubId = -1
+        if (pendingQuick?.sim != sim) pendingQuick = null
+        if (quickSubscription?.first != sim) quickSubscription = null
         cancelVerification()
         recentCellTargets = null
         mutable.update { it.copy(sim = sim, device = null, draft = null, combinedNr = false,
@@ -83,6 +100,65 @@ class QmiBandLockViewModel(app: Application) : AndroidViewModel(app) {
             activeBands = if (sim == it.sim) it.activeBands else emptyMap(),
             mcc = if (sim == it.sim) it.mcc else "", mnc = if (sim == it.sim) it.mnc else "") }
         operation(sim) { client.read(sim) }
+    }
+
+    /** Cleanup must await the actual NAS read, not just enqueue a UI refresh. No write is replayed. */
+    suspend fun refreshForRecovery() {
+        check(!state.value.busy) { "请等待当前操作完成" }
+        cancelVerification(); dismissStatus()
+        mutable.update { it.copy(busy = true, error = null, message = null) }
+        try {
+            val device = client.read(state.value.sim)
+            // Control and foreground observation need two simultaneously usable NAS clients.
+            val probe = QmiModemClient(getApplication())
+            try { probe.monitor(state.value.sim, includeRx = false) }
+            finally { withContext(NonCancellable) { probe.close() } }
+            mutable.update { it.copy(device = device, draft = qmiEmptyBandSelection(device.profile), combinedNr = false,
+                cellLockState = qmiCellLockState(device, it.servingCells, recentTargets(it.sim))) }
+        } catch (e: Exception) {
+            mutable.update { it.copy(device = null, draft = null) }
+            postStatus(error = getApplication<Application>().getString(R.string.qmi_read_failed, e.message.orEmpty()))
+            throw e
+        } finally { mutable.update { it.copy(busy = false) } }
+    }
+
+    fun prepareQuickLock(request: QmiQuickLockRequest) {
+        if (requestedQuickId == request.id || state.value.busy) return
+        try {
+            request.validate()
+            require(activeSubscription(request.sim) == request.subId) {
+                getApplication<Application>().getString(R.string.qmi_quick_sim_changed)
+            }
+        } catch (e: IllegalArgumentException) { invalid(e); return }
+        requestedQuickId = request.id
+        pendingQuick = request
+        quickSubscription = request.sim to request.subId
+        refresh(request.sim)
+    }
+
+    private fun activeSubscription(sim: Int): Int? = runCatching {
+        getApplication<Application>().getSystemService(SubscriptionManager::class.java)
+            .getActiveSubscriptionInfoForSimSlotIndex(sim - 1)?.subscriptionId
+    }.getOrNull()
+
+    private fun requireQuickSubscription() {
+        quickSubscription?.let { (sim, subId) ->
+            require(state.value.sim == sim && activeSubscription(sim) == subId) {
+                getApplication<Application>().getString(R.string.qmi_quick_sim_changed)
+            }
+        }
+    }
+
+    private fun applyQuickPrefill(request: QmiQuickLockRequest, device: QmiDeviceState) {
+        requireQuickSubscription()
+        val ui = state.value
+        val selection = qmiQuickBandSelection(request, device.profile,
+            device.hardware ?: throw IllegalArgumentException(getApplication<Application>().getString(R.string.qmi_no_hardware)),
+            ui.mainlandMode, ui.mcc, ui.mnc)
+        mutable.update { it.copy(quickPrefill = request,
+            draft = if (request.kind == QmiQuickLockKind.BAND) selection else qmiEmptyBandSelection(device.profile),
+            combinedNr = request.kind == QmiQuickLockKind.BAND && request.rat == "NR") }
+        postStatus(message = getApplication<Application>().getString(R.string.qmi_quick_ready, request.sim), level = QmiNoticeLevel.INFO)
     }
 
     fun resetSession() {
@@ -324,12 +400,19 @@ class QmiBandLockViewModel(app: Application) : AndroidViewModel(app) {
         mutable.update { it.copy(busy = true, error = null, message = null) }
         viewModelScope.launch {
             try {
+                if (writing) requireQuickSubscription()
                 val device = action()
                 mutable.update { it.copy(device = device,
                     cellLockState = qmiCellLockState(device, it.servingCells, recentTargets(sim)),
                     draft = if (clearSelection) qmiEmptyBandSelection(device.profile) else
                         (it.draft ?: qmiEmptyBandSelection(device.profile)).copy(rats = device.profile.rats, nrMode = device.profile.nrMode),
                     combinedNr = if (clearSelection) false else it.combinedNr) }
+                pendingQuick?.takeIf { it.sim == sim }?.let { request ->
+                    pendingQuick = null
+                    try { applyQuickPrefill(request, device) }
+                    catch (e: IllegalArgumentException) { invalid(e) }
+                    return@launch
+                }
                 val warning = warningMessage?.invoke()
                 if (warning != null) postStatus(message = warning, level = QmiNoticeLevel.WARNING)
                 else if (verifyCell != null) beginCellVerification(sim, verifyCell)
@@ -353,6 +436,7 @@ class QmiBandLockViewModel(app: Application) : AndroidViewModel(app) {
     }
 
     override fun onCleared() {
+        com.nvmex.networkhelper.util.modem.SystemQmiServices.unregisterDisconnector(this)
         CoroutineScope(Dispatchers.IO).launch { withContext(NonCancellable) { client.close() } }
     }
 }

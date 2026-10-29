@@ -10,8 +10,8 @@ data class DrivePointEntity(
     val sessionId: String,     // ✅ 新增：一次采样会话
     val ts: Long,
     val simSlot: Int = 0,
-    val lat: Double,
-    val lng: Double,
+    val lat: Double?,
+    val lng: Double?,
     val rsrpDbm: Int?,
     val isHandover: Boolean,
     val cellKey: String,
@@ -21,5 +21,6 @@ data class DrivePointEntity(
     @androidx.room.ColumnInfo(defaultValue = "0") val segmentStart: Boolean = false,
     val rawLat: Double? = null,
     val rawLng: Double? = null,
-    val rawCoordType: String? = null
+    val rawCoordType: String? = null,
+    @androidx.room.ColumnInfo(defaultValue = "'SDK'") val positionSource: String = if (estimated) "INERTIAL" else if (lat == null || lng == null) "NONE" else "SDK"
 )

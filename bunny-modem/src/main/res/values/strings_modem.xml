@@ -1,0 +1,110 @@
+<resources>
+    <string name="modem_sentences">%1$s %2$s</string>
+    <string name="modem_couldnt">Couldn\'t %1$s. %2$s</string>
+
+    <string name="modem_connect_checking">Checking what this phone\'s modem offers…</string>
+    <string name="modem_root_denied">Root access was denied.</string>
+    <string name="modem_sim">SIM %1$d</string>
+    <string name="modem_no_mtk_port">No MediaTek AT port answered. Pick one in Tools.</string>
+    <string name="modem_lock_unanswered">The radio didn\'t answer, so it may not support locks through Android\'s radio HAL.</string>
+
+    <string name="modem_goal_refresh">refresh</string>
+    <string name="modem_goal_lock_bands">lock the %1$s bands</string>
+    <string name="modem_goal_unlock_bands">unlock the %1$s bands</string>
+    <string name="modem_goal_net_mode">change the network mode</string>
+    <string name="modem_goal_nr_mode">switch the 5G mode to %1$s</string>
+    <string name="modem_goal_nr_dc_on">turn on NSA (EN-DC)</string>
+    <string name="modem_goal_nr_dc_off">turn off NSA (EN-DC)</string>
+    <string name="modem_goal_lock_cell">lock the cell</string>
+    <string name="modem_goal_unlock_cell">clear the cell lock</string>
+    <string name="modem_goal_lock_plmn">lock the network</string>
+    <string name="modem_goal_unlock_plmn">switch back to automatic network selection</string>
+    <string name="modem_goal_unlock_all">unlock everything</string>
+    <string name="modem_goal_restart_radio">restart the radio</string>
+    <string name="modem_goal_reattach">re-attach SIM %1$d</string>
+    <string name="modem_goal_reboot">reboot the modem</string>
+    <string name="modem_goal_samsung_menu">open the Samsung band menu</string>
+    <string name="modem_goal_send_at">send the AT command</string>
+    <string name="modem_goal_send_qmi">send QMI message 0x%1$04X</string>
+
+    <string name="modem_bands_locked">%1$s bands locked.</string>
+    <string name="modem_bands_unlocked">%1$s bands unlocked.</string>
+    <string name="modem_net_mode_set">Network mode is now \"%1$s\".</string>
+    <string name="modem_nr_mode_set">5G mode switched to %1$s.</string>
+    <string name="modem_nr_dc_on">NSA (EN-DC) is on.</string>
+    <string name="modem_nr_dc_off">NSA (EN-DC) is off.</string>
+    <string name="modem_cell_locked">Cell locked.</string>
+    <string name="modem_cell_unlocked">Cell lock cleared.</string>
+    <string name="modem_plmn_locked">Network locked.</string>
+    <string name="modem_plmn_locked_to">SIM %1$d is locked to %2$s.</string>
+    <string name="modem_plmn_unlocked">Back to automatic network selection.</string>
+    <string name="modem_all_unlocked">Everything is unlocked.</string>
+    <string name="modem_radio_restarted">Radio restarted.</string>
+    <string name="modem_reattached">SIM %1$d is attached again.</string>
+    <string name="modem_rebooting">Modem is rebooting.</string>
+    <string name="modem_samsung_menu_opened">Opened the Samsung band menu.</string>
+
+    <string name="modem_note_radio_restarted">The radio restarted to apply the change.</string>
+    <string name="modem_note_radio_restart_failed">The radio couldn\'t be restarted. %1$s Turn airplane mode on and off to apply the change.</string>
+    <string name="modem_note_old_nr_bands">If the phone still sticks to the old 5G bands, lock 5G to the ones you need instead, %1$d at most. That replaces the old lock.</string>
+    <string name="modem_note_kept_lock_refused">This phone kept the old lock after the unlock, and it refused every list of all bands bunnylock tried.</string>
+    <string name="modem_note_kept_lock_renamed">This phone kept the old lock after the unlock, so bunnylock named every band again.</string>
+    <string name="modem_note_nr_bands_limit">It only takes %1$d 5G bands at a time, so these are on now: %2$s.</string>
+    <string name="modem_note_legacy_back">2G and 3G are back on, though GSM 1800 may stay off: this phone\'s radio software can\'t name it.</string>
+    <string name="modem_note_qc_lte_off">This modem only changes the LTE cell lock with the radio off, so airplane mode came on for a moment.</string>
+
+    <string name="modem_lock_unconfirmed">%1$s (not confirmed by the modem)</string>
+    <string name="modem_lock_separator">"; "</string>
+    <string name="modem_lock_channel_pci">%1$s %2$s, PCI %3$s</string>
+    <string name="modem_lock_nr_pci">ARFCN %1$d, PCI %2$d on n%3$d at %4$d kHz</string>
+    <string name="modem_lock_frequency_only">Frequency only</string>
+    <string name="modem_lock_channel_frequency_only">%1$s %2$s (frequency only)</string>
+    <string name="modem_lock_channel_several_pcis">%1$s %2$s, several PCIs</string>
+    <string name="modem_lock_several_pcis">Several PCIs</string>
+    <string name="modem_lock_type">Lock type %1$d</string>
+    <string name="modem_plmn_manual">Manual selection</string>
+
+    <string name="modem_pick_band">Pick at least one band.</string>
+    <string name="modem_nr_list_too_long">This phone only takes %1$d 5G bands in one lock, so pick %1$d or fewer.</string>
+    <string name="modem_note_needs_channels">This phone needs visible frequencies together with the selected bands, so bunnylock included them in the lock.</string>
+    <string name="modem_no_gsm_1800">This phone\'s radio software doesn\'t know GSM 1800, so it refuses a 2G lock to 1800 alone.</string>
+    <string name="modem_note_fell_back">This phone fell back to 2G or 3G with a bands-only lock, so the lock was redone with the visible frequencies. bunnylock will do that on this phone from now on.</string>
+    <string name="modem_note_band_lock_ignored">Android accepted the %1$s lock, but the phone is still on %2$s. This modem doesn\'t seem to follow band locks sent this way.</string>
+    <string name="modem_note_samsung_menu_hint">Samsung\'s own band menu on the Bands screen may work instead.</string>
+    <string name="modem_needs_visible_cell">This phone needs a visible cell on the selected %1$s bands to lock them. Refresh the cell list and try again.</string>
+
+    <string name="modem_note_set_by_at">Android refused it, so bunnylock set it on the modem directly. It lasts until the phone restarts.</string>
+    <string name="modem_note_mode_airplane">The modem only switches modes with the radio off, so airplane mode came on for a moment.</string>
+    <string name="modem_note_mode_reapplied">SIM %1$d stayed on its old network, so the mode was set again with airplane mode on for a moment.</string>
+    <string name="modem_note_mode_stayed">SIM %1$d stayed on its old network. Turning airplane mode on and off may apply the mode.</string>
+    <string name="modem_note_mode_held_back">%1$s The mode stays set and applies in full once that changes.</string>
+    <string name="modem_backend_no_nr_mode">The %1$s backend can\'t change the 5G mode.</string>
+    <string name="modem_current_backend_no_nr_mode">The current backend can\'t change the 5G mode.</string>
+
+    <string name="modem_enter_earfcn">Enter the LTE EARFCN first.</string>
+    <string name="modem_enter_nr_arfcn">Enter the NR-ARFCN first.</string>
+    <string name="modem_qc_lte_needs_pci">The Qualcomm LTE lock needs at least one PCI. List several to allow a group of sectors.</string>
+    <string name="modem_lte_anchor_locked">LTE anchor locked. MediaTek can only hold one lock at a time, so NR follows the anchor.</string>
+    <string name="modem_note_mtk_one_pci">MediaTek locks to one PCI, so only PCI %1$d was used.</string>
+    <string name="modem_unknown_earfcn">EARFCN %1$d isn\'t in any known LTE band.</string>
+    <string name="modem_unknown_nr_arfcn">ARFCN %1$d isn\'t in any known NR band.</string>
+    <string name="modem_note_band_only">This phone\'s radio software doesn\'t accept channel locks, so only the band (%1$s) was locked.</string>
+    <string name="modem_note_cell_lock_ignored">Android accepted the cell lock, but the phone is still on %1$s. This modem doesn\'t seem to follow frequency locks sent this way.</string>
+    <string name="modem_note_frequency_only">Locked to the frequency only. The radio HAL can\'t lock to a PCI.</string>
+
+    <string name="modem_mcc_digits">The MCC needs 3 digits.</string>
+    <string name="modem_mnc_digits">The MNC needs 2 or 3 digits.</string>
+
+    <string name="modem_note_reattach_radio">The modem wouldn\'t re-attach, so the radio for SIM %1$d was restarted instead. Reason: %2$s</string>
+    <string name="modem_note_reboot_radio">The radio HAL wouldn\'t reboot the modem, so the cellular radio was restarted instead.</string>
+
+    <string name="modem_helper_start_failed">The %1$s couldn\'t start.</string>
+    <string name="modem_helper_start_timed_out">The %1$s didn\'t start in time.</string>
+    <string name="modem_helper_stopped">The %1$s stopped unexpectedly.</string>
+    <string name="modem_helper_not_running">The %1$s isn\'t running.</string>
+    <string name="modem_helper_no_answer">The %1$s didn\'t answer in time.</string>
+    <string name="modem_root_start_failed">Root access was denied, or the root helper couldn\'t start.</string>
+    <string name="modem_root_timed_out">Root access wasn\'t granted in time. Check your root manager and try again.</string>
+    <string name="modem_no_su">Couldn\'t find su. bunnylock needs root (Magisk, KernelSU or APatch).</string>
+    <string name="modem_root_wrong_uid">The root helper isn\'t running as root (uid %1$d).</string>
+</resources>

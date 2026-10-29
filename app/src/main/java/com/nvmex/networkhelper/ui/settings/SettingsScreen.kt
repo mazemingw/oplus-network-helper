@@ -326,7 +326,8 @@ fun SettingsScreen(
 
                     SettingsEntryRow(
                         title = stringResource(R.string.settings_font_size_title),
-                        subtitle = stringResource(R.string.settings_font_size_current, settingsFontSizeLevelName(currentFontLevel)),
+                        subtitle = stringResource(R.string.settings_font_size_current, settingsFontSizeLevelName(currentFontLevel)) +
+                            " · ${(currentFontLevel.scale * 100).toInt()}%",
                         highlight = true,
                         onClick = {
                             navController.navigate(Routes.FONT_SETTINGS)

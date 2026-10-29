@@ -4,7 +4,7 @@ import com.amap.api.maps.model.LatLng
 import com.nvmex.networkhelper.model.network.NetworkPanelUiState
 
 data class DrivePoint(
-    val latLng: LatLng,
+    val latLng: LatLng?,
     val ts: Long,
     val simSlot: Int = 0,
     val rsrpDbm: Int?,              // 可能取不到
@@ -17,5 +17,6 @@ data class DrivePoint(
     val rawLat: Double? = null,
     val rawLng: Double? = null,
     val rawCoordType: String? = null,
-    val mapMatchJson: String? = null
+    val mapMatchJson: String? = null,
+    val positionSource: String = if (estimated) "INERTIAL" else if (latLng == null) "NONE" else "SDK"
 )

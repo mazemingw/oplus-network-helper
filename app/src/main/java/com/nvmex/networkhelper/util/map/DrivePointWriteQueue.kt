@@ -24,6 +24,7 @@ internal class DrivePointWriteQueue<T>(
                 throw cancelled
             } catch (error: Exception) {
                 failure = error
+                driveLog("persist failed session=$sessionId rows=${points.size} error=${error.javaClass.simpleName}:${error.message}")
             }
         }
     }

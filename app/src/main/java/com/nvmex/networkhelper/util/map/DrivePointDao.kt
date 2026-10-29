@@ -32,7 +32,7 @@ interface DrivePointDao {
     @Query("SELECT * FROM drive_sessions WHERE sessionId = :sessionId")
     suspend fun getSession(sessionId: String): DriveSessionEntity?
 
-    @Query("SELECT * FROM drive_points WHERE sessionId = :sessionId ORDER BY ts ASC, id ASC LIMIT 1")
+    @Query("SELECT * FROM drive_points WHERE sessionId = :sessionId AND lat IS NOT NULL AND lng IS NOT NULL ORDER BY ts ASC, id ASC LIMIT 1")
     suspend fun getFirstPoint(sessionId: String): DrivePointEntity?
 
     @Query("UPDATE drive_sessions SET cityName = :city WHERE sessionId = :sessionId AND cityName = ''")

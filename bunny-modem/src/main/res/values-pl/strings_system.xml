@@ -1,0 +1,41 @@
+<resources>
+    <string name="system_notify_channel_name">Aktywne blokady</string>
+    <string name="system_notify_channel_description">Pokazuje, które pasma, komórki i sieci są zablokowane.</string>
+    <string name="system_notify_title">bunnylock: blokada aktywna</string>
+    <string name="system_notify_line_separator">", "</string>
+    <string name="system_notify_line_bands">%1$s: %2$s</string>
+    <string name="system_notify_line_network">Sieć: %1$s</string>
+    <string name="system_notify_line_lte_cell">Komórka LTE: %1$s</string>
+    <string name="system_notify_line_nr_cell">Komórka NR: %1$s</string>
+    <string name="system_notify_line_legacy_cell">Komórka 2G/3G: %1$s</string>
+
+    <string name="system_helper_not_running">Proces pomocniczy nie działa, więc nic nie zmieniono. Łączenie ponownie…</string>
+    <string name="system_at_replied">Modem odpowiedział. Wynik jest poniżej.</string>
+    <string name="system_qmi_replied">Wysłano komunikat 0x%1$04X. Odpowiedź modemu: %2$s.</string>
+    <string name="system_clip_label_diagnostics">Dane diagnostyczne bunnylock</string>
+    <string name="system_diagnostics_copied">Dane diagnostyczne skopiowane do schowka.</string>
+
+    <string name="system_shizuku_step_root">Prośba o dostęp roota…</string>
+    <string name="system_shizuku_step_looking">Szukanie Shizuku…</string>
+    <string name="system_shizuku_step_connecting">Łączenie z Shizuku. Jeśli pojawi się pytanie, zezwól na dostęp…</string>
+
+    <string name="system_shizuku_root_failed">Brak dostępu roota: %1$s</string>
+    <string name="system_shizuku_root_denied">Odmówiono dostępu roota.</string>
+    <string name="system_shizuku_not_installed">Nie ma też Shizuku. Przyznaj dostęp roota albo zainstaluj i uruchom Shizuku, a potem spróbuj ponownie.</string>
+    <string name="system_shizuku_not_running">Shizuku jest zainstalowane, ale nie połączyło się z aplikacją, więc pewnie nie jest uruchomione. Zajrzyj do Shizuku i spróbuj ponownie.</string>
+    <string name="system_shizuku_failed">Shizuku też nie zadziałało: %1$s</string>
+    <string name="system_shizuku_failed_no_reason">Shizuku też nie zadziałało (bez podania przyczyny).</string>
+
+    <string name="system_shizuku_lost">Usługa Shizuku się zatrzymała. Spróbuj ponownie, żeby ją uruchomić.</string>
+    <string name="system_shizuku_too_old">Ta wersja Shizuku jest za stara. Zaktualizuj Shizuku i spróbuj ponownie.</string>
+    <string name="system_shizuku_stopped">Shizuku przestało działać.</string>
+    <string name="system_shizuku_no_shell">Shizuku nie może otworzyć powłoki (%1$s).</string>
+    <string name="system_shizuku_denied_earlier">Dostęp w Shizuku został wcześniej odrzucony. Zezwól aplikacji bunnylock w Shizuku i spróbuj ponownie.</string>
+    <string name="system_shizuku_denied">Odmówiono dostępu w Shizuku.</string>
+    <string name="system_shizuku_prompt_unanswered">Brak odpowiedzi na prośbę o uprawnienie Shizuku. Jeśli okno się nie pojawiło, zezwól aplikacji bunnylock w Shizuku i wróć tutaj.</string>
+    <string name="system_shizuku_service_no_response">Usługa Shizuku wystartowała, ale nie odpowiada.</string>
+    <string name="system_shizuku_service_start_timeout">Usługa Shizuku nie uruchomiła się na czas.</string>
+    <string name="system_shizuku_service_not_running">Usługa Shizuku nie działa.</string>
+    <string name="system_shizuku_service_timeout">Usługa Shizuku nie odpowiedziała na czas.</string>
+    <string name="system_shizuku_service_died">Usługa Shizuku nieoczekiwanie się zatrzymała.</string>
+</resources>

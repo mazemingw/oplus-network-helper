@@ -1,0 +1,44 @@
+<resources>
+    <string name="backend_qualcomm">Qualcomm QMI</string>
+    <string name="backend_mediatek">MediaTek AT</string>
+    <string name="backend_pixel">Pixel (Tensor NV)</string>
+    <string name="backend_android">Android radio HAL</string>
+
+    <string name="net_mode_auto">Auto</string>
+    <string name="net_mode_nr_lte">5G and 4G</string>
+    <string name="net_mode_nr_only">5G only</string>
+    <string name="net_mode_lte_only">4G only</string>
+    <string name="net_mode_no_nr">No 5G</string>
+    <string name="net_mode_wcdma_only">3G only</string>
+    <string name="net_mode_gsm_only">2G only</string>
+
+    <string name="nr_mode_both">SA and NSA</string>
+    <string name="nr_mode_nsa">NSA only</string>
+    <string name="nr_mode_sa">SA only</string>
+
+    <string name="lock_rat_lte">LTE</string>
+    <string name="lock_rat_nr">5G NR</string>
+    <string name="lock_rat_nsa">LTE and NR</string>
+
+    <string name="vendor_qualcomm">Qualcomm Snapdragon</string>
+    <string name="vendor_mediatek">MediaTek</string>
+    <string name="vendor_tensor">Google Tensor (Shannon modem)</string>
+    <string name="vendor_exynos">Samsung Exynos (Shannon modem)</string>
+    <string name="vendor_unisoc">Unisoc</string>
+    <string name="vendor_unknown">Unknown modem</string>
+
+    <string name="plmn_home">Home</string>
+    <string name="plmn_current">Current</string>
+    <string name="plmn_visible">Visible</string>
+
+    <string name="list_separator">", "</string>
+    <string name="list_and">%1$s and %2$s</string>
+    <string name="list_or">%1$s or %2$s</string>
+
+    <string name="helper_root">root helper</string>
+    <string name="helper_shizuku">Shizuku helper</string>
+
+    <string name="verbatim" translatable="false">%1$s</string>
+
+    <string name="something_went_wrong">Something went wrong.</string>
+</resources>

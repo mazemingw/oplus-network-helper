@@ -1,0 +1,44 @@
+<resources>
+    <string name="aosp_sentences">%1$s%2$s</string>
+    <string name="aosp_with_details">%1$s（%2$s）</string>
+    <string name="aosp_unknown_error">未知错误</string>
+
+    <string name="aosp_no_method">当前 Android 版本没有 ITelephony.%1$s。</string>
+
+    <string name="aosp_held_back">Android 暂时关闭了 %1$s：%2$s。</string>
+    <string name="aosp_held_back_power">省电已开启（省电模式或自适应连接）</string>
+    <string name="aosp_held_back_carrier">运营商配置不含 %1$s</string>
+    <string name="aosp_held_back_2g">“允许 2G”已关闭</string>
+
+    <string name="aosp_plmn_not_registered">无法注册到 %1$s %2$s。该网络可能不在覆盖范围内，或不允许这张 SIM 卡接入。</string>
+
+    <string name="aosp_mode_refused">射频拒绝了该网络模式。</string>
+    <string name="aosp_mode_refused_restored">射频拒绝了该网络模式，已恢复之前的模式。</string>
+    <string name="aosp_mode_refused_radio_off">关闭射频后，该网络模式仍被拒绝。</string>
+
+    <string name="aosp_nr_dc_unavailable">射频暂时不可用。</string>
+    <string name="aosp_nr_dc_error">射频返回错误，可能不支持切换 EN-DC。</string>
+    <string name="aosp_nr_dc_refused">射频不接受该 EN-DC 状态。</string>
+    <string name="aosp_nr_dc_code">射频返回错误 %1$d。</string>
+
+    <string name="aosp_no_subscription">Android 没有这张 SIM 卡的有效订阅，无法下发锁定。请检查 SIM 卡已插入并启用，且 bunnylock 已获得“电话”权限。</string>
+    <string name="aosp_channels_rejected">Android 射频服务拒绝了这次锁定。</string>
+    <string name="aosp_channels_rejected_fewer">Android 射频服务拒绝了这次锁定。在这台手机上，选择不超过 %1$d 个频段或许可行。</string>
+    <string name="aosp_channels_rejected_split">Android 射频服务拒绝了这次锁定，按每组 %1$d 个频段拆分后仍被拒绝。在这台手机上，选择不超过 %1$d 个频段或许可行。</string>
+    <string name="aosp_channels_not_started">Android 射频服务无法启动锁定。</string>
+
+    <string name="aosp_reboot_refused">射频 HAL 拒绝重启基带。</string>
+    <string name="aosp_no_sim_radio_restart">当前 Android 版本无法单独重启一张 SIM 卡的移动网络。</string>
+    <string name="aosp_sim_radio_off">这张 SIM 卡的射频已关闭。</string>
+    <string name="aosp_radio_not_on">射频无法重新开启：%1$s。</string>
+    <string name="aosp_radio_not_off">射频无法关闭：%1$s。</string>
+
+    <string name="sys_samsung_menu_denied">这台手机只允许三星自家应用打开频段菜单，因此需要 Root。</string>
+    <string name="sys_samsung_menu_missing">这台手机上找不到三星频段菜单。</string>
+
+    <string name="samsung_no_nr_mode">这台手机没有三星的 5G 模式控制。</string>
+    <string name="samsung_nr_mode_refused">三星电话服务不接受该 5G 模式。</string>
+
+    <string name="server_unknown_subscription">无法识别这张 SIM 卡的订阅。</string>
+    <string name="server_unknown_command">未知命令：%1$s。</string>
+</resources>

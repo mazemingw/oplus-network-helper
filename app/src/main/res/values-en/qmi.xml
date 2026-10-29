@@ -23,10 +23,10 @@
     <string name="qmi_cell_refresh">Refresh</string>
     <string name="qmi_cell_serving">Current serving</string>
     <string name="qmi_cell_frequency_only">Frequency only, no PCI</string>
-    <string name="qmi_nr_ca_frequency_note">QMI secondary frequencies · PCI, bandwidth and activity unavailable</string>
+    <string name="qmi_nr_ca_frequency_note">QMI primary and secondary frequencies · secondary PCI, bandwidth and activity unavailable</string>
     <string name="qmi_read">Read / refresh</string>
     <string name="qmi_reset_session">Reset session</string>
-    <string name="qmi_session_reset_done">Session reset and current state loaded</string>
+    <string name="qmi_session_reset_done">Backend services released successfully</string>
     <string name="qmi_session_conflict_recovered">Band Menu and its conflicting daemon stopped; session restored</string>
     <string name="qmi_clients_exhausted">Modem client IDs are exhausted. Try Reset session; if it still fails, close other band-control tools.</string>
     <string name="qmi_reading">Communicating with the modem…</string>
@@ -41,7 +41,7 @@
     <string name="qmi_mainland_mode">Mainland China mode</string>
     <string name="qmi_mainland_operator">Operator %1$s / %2$s · mainland band rules</string>
     <string name="qmi_mainland_unknown">No matching mainland carrier rule; showing hardware-supported bands</string>
-    <string name="qmi_active_band">Serving or active carrier</string>
+    <string name="qmi_active_band">Serving or configured aggregation band</string>
     <string name="qmi_active_legend">Antenna icon: active band · Solid fill and check: lock target</string>
     <string name="qmi_target_waiting">Settings read back; waiting for registration on a target band…</string>
     <string name="qmi_target_registered">Registration observed on target bands: %1$s</string>
@@ -111,4 +111,22 @@
     <string name="qmi_cell_registered">Target cell registration confirmed: %1$s</string>
     <string name="qmi_cell_current">Current</string>
     <string name="network_cell_timeline_channel">Channel</string>
+    <string name="qmi_quick_title">Quick lock · SIM %1$d</string>
+    <string name="qmi_quick_confirm">%1$s\nOpen the control panel and prepare a lock for this SIM?</string>
+    <string name="qmi_quick_cell">Cell</string>
+    <string name="qmi_quick_band">Band</string>
+    <string name="qmi_quick_cell_missing">This record lacks complete parameters for a cell lock.</string>
+    <string name="qmi_quick_ready">SIM %1$d target prepared. Tap Lock to execute.</string>
+    <string name="qmi_quick_sim_changed">The target SIM subscription changed. Select it again from Home.</string>
+    <string name="qmi_cell_locked">Locked</string>
+    <string name="qmi_current_serving">Serving: %1$s</string>
+    <string name="qmi_timeline_neighbors">Live neighbor cells</string>
+    <string name="qmi_neighbor_cell">NB</string>
+    <string name="qmi_rx_unreported">N/A</string>
+    <string name="qmi_combined_nr_short">Merge SA/NSA</string>
+    <string name="qmi_mainland_mode_short">Mainland</string>
+    <string name="qmi_current_lock_summary">Cell: %1$s  RAT: %2$s</string>
+    <string name="qmi_summary_locked">Locked</string>
+    <string name="qmi_summary_unlocked">Unlocked</string>
+    <string name="qmi_summary_unknown">Unknown</string>
 </resources>

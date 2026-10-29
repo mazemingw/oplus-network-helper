@@ -8,7 +8,7 @@ internal class DeadReckoningEngine {
     enum class Calibration { FIX_REQUIRED, COLLECTING, READY }
     data class Reading(val mode: Mode, val lat: Double? = null, val lng: Double? = null,
         val speedMps: Double? = null, val bearing: Double? = null, val uncertaintyMeters: Double? = null,
-        val outageMillis: Long = 0)
+        val outageMillis: Long = 0, val measuredAtMillis: Long = -1, val reason: String = "ok")
     private data class Motion(val from: Long, val to: Long, val east: Double, val north: Double, val turn: Double)
 
     var enabled = false
@@ -165,17 +165,31 @@ internal class DeadReckoningEngine {
     fun isReady(now: Long): Boolean = enabled && calibration == Calibration.READY && headingAligned && sensorsReliable &&
         fixAt >= 0 && now - fixAt in 0..maxOutageMs && sensorAt >= 0 && now - sensorAt in 0..1000
 
+    fun diagnostic(now: Long): String = "imuReady=${isReady(now)} calibration=$calibration enabled=$enabled " +
+        "reliable=$sensorsReliable aligned=$headingAligned gpsAt=$fixAt gpsAgeMs=${if (fixAt >= 0) now - fixAt else -1} " +
+        "sensorAgeMs=${if (sensorAt >= 0) now - sensorAt else -1} limitMs=$maxOutageMs"
+
     fun reading(now: Long): Reading {
-        if (sensorAt >= 0 && now - sensorAt > 1000) resetSensors()
-        if (fixAt < 0) return Reading(Mode.NO_FIX)
+        val sensorExpired = sensorAt >= 0 && now - sensorAt > 1000
+        if (sensorExpired) resetSensors()
+        if (fixAt < 0) return Reading(Mode.NO_FIX, reason = "no_gps_anchor")
         val age = now - fixAt
-        if (age in 0..3000) return Reading(Mode.GPS, fixLat, fixLng, fixSpeed, fixBearing, fixAccuracy)
-        if (!enabled || calibration != Calibration.READY || !headingAligned || !sensorsReliable ||
-            sensorAt < fixAt || now - sensorAt !in 0..1000 || age !in 3001..maxOutageMs) return Reading(Mode.NO_FIX)
+        if (age in 0..3000) return Reading(Mode.GPS, fixLat, fixLng, fixSpeed, fixBearing, fixAccuracy,
+            age, fixAt)
+        val refusal = when {
+            !enabled -> "inertial_disabled"
+            !sensorsReliable -> "sensors_unreliable"
+            sensorExpired -> "imu_stale"
+            calibration != Calibration.READY || !headingAligned -> "imu_not_calibrated"
+            sensorAt < fixAt || now - sensorAt !in 0..1000 -> "imu_stale"
+            age !in 3001..maxOutageMs -> "configured_outage_limit"
+            else -> null
+        }
+        if (refusal != null) return Reading(Mode.NO_FIX, outageMillis = age, reason = refusal)
         val seconds = age / 1000.0
         // Drift indicator only, not a measured confidence radius.
         val uncertainty = fixAccuracy + 0.5 * seconds + 0.04 * seconds.pow(2)
-        return Reading(Mode.ESTIMATED, lat, lng, speed, heading, uncertainty, age)
+        return Reading(Mode.ESTIMATED, lat, lng, speed, heading, uncertainty, age, positionAt)
     }
 
     private fun courseBetween(aLat: Double, aLng: Double, bLat: Double, bLng: Double): Double {

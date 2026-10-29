@@ -1,0 +1,44 @@
+<resources>
+    <string name="aosp_sentences">%1$s %2$s</string>
+    <string name="aosp_with_details">%1$s (%2$s)</string>
+    <string name="aosp_unknown_error">unknown error</string>
+
+    <string name="aosp_no_method">This Android version doesn\'t offer ITelephony.%1$s.</string>
+
+    <string name="aosp_held_back">Android keeps %1$s off for now: %2$s.</string>
+    <string name="aosp_held_back_power">power saving (Battery Saver or Adaptive connectivity) is on</string>
+    <string name="aosp_held_back_carrier">the carrier settings leave out %1$s</string>
+    <string name="aosp_held_back_2g">the \"Allow 2G\" setting is off</string>
+
+    <string name="aosp_plmn_not_registered">Couldn\'t register on %1$s %2$s. The network may be out of range, or it may not allow this SIM.</string>
+
+    <string name="aosp_mode_refused">The radio refused this network mode.</string>
+    <string name="aosp_mode_refused_restored">The radio refused this network mode. The previous network mode was put back.</string>
+    <string name="aosp_mode_refused_radio_off">The radio refused the network mode with the radio off.</string>
+
+    <string name="aosp_nr_dc_unavailable">The radio isn\'t available right now.</string>
+    <string name="aosp_nr_dc_error">The radio returned an error. It may not support switching EN-DC.</string>
+    <string name="aosp_nr_dc_refused">The radio didn\'t accept that EN-DC state.</string>
+    <string name="aosp_nr_dc_code">The radio returned error %1$d.</string>
+
+    <string name="aosp_no_subscription">Android has no active subscription for this SIM, so there is nothing to send the lock to. Check that the SIM is inserted and switched on, and that bunnylock has the Phone permission.</string>
+    <string name="aosp_channels_rejected">Android\'s radio service rejected the channel lock.</string>
+    <string name="aosp_channels_rejected_fewer">Android\'s radio service rejected the channel lock. Selecting %1$d or fewer bands may work on this phone.</string>
+    <string name="aosp_channels_rejected_split">Android\'s radio service rejected the channel lock, also with the bands split into groups of %1$d. Selecting %1$d or fewer bands may work on this phone.</string>
+    <string name="aosp_channels_not_started">Android\'s radio service couldn\'t start the channel lock.</string>
+
+    <string name="aosp_reboot_refused">The radio HAL refused the modem reboot.</string>
+    <string name="aosp_no_sim_radio_restart">This Android version can\'t restart one SIM\'s radio.</string>
+    <string name="aosp_sim_radio_off">This SIM\'s radio is off.</string>
+    <string name="aosp_radio_not_on">The radio refused to turn back on: %1$s.</string>
+    <string name="aosp_radio_not_off">The radio refused to turn off: %1$s.</string>
+
+    <string name="sys_samsung_menu_denied">This phone only lets Samsung\'s own apps open its band menu, so it needs root.</string>
+    <string name="sys_samsung_menu_missing">Couldn\'t find the Samsung band menu on this phone.</string>
+
+    <string name="samsung_no_nr_mode">This phone doesn\'t have Samsung\'s 5G mode control.</string>
+    <string name="samsung_nr_mode_refused">Samsung\'s telephony service didn\'t accept that 5G mode.</string>
+
+    <string name="server_unknown_subscription">This SIM\'s subscription isn\'t known.</string>
+    <string name="server_unknown_command">Unknown command: %1$s.</string>
+</resources>

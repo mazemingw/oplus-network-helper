@@ -126,7 +126,7 @@ class DeadReckoningEngineTest {
         assertEquals(drive.latitude, reset.lat!!, 0.0000001)
     }
 
-    @Test fun expiresAfterSixtySecondsAndAfterSensorInterruption() {
+    @Test fun honorsExplicitOneMinuteSettingAndExpiresAfterSensorInterruption() {
         val drive = Drive()
         drive.engine.maxOutageMs = 60_000
         drive.warmup()

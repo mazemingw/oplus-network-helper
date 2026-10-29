@@ -1,0 +1,42 @@
+<resources>
+    <string name="backend_qualcomm">Qualcomm QMI</string>
+    <string name="backend_mediatek">MediaTek AT</string>
+    <string name="backend_pixel">Pixel (Tensor NV)</string>
+    <string name="backend_android">HAL radia Androida</string>
+
+    <string name="net_mode_auto">Auto</string>
+    <string name="net_mode_nr_lte">5G i 4G</string>
+    <string name="net_mode_nr_only">Tylko 5G</string>
+    <string name="net_mode_lte_only">Tylko 4G</string>
+    <string name="net_mode_no_nr">Bez 5G</string>
+    <string name="net_mode_wcdma_only">Tylko 3G</string>
+    <string name="net_mode_gsm_only">Tylko 2G</string>
+
+    <string name="nr_mode_both">SA i NSA</string>
+    <string name="nr_mode_nsa">Tylko NSA</string>
+    <string name="nr_mode_sa">Tylko SA</string>
+
+    <string name="lock_rat_lte">LTE</string>
+    <string name="lock_rat_nr">5G NR</string>
+    <string name="lock_rat_nsa">LTE + NR</string>
+
+    <string name="vendor_qualcomm">Qualcomm Snapdragon</string>
+    <string name="vendor_mediatek">MediaTek</string>
+    <string name="vendor_tensor">Google Tensor (modem Shannon)</string>
+    <string name="vendor_exynos">Samsung Exynos (modem Shannon)</string>
+    <string name="vendor_unisoc">Unisoc</string>
+    <string name="vendor_unknown">Nieznany modem</string>
+
+    <string name="plmn_home">Sieć macierzysta</string>
+    <string name="plmn_current">Bieżąca sieć</string>
+    <string name="plmn_visible">Widoczna sieć</string>
+
+    <string name="list_separator">", "</string>
+    <string name="list_and">%1$s i %2$s</string>
+    <string name="list_or">%1$s lub %2$s</string>
+
+    <string name="helper_root">Proces pomocniczy roota</string>
+    <string name="helper_shizuku">Proces pomocniczy Shizuku</string>
+
+    <string name="something_went_wrong">Coś poszło nie tak.</string>
+</resources>

@@ -60,6 +60,7 @@ fun NetworkPanelTabs(
     onShowBandHelp: () -> Unit,
     onLaunchEngineerMode: (() -> Unit)? = null,
     onOpenEngineerBandLock: (() -> Unit)? = null,
+    onQuickLock: ((com.nvmex.networkhelper.util.qmi.QmiQuickLockRequest) -> Unit)? = null,
     onOpenSignalComparison: () -> Unit = {},
     onAllStates: ((Map<Int, NetworkPanelUiState>) -> Unit)? = null,
     overrideStates: Map<Int, NetworkPanelUiState>? = null,
@@ -74,6 +75,10 @@ fun NetworkPanelTabs(
     val sims by vm.sims.collectAsState()
     val frame by vm.frame.collectAsState()
     val cellTimelineBySubId by vm.cellTimelineBySubId.collectAsState()
+    val radios by vm.qmiBySlot.collectAsState()
+    val rxGroups by vm.qmiRxBySlot.collectAsState()
+    val qmiErrors by vm.qmiErrors.collectAsState()
+    val qmiLoading by vm.qmiLoading.collectAsState()
     val liveStates = frame.data
     val dds by vm.dataSubId.collectAsState()
 
@@ -106,7 +111,8 @@ fun NetworkPanelTabs(
     }
 
     val currentSubId = panelSubIds[pagerState.currentPage]
-    QmiRadioObservation(vm, sims.firstOrNull { it.subscriptionId == currentSubId }?.simSlotIndex?.plus(1), overrideStates == null, currentSubId)
+    QmiRadioObservation(vm, sims.firstOrNull { it.subscriptionId == currentSubId }?.simSlotIndex?.plus(1), overrideStates == null,
+        currentSubId, includeRx = settings.rxMeasurementsExpanded)
     val currentState = states[currentSubId] ?: NetworkPanelUiState(lastError = "加载中...", subId = currentSubId)
     LaunchedEffect(currentSubId, currentState.updatedAt) {
         onCurrentState(currentState)
@@ -261,14 +267,22 @@ fun NetworkPanelTabs(
 
         HorizontalPager(
             state = pagerState,
+            verticalAlignment = Alignment.Top,
             modifier = Modifier.fillMaxWidth()
         ) { page ->
             val subId = panelSubIds[page]
             val s = states[subId] ?: NetworkPanelUiState(lastError = "加载中...", subId = subId)
+            val slot = sims.firstOrNull { it.subscriptionId == subId }?.simSlotIndex?.takeIf { it in 0..1 }
+            val now = System.currentTimeMillis()
+            val freshRadio = slot?.let { radios[it] }?.takeIf { now - it.updatedAt in 0..12000 }
             NetworkPanelContent(
                 modifier = Modifier.fillMaxWidth(),
                 s = s,
                 liveCellTimeline = cellTimelineBySubId[subId].orEmpty(),
+                timelineNeighbors = if (overrideStates == null) com.nvmex.networkhelper.util.qmi.qmiTimelineNeighbors(freshRadio, s, slot, now) else emptyList(),
+                lockSnapshot = if (overrideStates == null) freshRadio else null,
+                quickLockSim = sims.firstOrNull { it.subscriptionId == subId }?.simSlotIndex?.takeIf { it in 0..1 }?.plus(1),
+                onQuickLock = if (overrideStates == null && isQualcommPlatform) onQuickLock else null,
                 onRecordCellTimeline = { point -> vm.recordCellTimeline(subId, point) },
                 showNrBandwidth = subId == dds || overrideStates != null,
                 onBandHelp = onShowBandHelp,
@@ -291,6 +305,11 @@ fun NetworkPanelTabs(
                 rxLive = overrideStates == null,
                 rxActive = pagerState.settledPage == page,
                 rxExpanded = settings.rxMeasurementsExpanded,
+                rxSim = slot?.plus(1),
+                rxGroups = if (freshRadio != null) rxGroups[slot].orEmpty() else emptyList(),
+                rxError = qmiErrors[slot],
+                rxLoading = qmiLoading[slot] == true,
+                onRxRetry = vm::retryQmiMonitoring,
                 onRxExpandedChange = { setSettings(settings.copy(rxMeasurementsExpanded = it)) }
             )
         }

@@ -65,11 +65,15 @@ fun BandLockHelpDialog(
         finally { reading = false }
     }
     fun rows(domain: QmiBand, fallback: List<LockRow>): List<LockRow> {
-        if (hardware == null) return fallback
+        fun notes(rows: List<LockRow>) = rows.map { row ->
+            if (domain.rat == "nr" && row.band.uppercase() in setOf("N3", "N8"))
+                row.copy(noteRes = R.string.band_lock_note_uncommon) else row
+        }
+        if (hardware == null) return notes(fallback)
         val reference = fallback.mapNotNull { row -> row.band.drop(1).toIntOrNull()?.let { it to row } }.toMap()
         val bands = qmiHelpBandNumbers(domain, hardware?.get(domain), reference.keys, state.mcc, state.mnc)
-        return bands.sorted().map { band -> reference[band] ?: LockRow(
-            (if (domain.rat == "nr") "N" else "B") + band, "-", R.string.band_lock_note_common) }
+        return notes(bands.sorted().map { band -> reference[band] ?: LockRow(
+            (if (domain.rat == "nr") "N" else "B") + band, "-", R.string.band_lock_note_common) })
     }
 
     val currentNrBand = remember(state.cellType, state.band) {

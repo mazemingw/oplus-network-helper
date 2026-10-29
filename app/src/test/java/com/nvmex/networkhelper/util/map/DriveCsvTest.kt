@@ -18,7 +18,7 @@ class DriveCsvTest {
         val a = point(); val b = point(1)
         val snapshot = DriveStationSnapshot(rat = "NR", latitude = 31.1, longitude = 121.1, name = "服务站",
             sectors = listOf(DriveStationSector("68719476001", 8, 520830, 100, null, null, "服务站", 31.1, 121.1, 0)))
-        val station = DriveStationEntity(a.sessionId, 0, a.cellKey, a.ts, a.lat, a.lng, DriveStationJson.encode(snapshot))
+        val station = DriveStationEntity(a.sessionId, 0, a.cellKey, a.ts, a.lat!!, a.lng!!, DriveStationJson.encode(snapshot))
         val csv = DriveCsv.encode(listOf(a, b), listOf(station), "上海")
         val columns = CsvTable.decode(csv)
         assertEquals("1", columns[0]["sim_slot"]); assertEquals("2", columns[1]["sim_slot"])
@@ -46,7 +46,7 @@ class DriveCsvTest {
         assertEquals(1, p.simSlot)
         assertEquals(31.1, p.rawLat!!, 0.0)
         assertEquals("WGS84_IMPORTED", p.rawCoordType)
-        assertEquals(Gcj02.wgs84ToGcj02(31.1, 121.1).first, p.lat, 0.00000001)
+        assertEquals(Gcj02.wgs84ToGcj02(31.1, 121.1).first, p.lat!!, 0.00000001)
     }
     @Test fun invalidCoordinatesAndSlotsAndTimestampsRejectTheWholeFile() {
         listOf(listOf("bad", "1", "31", "121"), listOf("1000", "3", "31", "121"), listOf("1000", "1", "NaN", "121"), listOf("1000", "1", "91", "121")).forEach { row ->

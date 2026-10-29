@@ -5,13 +5,10 @@
 面向 Android 高通/联发科设备的网络与信号分析工具。应用包名为
 `com.nvmex.networkhelper`，使用 Jetpack Compose 构建，并包含独立的 VPN/热点功能模块。
 
-## 版本与安装包
+## 版本
 
-- 当前版本：`v1.5.9`（versionCode `59`）。
-- [v1.5.9 已签名 ARM64 安装包与发布说明](https://github.com/mazemingw/oplus-network-helper/releases/tag/v1.5.9)
-- [历史 v1.5.7-dev ARM64 安装包与发布说明](https://github.com/mazemingw/oplus-network-helper/releases/tag/v1.5.7-dev)（预发布）
+- 当前源码版本：`v1.6.1`（versionCode `61`）。
 - 架构：`arm64-v8a`
-- v1.5.9 APK SHA-256：`e2dc847d1c4fe4d7d02c309c7a218c9aaa22383e856a10fcc5696f77af8cee73`
 
 ## 主要功能
 
@@ -33,9 +30,11 @@ QMI 集成参照 [Fronsipswu/qcom-band-menu](https://github.com/Fronsipswu/qcom-
 - 频段草稿默认不勾选，按 NR SA、NR NSA、LTE、WCDMA、GSM 排列；制式决定相应卡片是否显示。频段按钮附频率或 SUL 标记，选中状态与当前驻留分别标识。“中国大陆模式”默认开启，按当前 SIM 注册运营商过滤可选频段。
 - 小区候选按邻区、近期驻留、LTE CA、当前服务排序，只保留有效 PCI 和完整参数；展开时冻结列表，显示 RSRP 短条及“当前”标记。NRCA 载波频点不作为小区锁定候选。
 - 首页与控制页共享各 SIM 的服务小区数据。锁定后核对基带读回及新的驻留采样，信息不足时提示未确认；解除小区锁定按实际活动锁定类型处理。锁小区时可选择同时限制制式，解除时恢复关联前设置。
+- 点击首页基站时域图记录，可确认快速锁小区或锁频段，携带实际 SIM 卡槽与订阅信息进入控制页。校验硬件与运营商规则后预填参数或选中频段，仍需手动点击“锁定”；FDD/TDD 默认 SCS 分别为 15/30 kHz，可继续手动调整。控制页按钮统一为矩形，小区类型与 SCS 选中时显示实色和勾选图标，锁定读回面板采用紧凑布局。
 - 浮动“锁定 / 解锁”按钮上方显示自动消失的状态提示。“重置通道”提供有界的会话恢复；遇到确认的 QMI 5 绑定冲突时，可停止经过身份验证的原作者应用后台，释放其客户端，不清除频段或小区锁。
-- 首页“可锁频段”继续打开运营商频段说明，优先使用真实硬件能力，获取失败才回退到内置列表。设置中的“旧式锁频”默认关闭，MTK 用户可尝试开启。
-- LTE CA 仅由 QMI 提供；NRCA 优先使用现有工程模式链路，降级到 QMI SCELL 频点，再无信息则留空。RX 测量嵌入网络面板，三个信号参数使用同一行彩色进度条。
+- 首页“可锁频段”继续打开运营商频段说明，优先使用真实硬件能力，获取失败才回退到内置列表；N3、N8 标为“不常见”。设置中的“旧式锁频”默认关闭，MTK 用户可尝试开启。
+- LTE CA 仅由 QMI 提供；NRCA 优先使用现有工程模式链路，降级到 QMI SCELL 频点，再无信息则留空。RX 测量嵌入网络面板，每条接收链紧凑排列，信号参数使用彩色进度条，PHASE 使用平滑动画的 24dp 填充饼图。
+- NRCA 标签展示转换后的频段，原始频点留在详情。时域图优先展示带有效 PCI 的邻区，否则回退驻留历史；邻区快照至少保持 3 秒，方便点击锁定。RX 固定接收链位置，并在同一 SIM 本次展开期间保留出现过的制式分组，缺失读数显示“未报告”，避免 2/4 天线或 LTE/NR 组变化使面板反复缩放。RX、CA 和邻区共用只读采集会话，暂时绑定失败时最多重连两次。
 
 详细数据来源、恢复边界、构建与真机验收要求见 [QMI 控制说明](docs/qmi-controls.md)；上游同步范围与许可证见 [同步记录](app/src/main/cpp/qmi/UPSTREAM.md) 和 [第三方声明](THIRD_PARTY_NOTICES.md)。
 
@@ -137,7 +136,7 @@ Windows PowerShell：
 .\gradlew.bat :app:testDebugUnitTest :app:assembleDebug
 ```
 
-2026-10-26 验证：Debug APK 构建成功；单元测试共 336 项，333 项通过、3 项因缺少本地真实样本跳过、0 失败。QMI 原生会话和恢复脚本另有独立模拟测试，命令见 [QMI 控制说明](docs/qmi-controls.md)。v1.5.9 Release 使用用户提供的已签名安装包，签名与 APK 版本检查通过；该轮未覆盖安装，双卡写入、锁定及实际驻留效果仍需真机验收。
+2026-10-26 验证：v1.6.0 Debug APK 构建成功；单元测试共 380 项，377 项通过、3 项因缺少本地真实样本跳过、0 失败。QMI 原生会话和恢复脚本另有独立模拟测试，命令见 [QMI 控制说明](docs/qmi-controls.md)。本轮仅保留本地测试包，未覆盖安装；快捷导航、双卡写入、锁定及实际驻留效果仍需真机验收。
 
 兼容修复的既有验证记录见 [2026-09-18 说明](docs/2026-09-18-compatibility-verification.md)；路测检查与手工测试步骤见 [路测地图说明](docs/drive-test-map.md)。
 
@@ -156,11 +155,41 @@ AMAP_API_KEY=你的高德Key
 
 ```text
 app/                  主应用模块
+bunny-modem/          bunnylock 后端与 Root/Shizuku 连接桥（GPL-3.0）
 vpnhotspot-mobile/    VPN/热点库模块
 gradle/               Gradle wrapper 与依赖版本
 docs/                 功能说明、验证记录与截图
 ```
 
+## 多后端驱动与开源致谢
+
+“频段与小区控制”增加 **驱动&设置** Tab，可选择原有高通 QMI，或 bunnylock
+提供的自动识别、高通 QMI、联发科 AT、Pixel、Android HAL 后端。页面包含重启移动
+网络、重启基带、清理通道、AT 控制台、设备信息和诊断日志，继续使用欧加助手自己的 UI。
+
+无 Root 路径需要安装、启动并授权 **Shizuku**。ADB 权限支持 Android HAL，以及设备
+实际提供的联发科 RIL AT 透传；并不代表所有手机都支持 PCI 锁定或直接访问高通 QMI。
+驱动切换会释放当前会话，保留已有锁定。“清理通道”会释放自己的服务；Root 可用时
+还会按包名及进程归属检查 qcom-band-menu 和 bunnylock 的后台，只清理确认身份的实例，
+不发送解锁命令、不重启系统 radio 服务。Root 下还会扫描实际 QRTR/QMUX 占用并校验
+第三方进程归属，不局限于这两个包名；清理后自动重连并刷新当前驱动。受内核或权限
+限制而无法检查的对象会单独提示。两类驱动复用同一个频段与小区控制 UI，按能力显示组件。
+
+诚挚感谢 [Fronsipswu/qcom-band-menu](https://github.com/Fronsipswu/qcom-band-menu)
+与 [btsearch/bunnylock](https://github.com/btsearch/bunnylock) 的作者及所有贡献者。
+感谢你们开放协议实现、后端和兼容经验，让欧加网络助手能够服务更多设备。
+页面和驱动列表使用两项目原图标标识来源，并提供 GitHub 链接。
+
+接入范围、来源版本和验证步骤见 [多后端驱动说明](docs/modem-backends.md)。
+
+清理后读回仍失败时，可在弹窗查看已知系统 NAS 使用组件的作用、状态与暂停影响，逐项暂停并验证，
+也可手动恢复。“驱动&设置”中的“替我决定”默认开启（预选后仍需确认），“自动恢复”默认关闭；
+开启后退出应用会恢复助手暂停前正在运行的组件，保留原先已停止的状态。
+详见 [系统通道恢复说明](docs/qmi-system-recovery.md)，组件身份与占用数量不能推广为所有固件的固定值。
+
 ## 许可证
 
 本项目原创代码采用 **Apache License 2.0**，详见 [LICENSE](LICENSE)。仓库还包含采用其他许可证的第三方代码；请阅读 [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md)，并保留相应的版权和许可证声明。
+
+`bunny-modem` 保留 GPL-3.0 许可和完整源码。包含该模块的组合应用按 GPL-3.0 条件分发；
+这不会移除原创文件已有的 Apache-2.0 声明。对应许可证见 [bunny-modem/LICENSE](bunny-modem/LICENSE)。

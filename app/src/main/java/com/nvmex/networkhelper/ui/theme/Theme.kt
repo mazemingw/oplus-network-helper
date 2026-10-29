@@ -5,6 +5,8 @@ import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalDensity
+import com.nvmex.networkhelper.ui.settings.fonts.displayDensity
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.sp
@@ -42,15 +44,16 @@ fun NetworkHelperTheme(
     val fontSizeLevel by FontSizeConfig.currentLevel.collectAsState()
 
     // 根据当前缩放比例创建字体样式
-    val scaledTypography = remember(fontSizeLevel) {
-        createScaledTypography(fontSizeLevel.scale)
-    }
-
+    val scaledTypography = remember { createScaledTypography(1f) }
+    val systemDensity = LocalDensity.current
+    val appDensity = remember(systemDensity, fontSizeLevel) { displayDensity(systemDensity, fontSizeLevel.scale) }
+    CompositionLocalProvider(LocalDensity provides appDensity) {
     MaterialTheme(
         colorScheme = colorScheme,
         typography = scaledTypography,  // 使用动态缩放的字体
         content = content
     )
+    }
 }
 
 // 创建带缩放的 Typography

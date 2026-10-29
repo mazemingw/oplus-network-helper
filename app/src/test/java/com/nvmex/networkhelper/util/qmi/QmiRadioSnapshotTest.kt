@@ -224,11 +224,11 @@ class QmiRadioSnapshotTest {
     @Test fun qmiNrCaContainsOnlyScellFrequenciesAndUnknownMetrics() {
         val snapshot = QmiRadioSnapshot(0, 1000, nrServingChannels = listOf(640000, 720000))
         val ca = qmiNrFrequencyFallback(snapshot, state(), 1001)!!
-        assertTrue(ca.frequencyOnly); assertEquals(1, ca.carriers.size)
-        assertEquals(720000, ca.carriers.single().dlArfcn)
-        assertEquals(-1, ca.carriers.single().pci)
-        assertEquals(-1, ca.carriers.single().dlStateRaw)
-        assertEquals(-1, ca.carriers.single().dlBwRaw)
+        assertTrue(ca.frequencyOnly); assertEquals(2, ca.carriers.size)
+        assertEquals(720000, ca.carriers.last().dlArfcn)
+        assertEquals(-1, ca.carriers.last().pci)
+        assertEquals(-1, ca.carriers.last().dlStateRaw)
+        assertEquals(-1, ca.carriers.last().dlBwRaw)
     }
 
     @Test fun nrFallbackRejectsStaleOtherServingAndSingleCarrierSnapshots() {
@@ -241,7 +241,7 @@ class QmiRadioSnapshotTest {
 
     @Test fun matchingQmiServingPciCanResolveAndroidVersusQmiChannelDifference() {
         val snapshot = QmiRadioSnapshot(0, 1000, nrServingChannels = listOf(640000, 720000), nrPrimaryChannel = 640000, nrPrimaryPci = 3)
-        assertEquals(720000, qmiNrFrequencyFallback(snapshot, state("640032"), 1001)!!.carriers.single().dlArfcn)
+        assertEquals(720000, qmiNrFrequencyFallback(snapshot, state("640032"), 1001)!!.carriers.last().dlArfcn)
         assertNull(qmiNrFrequencyFallback(snapshot.copy(nrPrimaryPci = 4), state("640032"), 1001))
     }
 

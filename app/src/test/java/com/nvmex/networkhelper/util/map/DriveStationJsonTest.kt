@@ -88,7 +88,7 @@ class DriveStationJsonTest {
         assertEquals("A", driveHistoryStationForPoint(rows, point)?.second?.name)
         val selected = driveHistoryStationForPoint(rows, point.copy(cellKey = "saved-B", snapshot = state.copy(ci = "25602")))!!
         assertEquals("B", selected.second.name)
-        val reference = servingStationReference(point.latLng.latitude, point.latLng.longitude)!!
+        val reference = servingStationReference(point.latLng!!.latitude, point.latLng!!.longitude)!!
         val distance = driveDistanceMeters(reference.latitude, reference.longitude, selected.second.latitude, selected.second.longitude)
         assertTrue(distance > 2000)
         assertNull(driveHistoryStationForPoint(rows, point.copy(cellKey = "missing", snapshot = state.copy(ci = "9999"))))

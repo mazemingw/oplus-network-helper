@@ -3,10 +3,26 @@ package com.nvmex.networkhelper.util.qmi
 import com.nvmex.networkhelper.model.network.NetworkPanelUiState
 import com.nvmex.networkhelper.util.network.LTE_GLOBAL_BANDS
 import com.nvmex.networkhelper.util.network.NR_GLOBAL_BANDS
+import com.nvmex.networkhelper.util.network.utils.nrArfcnToMhz
+import com.nvmex.networkhelper.model.network.NrCaCarrier
 import com.nvmex.networkhelper.xposed.translator.NrcaTranslator
 import java.util.Locale
 
 data class MainlandBandRule(val lte: Set<Int>, val nr: Set<Int>)
+
+/** Display-only frequency conversion. Ambiguous ranges retain every candidate band. */
+fun qmiNrBandsForChannel(channel: Int, mcc: String = "", mnc: String = ""): List<Int> {
+    if (channel !in 1..3279165) return emptyList()
+    val mhz = nrArfcnToMhz(channel)
+    val bands = NR_GLOBAL_BANDS.filter { it.duplex != "SUL" && mhz in it.dlLowMhz..it.dlHighMhz }
+        .map { it.band }.distinct().sorted()
+    val operatorBands = mainlandBandRule(mcc, mnc)?.nr
+    return bands.filter { operatorBands == null || it in operatorBands }.takeIf { it.isNotEmpty() } ?: bands
+}
+
+fun qmiNrCaBandLabel(carrier: NrCaCarrier, mcc: String = "", mnc: String = ""): String =
+    carrier.bandText.uppercase().takeIf { it.matches(Regex("N[0-9]+(?:/N[0-9]+)*")) }
+        ?: qmiNrBandsForChannel(carrier.dlArfcn, mcc, mnc).joinToString("/") { "N$it" }.ifEmpty { "N?" }
 
 /** User-defined mainland carrier plans, shared by the help dialog and both locking UIs. */
 fun mainlandBandRule(mcc: String, mnc: String): MainlandBandRule? {
@@ -70,8 +86,13 @@ fun qmiBandButtonLabel(domain: QmiBand, band: Int): String {
     return "$prefix$band $frequency"
 }
 
-data class QmiBandObservation(val bands: Map<QmiBand, Map<Int, Long>>, val sampleAt: Long) {
+data class QmiBandObservation(
+    val bands: Map<QmiBand, Map<Int, Long>>, val sampleAt: Long,
+    val reportedBands: Map<QmiBand, Set<Int>> = bands.mapValues { it.value.keys },
+) {
     fun active(domain: QmiBand): Set<Int> = bands[domain].orEmpty().keys
+    /** Serving + configured CA, including deactivated SCCs. This is not registration evidence. */
+    fun highlighted(domain: QmiBand): Set<Int> = reportedBands[domain].orEmpty()
 }
 
 private fun bandNumber(value: String): Int? = Regex("^(?:N|B|BAND)?\\s*(\\d+)$", RegexOption.IGNORE_CASE)
@@ -80,14 +101,19 @@ private fun bandNumber(value: String): Int? = Regex("^(?:N|B|BAND)?\\s*(\\d+)$",
 /** Registered serving cells plus active, fresh CA carriers of this physical slot. */
 fun qmiObserveBands(state: NetworkPanelUiState?, slot: Int, now: Long): QmiBandObservation {
     val observed = QmiBand.entries.associateWith { linkedMapOf<Int, Long>() }
+    val reported = QmiBand.entries.associateWith { linkedSetOf<Int>() }
     if (state == null) return QmiBandObservation(observed, 0)
     fun fresh(at: Long) = at > 0 && now - at in 0..12_000L
     fun add(domain: QmiBand, band: Int?, at: Long) {
-        if (band != null && fresh(at)) observed.getValue(domain)[band] = maxOf(observed.getValue(domain)[band] ?: 0, at)
+        if (band != null && fresh(at)) {
+            observed.getValue(domain)[band] = maxOf(observed.getValue(domain)[band] ?: 0, at)
+            reported.getValue(domain).add(band)
+        }
     }
     val mode = state.nrMode.uppercase(Locale.ROOT)
+    val nsa = mode.startsWith("NSA") || mode.endsWith("-NSA")
     val nrDomains = when {
-        mode.startsWith("NSA") -> listOf(QmiBand.NR_NSA)
+        nsa -> listOf(QmiBand.NR_NSA)
         mode == "SA" || mode.endsWith("-SA") -> listOf(QmiBand.NR_SA)
         else -> listOf(QmiBand.NR_SA, QmiBand.NR_NSA)
     }
@@ -102,11 +128,23 @@ fun qmiObserveBands(state: NetworkPanelUiState?, slot: Int, now: Long): QmiBandO
     }
     serving(state)
     state.nsaLteAnchor?.let { serving(it.copy(updatedAt = state.updatedAt)) }
-    if (mode.startsWith("NSA") && state.anchorAvailable) add(QmiBand.LTE, bandNumber(state.anchorBand), state.updatedAt)
+    if (nsa && state.anchorAvailable) add(QmiBand.LTE, bandNumber(state.anchorBand), state.updatedAt)
     state.nrCaInfo?.takeIf { it.slot == slot && fresh(it.updatedAt) }?.let { ca ->
-        ca.carriers.filter { it.dlStateRaw == 2 || it.ulStateRaw == 2 }.forEach { carrier ->
-            val band = bandNumber(carrier.bandText) ?: NrcaTranslator.bandShort(carrier.bandRaw).toIntOrNull()
-            nrDomains.forEach { add(it, band, ca.updatedAt) }
+        ca.carriers.forEach { carrier ->
+            val band = bandNumber(carrier.bandText) ?: if (!ca.frequencyOnly)
+                NrcaTranslator.bandShort(carrier.bandRaw).toIntOrNull()
+            else null
+            val configured = carrier.dlStateRaw in 1..2 || carrier.ulStateRaw in 1..2
+            if (configured || ca.frequencyOnly) {
+                // QMI frequency-only reports have no activation state. Highlight only an
+                // unambiguous display band; never reinterpret engineering ARFCNs as lock targets.
+                val displayBand = band ?: if (ca.frequencyOnly)
+                    bandNumber(qmiNrCaBandLabel(carrier, state.mcc, state.mnc)) else null
+                if (displayBand != null) nrDomains.forEach { reported.getValue(it).add(displayBand) }
+            }
+            if (!ca.frequencyOnly && (carrier.dlStateRaw == 2 || carrier.ulStateRaw == 2)) {
+                nrDomains.forEach { add(it, band, ca.updatedAt) }
+            }
         }
     }
     state.lteCaInfo?.takeIf { it.slot == slot && fresh(it.updatedAt) }?.let { ca ->
@@ -114,7 +152,7 @@ fun qmiObserveBands(state: NetworkPanelUiState?, slot: Int, now: Long): QmiBandO
             add(QmiBand.LTE, it.band ?: it.bandText?.let(::bandNumber), ca.updatedAt)
         }
     }
-    return QmiBandObservation(observed, state.updatedAt)
+    return QmiBandObservation(observed, state.updatedAt, reported)
 }
 
 /** Confirm only observed targets: accepted mask readback alone is not proof of registration. */

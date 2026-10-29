@@ -12,7 +12,7 @@ import java.io.File
 
 data class AppSettings(
     val enableSignalChart: Boolean = true,
-    val enableEChartsChart: Boolean = false,
+    val enableEChartsChart: Boolean = true,
     val autoRangeChart: Boolean = false,
     val enablePluginHelp: Boolean = true,
     val enableRealSignalIcon: Boolean = true,
@@ -57,7 +57,7 @@ object AppSettingsStore {
         val sp = context.getSharedPreferences(SP_NAME, Context.MODE_PRIVATE)
         return AppSettings(
             enableSignalChart = sp.getBoolean(KEY_ENABLE_CHART, true),
-            enableEChartsChart = sp.getBoolean(KEY_ENABLE_ECHARTS_CHART, false),
+            enableEChartsChart = sp.getBoolean(KEY_ENABLE_ECHARTS_CHART, true),
             autoRangeChart = sp.getBoolean(KEY_AUTO_RANGE, false),
             enablePluginHelp = sp.getBoolean(KEY_ENABLE_PLUGIN_HELP, true),
             enableRealSignalIcon = sp.getBoolean(KEY_ENABLE_REAL_SIGNAL_ICON, true),

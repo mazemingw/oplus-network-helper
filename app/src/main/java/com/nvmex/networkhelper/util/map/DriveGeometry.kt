@@ -9,22 +9,24 @@ internal fun driveDistanceMeters(lat1: Double, lon1: Double, lat2: Double, lon2:
 }
 
 internal data class DriveTrackFix(
-    val ts: Long, val lat: Double, val lng: Double, val segmentStart: Boolean = false
+    val ts: Long, val lat: Double?, val lng: Double?, val segmentStart: Boolean = false
 )
 
-private fun DriveTrackFix.valid() = lat.isFinite() && lng.isFinite() && abs(lat) <= 90 && abs(lng) <= 180
+private fun DriveTrackFix.valid() = lat != null && lng != null && lat.isFinite() && lng.isFinite() && abs(lat) <= 90 && abs(lng) <= 180
 
 private fun driveTrackCanJoin(a: DriveTrackFix, b: DriveTrackFix): Boolean {
     val seconds = (b.ts - a.ts) / 1000.0
     return a.valid() && b.valid() && !b.segmentStart && seconds in 0.001..120.0 &&
-        driveDistanceMeters(a.lat, a.lng, b.lat, b.lng) / seconds <= 100
+        driveDistanceMeters(a.lat!!, a.lng!!, b.lat!!, b.lng!!) / seconds <= 100
 }
 
 /** Both SIMs share a fix. Never count that fix twice or bridge separate recording segments. */
 internal fun driveTrackLength(fixes: List<DriveTrackFix>): Double = fixes
     .distinctBy { it.ts }.sortedBy { it.ts }.zipWithNext().sumOf { (a, b) ->
-        val distance = driveDistanceMeters(a.lat, a.lng, b.lat, b.lng)
-        if (!driveTrackCanJoin(a, b) || distance < 2) 0.0 else distance
+        if (!driveTrackCanJoin(a, b)) 0.0 else {
+            val distance = driveDistanceMeters(a.lat!!, a.lng!!, b.lat!!, b.lng!!)
+            if (distance < 2) 0.0 else distance
+        }
     }
 
 data class DriveCoverage(val totalMeters: Double = 0.0, val coveredMeters: Double = 0.0) {
@@ -39,7 +41,7 @@ internal fun driveTrackCoverage(fixes: List<DriveTrackFix>, matches: (Int) -> Bo
         val a = fixes[index - 1]
         val b = fixes[index]
         if (!driveTrackCanJoin(a, b)) continue
-        val distance = driveDistanceMeters(a.lat, a.lng, b.lat, b.lng)
+        val distance = driveDistanceMeters(a.lat!!, a.lng!!, b.lat!!, b.lng!!)
         if (distance < 2) continue
         total += distance
         if (matches(index - 1) && matches(index)) covered += distance

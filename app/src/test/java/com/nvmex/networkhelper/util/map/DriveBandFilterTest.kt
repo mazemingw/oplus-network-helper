@@ -69,7 +69,7 @@ class DriveBandFilterTest {
     @Test fun hiddenBandsSplitTheTrackRatherThanConnectingAcrossExcludedSamples() {
         val points = listOf(41, 41, 78, 41, 41, 28, 28).mapIndexed { i, band -> point(0, (i + 1) * 1000L, "NR", "$band") }
         val filter = DriveBandFilter(nr = setOf(41))
-        val fixes = points.map { DriveTrackFix(it.ts, it.latLng.latitude, it.latLng.longitude) }
+        val fixes = points.map { DriveTrackFix(it.ts, it.latLng!!.latitude, it.latLng!!.longitude) }
         assertEquals(listOf(listOf(0, 1), listOf(3, 4)), driveTrackSegments(fixes) { filter.matches(points[it].snapshot) })
         assertEquals(listOf(points.indices.toList()), driveTrackSegments(fixes))
         assertEquals(emptyList<List<Int>>(), driveTrackSegments(fixes) { false })

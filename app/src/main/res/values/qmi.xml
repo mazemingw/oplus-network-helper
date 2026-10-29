@@ -23,11 +23,11 @@
     <string name="qmi_cell_refresh">刷新</string>
     <string name="qmi_cell_serving">当前服务</string>
     <string name="qmi_cell_frequency_only">仅频点，无 PCI</string>
-    <string name="qmi_nr_ca_frequency_note">QMI 辅载波频点 · 未报告 PCI、带宽和激活状态</string>
+    <string name="qmi_nr_ca_frequency_note">QMI 主辅载波频点 · 辅载波未报告 PCI、带宽和激活状态</string>
     <string name="qmi_read">读取 / 刷新</string>
     <string name="qmi_reset_session">重置通道</string>
-    <string name="qmi_session_reset_done">通道已重置，已读取当前状态</string>
-    <string name="qmi_session_conflict_recovered">已停止原作者应用并释放其冲突后台，通道已恢复</string>
+    <string name="qmi_session_reset_done">已成功释放后端服务</string>
+    <string name="qmi_session_conflict_recovered">已成功释放后端服务</string>
     <string name="qmi_clients_exhausted">基带客户端 ID 已用尽。可尝试重置通道；若仍失败，请先退出其他锁频工具。</string>
     <string name="qmi_reading">正在与基带通信…</string>
     <string name="qmi_rats">允许的网络制式</string>
@@ -41,7 +41,7 @@
     <string name="qmi_mainland_mode">中国大陆模式</string>
     <string name="qmi_mainland_operator">运营商 %1$s / %2$s · 按大陆规则过滤</string>
     <string name="qmi_mainland_unknown">未匹配到大陆运营商规则，显示硬件支持频段</string>
-    <string name="qmi_active_band">当前驻留或活动载波</string>
+    <string name="qmi_active_band">当前驻留或已配置的聚合载波频段</string>
     <string name="qmi_active_legend">天线图标：当前频段 · 实色勾选：锁定目标</string>
     <string name="qmi_target_waiting">设置已读回，正在等待目标频段驻留…</string>
     <string name="qmi_target_registered">已观测到目标频段驻留：%1$s</string>
@@ -111,4 +111,22 @@
     <string name="qmi_cell_registered">已确认驻留到目标小区：%1$s</string>
     <string name="qmi_cell_current">当前</string>
     <string name="network_cell_timeline_channel">频点</string>
+    <string name="qmi_quick_title">快速锁定 · SIM %1$d</string>
+    <string name="qmi_quick_confirm">%1$s\n是否前往控制面板，为此 SIM 准备锁定？</string>
+    <string name="qmi_quick_cell">锁小区</string>
+    <string name="qmi_quick_band">锁频段</string>
+    <string name="qmi_quick_cell_missing">记录的小区参数不完整，无法快速锁小区。</string>
+    <string name="qmi_quick_ready">SIM %1$d 的目标已填入或选中，点击“锁定”即可执行。</string>
+    <string name="qmi_quick_sim_changed">目标 SIM 订阅已变化，请返回首页重新选择</string>
+    <string name="qmi_cell_locked">已锁定</string>
+    <string name="qmi_current_serving">当前：%1$s</string>
+    <string name="qmi_timeline_neighbors">实时邻区</string>
+    <string name="qmi_neighbor_cell">邻区</string>
+    <string name="qmi_rx_unreported">未报告</string>
+    <string name="qmi_combined_nr_short">合并 SA/NSA</string>
+    <string name="qmi_mainland_mode_short">大陆模式</string>
+    <string name="qmi_current_lock_summary">小区：%1$s  制式：%2$s</string>
+    <string name="qmi_summary_locked">锁定</string>
+    <string name="qmi_summary_unlocked">未锁定</string>
+    <string name="qmi_summary_unknown">未知</string>
 </resources>

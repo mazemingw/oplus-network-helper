@@ -28,9 +28,10 @@ internal class QmiSessionRecovery(private val context: Context) {
             val path = "'" + script.absolutePath.replace("'", "'\"'\"'") + "'"
             val result = SuShellRunner(mountMaster = true).execSu("sh $path ${Process.myUid() / 100000}", 15_000)
             if (result.code != 0) throw IOException("QMI session cleanup failed (${result.code}): ${result.err.takeLast(500)}")
-            val stopped = result.out.lineSequence().firstOrNull { it.startsWith("bandmenu_stopped=") }?.substringAfter('=')
-            if (stopped !in setOf("0", "1")) throw IOException("Invalid QMI session cleanup response")
-            return stopped == "1"
+            val stopped = result.out.lineSequence().filter { it.startsWith("bandmenu_stopped=") || it.startsWith("bunny_stopped=") }
+                .map { it.substringAfter('=') }.toList()
+            if (stopped.size != 2 || stopped.any { it !in setOf("0", "1") }) throw IOException("Invalid backend cleanup response")
+            return "1" in stopped
         } finally {
             script.delete()
         }

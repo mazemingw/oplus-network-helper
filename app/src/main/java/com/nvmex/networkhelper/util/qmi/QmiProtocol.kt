@@ -179,7 +179,7 @@ fun qmiCellCommand(input: QmiCellInput): JSONObject {
     fun number(text: String, range: LongRange, field: String): Long =
         text.trim().toLongOrNull()?.takeIf { it in range } ?: throw IllegalArgumentException(field)
     fun numbers(text: String, range: LongRange, max: Int, field: String): List<Long> {
-        val parts = text.trim().split(Regex("[,，\\s]+"))
+        val parts = text.trim().split(Regex("[,，\\s]+")).filter { it.isNotEmpty() }
         require(parts.size in 1..max) { field }
         return parts.map { number(it, range, field) }.distinct()
     }
@@ -200,11 +200,17 @@ fun qmiCellCommand(input: QmiCellInput): JSONObject {
     require(input.scs in setOf(15, 30, 60, 120, 240)) { "SCS" }
     if (input.mode == QmiCellMode.NR_ARFCN) return qmiCommand("nr_cell_lock_arfcn_set").put("arfcn", channel).put("scs_khz", input.scs)
     val band = number(input.band, 1L..512L, "NR band: 1–512")
-    val pcis = numbers(input.pcis, 0L..1007L, if (input.mode == QmiCellMode.NR_PCI) 1 else 64, "NR PCI: 0–1007")
+    val pcis = numbers(input.pcis, 0L..1007L, 64, "NR PCI: 0–1007 (max 64)")
+    require(input.mode != QmiCellMode.NR_PCI || pcis.size == 1) { "NR single PCI: select NR multi-PCI for multiple values" }
     return qmiCommand(if (input.mode == QmiCellMode.NR_PCI) "nr_cell_lock_pci_set" else "nr_cell_lock_multi_pci_set")
         .put("arfcn", channel).put("scs_khz", input.scs).put("band", band).apply {
             if (input.mode == QmiCellMode.NR_PCI) put("pci", pcis.single()) else put("pci_list", JSONArray(pcis))
         }
+}
+
+fun qmiCellWithPciText(input: QmiCellInput, text: String): QmiCellInput {
+    val multiple = text.split(Regex("[,，\\s]+")).count { it.isNotBlank() } > 1
+    return input.copy(pcis = text, mode = if (input.mode == QmiCellMode.NR_PCI && multiple) QmiCellMode.NR_MULTI_PCI else input.mode)
 }
 
 data class QmiRxChain(val index: Int, val tuned: Boolean, val power: Double?, val rsrp: Double?, val ecio: Double?, val rscp: Double?, val phase: Double?)

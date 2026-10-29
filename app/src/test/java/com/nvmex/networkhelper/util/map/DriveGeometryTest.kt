@@ -59,7 +59,7 @@ class DriveGeometryTest {
         val segments = driveTrackSegments(fixes)
         assertEquals(1, segments.size)
         assertEquals(fixes.indices.toList(), segments.single())
-        val dots = fixes.mapIndexed { i, p -> DriveDot(i, p.lat, p.lng, false) }
+        val dots = fixes.mapIndexed { i, p -> DriveDot(i, p.lat!!, p.lng!!, false) }
         assertTrue(selectDriveDots(dots, 10f, true, 1f).size < fixes.size)
         assertEquals(10000, fixes.size)
     }

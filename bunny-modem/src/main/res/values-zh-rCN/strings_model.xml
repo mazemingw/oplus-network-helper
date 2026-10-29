@@ -1,0 +1,42 @@
+<resources>
+    <string name="backend_qualcomm">高通 QMI</string>
+    <string name="backend_mediatek">联发科 AT</string>
+    <string name="backend_pixel">Pixel（Tensor NV）</string>
+    <string name="backend_android">Android 射频 HAL</string>
+
+    <string name="net_mode_auto">自动</string>
+    <string name="net_mode_nr_lte">5G/4G</string>
+    <string name="net_mode_nr_only">仅 5G</string>
+    <string name="net_mode_lte_only">仅 4G</string>
+    <string name="net_mode_no_nr">4G/3G/2G</string>
+    <string name="net_mode_wcdma_only">仅 3G</string>
+    <string name="net_mode_gsm_only">仅 2G</string>
+
+    <string name="nr_mode_both">SA/NSA</string>
+    <string name="nr_mode_nsa">仅 NSA</string>
+    <string name="nr_mode_sa">仅 SA</string>
+
+    <string name="lock_rat_lte">LTE</string>
+    <string name="lock_rat_nr">5G NR</string>
+    <string name="lock_rat_nsa">LTE + NR</string>
+
+    <string name="vendor_qualcomm">高通骁龙</string>
+    <string name="vendor_mediatek">联发科</string>
+    <string name="vendor_tensor">Google Tensor（三星 Shannon 基带）</string>
+    <string name="vendor_exynos">三星 Exynos（Shannon 基带）</string>
+    <string name="vendor_unisoc">紫光展锐</string>
+    <string name="vendor_unknown">未知基带</string>
+
+    <string name="plmn_home">归属网络</string>
+    <string name="plmn_current">当前网络</string>
+    <string name="plmn_visible">可见网络</string>
+
+    <string name="list_separator">、</string>
+    <string name="list_and">%1$s 和 %2$s</string>
+    <string name="list_or">%1$s 或 %2$s</string>
+
+    <string name="helper_root">Root 辅助进程</string>
+    <string name="helper_shizuku">Shizuku 辅助进程</string>
+
+    <string name="something_went_wrong">出了点问题。</string>
+</resources>

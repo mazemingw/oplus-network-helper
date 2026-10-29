@@ -1,0 +1,6 @@
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+    <application>
+        <activity android:name="com.nvmex.networkhelper.ui.menu.BackendUiProbeActivity"
+            android:exported="false" android:theme="@android:style/Theme.Material.Light.NoActionBar" />
+    </application>
+</manifest>

@@ -1,5 +1,5 @@
 #!/system/bin/sh
-# Release only the verified NAS daemon belonging to dev.qcom.bandmenu.
+# Discover and release verified competing backend services. Never clear modem locks.
 # No modem requests, preference setters, radio-service restarts, or global pkill.
 
 bandmenu_read_cmdline() {
@@ -79,4 +79,57 @@ bandmenu_recover() {
     return 18
 }
 
-bandmenu_recover "$@"
+bunny_matches() {
+    task_bunny_pid=$1
+    task_bunny_apk=$2
+    # A process name alone is not ownership evidence: our embedded helper uses
+    # the same class/name. Verify the installed APK in its environment or maps.
+    task_bunny_command=$(bandmenu_read_cmdline "$task_bunny_pid") || return 1
+    case "$task_bunny_command" in
+        'bunnylockd '*|'dev.ririxi.bunnylock:bunnylockd '*) ;;
+        *) return 1;;
+    esac
+    if dd if="/proc/$task_bunny_pid/environ" bs=65536 count=1 2>/dev/null |
+        tr '\000' '\n' | grep -F -x "CLASSPATH=$task_bunny_apk" >/dev/null; then return 0; fi
+    awk -v apk="$task_bunny_apk" '$NF == apk {found=1} END {exit !found}' "/proc/$task_bunny_pid/maps" 2>/dev/null
+}
+
+bunny_recover() {
+    task_user=${1:-0}
+    task_bunny_apk=$(cmd package path --user "$task_user" dev.ririxi.bunnylock 2>/dev/null |
+        sed -n 's/^package://p' | head -n 1)
+    case "$task_bunny_apk" in /data/app/*/base.apk) ;; *) echo 'bunny_stopped=0'; return 0;; esac
+    task_bunny_pids=''
+    task_bunny_candidates=$(ps -A -o PID,NAME | while read -r task_bunny_pid task_bunny_name task_bunny_extra; do
+        [ -z "$task_bunny_extra" ] || continue
+        case "$task_bunny_name" in bunnylockd|dev.ririxi.bunnylock:bunnylockd) ;;
+            *) continue;; esac
+        case "$task_bunny_pid" in ''|*[!0-9]*) continue;; esac
+        printf '%s\n' "$task_bunny_pid"
+    done)
+    for task_bunny_pid in $task_bunny_candidates; do
+        [ "$task_bunny_pid" -gt 1 ] || continue
+        bunny_matches "$task_bunny_pid" "$task_bunny_apk" && task_bunny_pids="$task_bunny_pids $task_bunny_pid"
+    done
+    [ -n "$task_bunny_pids" ] || { echo 'bunny_stopped=0'; return 0; }
+    am force-stop --user "$task_user" dev.ririxi.bunnylock || return 20
+    for task_bunny_pid in $task_bunny_pids; do
+        bunny_matches "$task_bunny_pid" "$task_bunny_apk" || continue
+        kill "$task_bunny_pid" || { [ ! -d "/proc/$task_bunny_pid" ] || return 21; }
+    done
+    task_bunny_attempt=0
+    while [ "$task_bunny_attempt" -lt 10 ]; do
+        task_bunny_remaining=0
+        for task_bunny_pid in $task_bunny_pids; do
+            bunny_matches "$task_bunny_pid" "$task_bunny_apk" && task_bunny_remaining=1
+        done
+        [ "$task_bunny_remaining" = 0 ] && { echo 'bunny_stopped=1'; return 0; }
+        sleep 0.1
+        task_bunny_attempt=$((task_bunny_attempt + 1))
+    done
+    echo 'Verified bunnylock service did not exit' >&2
+    return 22
+}
+
+bandmenu_recover "$@" || exit $?
+bunny_recover "$@"

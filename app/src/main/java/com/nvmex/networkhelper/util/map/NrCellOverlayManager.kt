@@ -40,6 +40,7 @@ class NrCellOverlayManager(
 ) {
     private val nearbyStationRows = HashMap<Marker, Pair<String, List<NrCellParamItem>>>()
     fun nearbyStation(marker: Marker): Pair<String, List<NrCellParamItem>>? = nearbyStationRows[marker]
+    fun stationMarker(key: String): Marker? = nearbyStationRows.entries.firstOrNull { it.value.first == key }?.key
     sealed interface QueryResult {
         data class Rendered(
             val stationCount: Int,

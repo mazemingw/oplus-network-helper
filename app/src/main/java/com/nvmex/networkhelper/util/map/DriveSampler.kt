@@ -20,14 +20,13 @@ import com.nvmex.networkhelper.util.map.matching.*
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
-import kotlinx.coroutines.delay
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 
-class DriveSampler(
+internal class DriveSampler(
     private val aMap: AMap,
     private val scope: CoroutineScope,
-    private val getLatLng: () -> LatLng?,
+    private val position: () -> DriveSamplePosition,
     private val snapshots: () -> Map<Int, NetworkPanelUiState>,
     private val density: Float,
 
@@ -53,10 +52,7 @@ class DriveSampler(
     private val resolvePersistSessionId: (() -> String?)? = null,
     private val onPersist: (suspend (List<DrivePoint>, String) -> Unit)? = null,
     private val persistEnabled: () -> Boolean = { true },
-    private val positionQuality: () -> Pair<Boolean, Float?> = { false to null },
     private val onPointSelected: ((DrivePoint) -> String?)? = null,
-    private val rawPosition: () -> Triple<Double?, Double?, String?> = { Triple(null, null, null) },
-    private val mapMatchJson: () -> String? = { null },
     private val onCoverageChanged: (DriveCoverage) -> Unit = {}
 ) {
 
@@ -67,12 +63,11 @@ class DriveSampler(
     private val writes = DrivePointWriteQueue<DrivePoint>(DrivePersistence.scope) { points, sid ->
         onPersist?.invoke(points, sid)
     }
-    private val lastCellKeyBySlot = HashMap<Int, String>()
+    private val sampling = DriveSamplingBatch()
     private val pointsBySlot = HashMap<Int, MutableList<DrivePoint>>()
     private var visibleSimSlot: Int = 0
     private var showHandovers = true
     private var bandFilter = DriveBandFilter()
-    private var segmentStartPending = true
     private var trackDirty = true
     private val trackLines = mutableListOf<Polyline>()
     private val contextTrackLines = mutableListOf<Polyline>()
@@ -94,12 +89,10 @@ class DriveSampler(
 
     fun start() {
         if (isRunning) return
-        segmentStartPending = true
+        sampling.startSegment()
         job = scope.launch(Dispatchers.Main.immediate) {
-            while (isActive) {
-                runCatching { sampleOnce() }
-                delay(sampleIntervalMs)
-            }
+            runDriveSamplingLoop({ isActive }, { sampleIntervalMs }, { sampleOnce() },
+                { driveLog("sample failed: ${it.message}") })
         }
     }
 
@@ -114,7 +107,7 @@ class DriveSampler(
 
     suspend fun awaitPersistence(): Throwable? = writes.awaitIdle()
 
-    fun captureNow() { runCatching { sampleOnce() } }
+    fun captureNow() { runCatching { sampleOnce() }.onFailure { driveLog("capture failed: ${it.message}") } }
 
     fun setHandoverVisible(visible: Boolean) {
         showHandovers = visible
@@ -130,15 +123,16 @@ class DriveSampler(
     }
 
     fun refreshVisibleMarkers() {
-        if (lastInfoMarker?.isRemoved == true) clearSelection()
+        refreshSelectedStationMarker()
         val points = pointsBySlot[visibleSimSlot].orEmpty()
         if (trackDirty) {
-            val fixes = points.map { DriveTrackFix(it.ts, it.latLng.latitude, it.latLng.longitude, it.segmentStart) }
+            val fixes = points.map { DriveTrackFix(it.ts, it.latLng?.latitude, it.latLng?.longitude, it.segmentStart) }
             onCoverageChanged(driveTrackCoverage(fixes) { bandFilter.matches(points[it].snapshot) })
             refreshTrackLines(points, fixes)
         }
         val bounds = runCatching { aMap.projection.visibleRegion.latLngBounds }.getOrNull()
         val dots = points.mapIndexedNotNull { index, p ->
+            if (p.latLng == null) return@mapIndexedNotNull null
             val position = displayPosition(p)
             if (!bandFilter.matches(p.snapshot) || (bounds != null && !bounds.contains(position))) null
             else DriveDot(index, position.latitude, position.longitude, p.isHandover)
@@ -167,7 +161,7 @@ class DriveSampler(
         markerQueue.clear()
         marker2Point.clear()
         pointsBySlot.clear()
-        lastCellKeyBySlot.clear()
+        sampling.clear()
         clearTrackLines()
         onCoverageChanged(DriveCoverage())
     }
@@ -245,9 +239,10 @@ class DriveSampler(
     fun recordedPoints(): List<DrivePoint> = pointsBySlot.values.flatten()
 
     private fun displayPosition(point: DrivePoint): LatLng = displayCoordinates.getOrPut(point) {
+        val raw = requireNotNull(point.latLng) // Only located samples reach marker/line rendering.
         val matched = if (point.estimated) null else falconRecordedPosition(point.mapMatchJson)
-        if (matched != null && driveDistanceMeters(point.latLng.latitude, point.latLng.longitude, matched.lat, matched.lng) <= 100)
-            LatLng(matched.lat, matched.lng) else point.latLng
+        if (matched != null && driveDistanceMeters(raw.latitude, raw.longitude, matched.lat, matched.lng) <= 100)
+            LatLng(matched.lat, matched.lng) else raw
     }
 
     /** Update cloud metadata and presentation only. The raw sample and coverage denominator stay intact. */
@@ -256,10 +251,11 @@ class DriveSampler(
         val updates = mutableListOf<FalconPointUpdate>()
         val replaced = mutableMapOf<Pair<Int, Long>, DrivePoint>()
         pointsBySlot.values.forEach { points ->
-            points.indices.forEach { i ->
+            for (i in points.indices) {
                 val point = points[i]
+                val coordinate = point.latLng ?: continue
                 val metadata = index.apply(point.mapMatchJson, point.ts,
-                    RoutePosition(point.latLng.latitude, point.latLng.longitude), (point.accuracyMeters ?: 100f).toDouble(), point.estimated)
+                    RoutePosition(coordinate.latitude, coordinate.longitude), (point.accuracyMeters ?: 100f).toDouble(), point.estimated)
                 if (metadata != null) {
                     val updated = point.copy(mapMatchJson = metadata)
                     points[i] = updated; displayCoordinates.remove(point)
@@ -281,71 +277,18 @@ class DriveSampler(
     }
 
     private fun sampleOnce() {
-        val ll = getLatLng() ?: return
-        val snapshotsNow = snapshots()
-        val ts = System.currentTimeMillis()
-        val batch = snapshotsNow.toSortedMap().map { (simSlot, s) ->
-            sampleOnce(simSlot, s, ll, ts)
+        val fix = position()
+        val batch = sampling.sample(System.currentTimeMillis(), snapshots(), fix)
+        batch.forEach { point ->
+            pointsBySlot.getOrPut(point.simSlot) { mutableListOf() }.add(point)
+            if (point.simSlot == visibleSimSlot) trackDirty = true
+            if (point.isHandover) runCatching { onHandover?.invoke(point.snapshot) }
         }
-        if (batch.isNotEmpty()) segmentStartPending = false
         val sid = resolvePersistSessionId?.invoke()
-        if (batch.isNotEmpty() && persistEnabled() && onPersist != null && !sid.isNullOrBlank()) {
-            writes.enqueue(batch, sid)
-        }
-        runCatching { refreshVisibleMarkers() }
-    }
-
-    private fun sampleOnce(simSlot: Int, s: NetworkPanelUiState, ll: LatLng, ts: Long): DrivePoint {
-
-        // === 计算 cellKey / handover ===
-        val key = DriveStyle.cellKey(s)
-        val prev = lastCellKeyBySlot[simSlot]
-
-        // 只有当 key 有意义且发生变化才算 handover
-        val hasKey = !key.isNullOrBlank() && key != "-"
-        val handover = hasKey && (prev != null) && (prev != key)
-
-        // ✅ handover 时触发回调（例如：查基站库并画红三角）
-        if (handover) {
-            runCatching { onHandover?.invoke(s) }
-        }
-
-        // 更新 lastCellKey：只有 key 有意义才更新，否则保持上一次，避免抖动
-        if (hasKey) lastCellKeyBySlot[simSlot] = key
-
-        // === 解析 RSRP（NR 优先 SS-RSRP）===
-        val rsrpDbm = DriveStyle.parseDbm(
-            if (s.cellType.equals("NR", true)) {
-                if (s.ssRsrp != "-" && s.ssRsrp.isNotBlank()) s.ssRsrp else s.rsrp
-            } else {
-                s.rsrp
-            }
-        )
-
-        val p = DrivePoint(
-            latLng = ll,
-            ts = ts,
-            simSlot = simSlot,
-            rsrpDbm = rsrpDbm,
-            isHandover = handover,
-            cellKey = if (hasKey) key else "",
-            snapshot = s,
-            estimated = positionQuality().first,
-            accuracyMeters = positionQuality().second,
-            segmentStart = segmentStartPending,
-            rawLat = rawPosition().first,
-            rawLng = rawPosition().second,
-            rawCoordType = rawPosition().third,
-            mapMatchJson = mapMatchJson()
-        )
-
-        pointsBySlot.getOrPut(simSlot) { mutableListOf() }.apply {
-            add(p)
-        }
-        if (simSlot == visibleSimSlot) trackDirty = true
-        // A paused/unready map must never prevent either SIM from being persisted.
-
-        return p
+        val persist = batch.isNotEmpty() && persistEnabled() && onPersist != null && !sid.isNullOrBlank()
+        if (persist) writes.enqueue(batch, sid!!)
+        driveLog("sample source=${fix.source} measuredAt=${fix.measuredAt} radio=${batch.size} located=${batch.count { it.latLng != null }} queued=$persist reason=${fix.reason}")
+        runCatching { refreshVisibleMarkers() }.onFailure { driveLog("render failed: ${it.message}") }
     }
 
     private fun trimIfNeeded() {
@@ -383,6 +326,22 @@ class DriveSampler(
     private var lastInfoMarker: Marker? = null
     private var lastMarkerClickTs: Long = 0L
     var onMapMarkerSelected: ((Marker?) -> Unit)? = null
+    var resolveStationMarker: (() -> Marker?)? = null
+
+    fun refreshSelectedStationMarker() {
+        val marker = lastInfoMarker ?: return
+        if (!marker.isRemoved) return
+        val replacement = if (marker2Point[marker] == null) resolveStationMarker?.invoke() else null
+        if (replacement != null && !replacement.isRemoved) selectStationMarker(replacement) else clearSelection()
+    }
+
+    fun selectStationMarker(marker: Marker) {
+        onMapMarkerSelected?.invoke(marker)
+        markerSelection.select(marker)
+        lastInfoMarker = marker
+        marker.showInfoWindow()
+    }
+
     fun clearSelection() {
         markerSelection.clear()
         lastInfoMarker = null
@@ -404,12 +363,9 @@ class DriveSampler(
             // ✅ 先识别“基站红三角”（LteCellOverlayManager 已设置 m.`object` = row）
             val tag = m.`object`
             if (tag != null && marker2Point[m] == null) {
-                onMapMarkerSelected?.invoke(m)
                 // 基站 marker：你在 addMarker 时已经塞了 title/snippet，
                 // 这里直接 show 就行（也可以在这里根据 tag 拼更详细的 snippet）
-                markerSelection.select(m)
-                lastInfoMarker = m
-                m.showInfoWindow()
+                selectStationMarker(m)
                 return@setOnMarkerClickListener true
             }
 
@@ -427,6 +383,7 @@ class DriveSampler(
                     "${metrics.rsrqLabel}=${metrics.rsrq?.let { "$it dB" } ?: "—"}  ${metrics.sinrLabel}=${metrics.sinr?.let { "$it dB" } ?: "—"}\n" +
                     "制式=${formatCellType(s.cellType, s.arfcn.toIntOrNull())}  网络=${s.dataNetworkType}\nTAC=${s.tac}  PCI=${s.pci}\nCI/NCI=${s.ci}\nARFCN=${s.arfcn}  BAND=${s.band}" +
                     "\n${mapChannelFrequency(s.cellType, s.arfcn.toIntOrNull())}" +
+                    "\n定位来源=${p.positionSource}" +
                     (if (p.estimated) "\n惯导估算 · 漂移指示 ${p.accuracyMeters?.toInt() ?: "-"} m（非实测精度）" else "") +
                     (p.mapMatchJson?.let { json -> runCatching {
                         val m = com.google.gson.JsonParser.parseString(json).asJsonObject

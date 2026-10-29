@@ -6,13 +6,10 @@ An Android network and signal analysis tool for Qualcomm and MediaTek devices.
 The application ID is `com.nvmex.networkhelper`. The UI is built with Jetpack
 Compose and includes a separate VPN/hotspot library module.
 
-## Source version and downloads
+## Source version
 
-- Current version: `v1.5.9` (versionCode `59`).
-- [v1.5.9 signed ARM64 APK and release notes](https://github.com/mazemingw/oplus-network-helper/releases/tag/v1.5.9)
-- [Historical v1.5.7-dev ARM64 APK and release notes](https://github.com/mazemingw/oplus-network-helper/releases/tag/v1.5.7-dev) (prerelease)
+- Current source version: `v1.6.1` (versionCode `61`).
 - Architecture: `arm64-v8a`
-- v1.5.9 APK SHA-256: `e2dc847d1c4fe4d7d02c309c7a218c9aaa22383e856a10fcc5696f77af8cee73`
 
 ## Features
 
@@ -34,9 +31,11 @@ The QMI integration references [Fronsipswu/qcom-band-menu](https://github.com/Fr
 - Band selections start empty and appear in NR SA, NR NSA, LTE, WCDMA, GSM order. RAT selection controls card visibility. Buttons include nominal frequencies or SUL labels, with separate selected and serving indicators. Mainland China mode defaults on and filters bands by the selected SIM's registered operator.
 - Cell candidates require valid PCI and complete parameters, ordered as neighbors, recent serving history, LTE CA, then current serving cells. The open menu stays stable and shows RSRP bars and current-cell badges. NRCA carrier frequencies are excluded from cell-lock candidates.
 - Home and control screens share per-SIM serving data. Cell lock feedback checks modem readback and fresh registration samples; insufficient evidence remains unconfirmed. Unlock clears actual active lock types. Optional RAT coupling saves and restores the previous settings.
+- Tap a Home cell-timeline record to confirm a cell/band shortcut. The actual SIM slot and subscription are carried to the control page, which checks hardware/operator rules before filling fields or selecting bands. Tap Lock manually to execute. FDD/TDD SCS defaults are 15/30 kHz and remain editable. Controls use rectangular buttons, with solid checked selections and a compact lock-readback panel.
 - Floating Lock/Unlock buttons have auto-dismiss status alerts. Reset channel uses bounded session recovery; a confirmed QMI 5 binding conflict can stop the verified upstream application's background helper and release its clients without clearing band/cell locks.
-- Available bands still opens the operator-band dialog, preferring real hardware capabilities and falling back to built-in lists only when unavailable. Legacy band locking defaults off; MediaTek users may try enabling it in Settings.
-- LTE CA comes only from QMI. NRCA prefers the existing engineering feed, then QMI SCELL frequencies, then no data. RX measurements are embedded in the network panel, with three colored parameter bars in one row.
+- Available bands still opens the operator-band dialog, preferring real hardware capabilities and falling back to built-in lists only when unavailable. N3/N8 are labeled Uncommon. Legacy band locking defaults off; MediaTek users may try enabling it in Settings.
+- LTE CA comes only from QMI. NRCA prefers the existing engineering feed, then QMI SCELL frequencies, then no data. RX measurements use compact rows in the network panel, with colored signal bars and a smooth 24dp filled PHASE pie.
+- NRCA chips show converted bands; raw channels remain in details. The timeline prefers neighbors with valid PCI and falls back to serving history otherwise. Visible neighbor batches stay stable for at least 3 seconds. RX keeps fixed chain positions and retains observed RAT sections during each SIM's expanded view, clearing missing readings instead of resizing as 2/4 chains or LTE/NR groups change. RX, CA and neighbors share one read-only session with at most two reconnect attempts for transient binding failures.
 
 See the [QMI control guide (Chinese)](docs/qmi-controls.md) for data sources, recovery limits, building and device checks, plus [upstream synchronization](app/src/main/cpp/qmi/UPSTREAM.md) and [third-party notices](THIRD_PARTY_NOTICES.md).
 
@@ -139,7 +138,7 @@ Run local unit tests and build without connecting a device:
 .\gradlew.bat :app:testDebugUnitTest :app:assembleDebug
 ```
 
-Verified on 2026-10-26: Debug APK build succeeded; 336 unit tests, 333 passed, 3 skipped for missing local real-world samples, 0 failures. Native QMI sessions and the recovery script have separate mocked tests; commands are in the [QMI guide (Chinese)](docs/qmi-controls.md). The v1.5.9 Release uses the user-supplied signed APK, with its signature and embedded version verified. It was not installed during these checks. Dual-SIM writes, locking and actual registration still require device acceptance testing.
+Verified on 2026-10-26: v1.6.0 Debug APK build succeeded; 380 unit tests, 377 passed, 3 skipped for missing local real-world samples, 0 failures. Native QMI sessions and the recovery script have separate mocked tests; commands are in the [QMI guide (Chinese)](docs/qmi-controls.md). The test APK was kept locally without installation. Shortcut navigation, dual-SIM writes, locking and actual registration still require device acceptance testing.
 
 See the [existing compatibility verification record](docs/2026-09-18-compatibility-verification.md) and the [drive-map checks and manual test steps](docs/drive-test-map.md).
 
@@ -164,10 +163,45 @@ a physical target device and may not work on a standard emulator.
 
 ```text
 app/                  Main application module
+bunny-modem/          bunnylock backends and Root/Shizuku bridge (GPL-3.0)
 vpnhotspot-mobile/    VPN and hotspot library module
 gradle/               Gradle wrapper and dependency versions
 docs/                 Feature guides, verification records and screenshots
 ```
+
+## Modem drivers and acknowledgements
+
+The **Drivers & settings** tab in band/cell control offers the original Qualcomm
+QMI driver and bunnylock's automatic detection, Qualcomm QMI, MediaTek AT, Pixel,
+and Android radio HAL backends. Network/modem restart, channel cleanup, an AT
+console, device diagnostics, and logs use Network Helper's own Compose UI.
+
+Rootless access requires a running, authorized **Shizuku** service. ADB access
+supports the Android radio HAL and MediaTek RIL passthrough where the device
+actually provides it; direct QMI and PCI locking are not universally available.
+Switching drivers releases the current session without clearing locks. Cleanup
+releases our helper and, with root, discovers verified qcom-band-menu and
+bunnylock backend processes. It never sends unlock commands or restarts the
+system radio service. With root, actual QRTR/QMUX descriptor owners are also
+inspected and verified as third-party processes, without relying on two package
+names. Cleanup automatically reconnects and refreshes the selected driver;
+kernel/permission limits are reported. Both drivers use the same capability-driven
+band and cell control UI.
+
+Our sincere thanks to the authors and contributors of
+[Fronsipswu/qcom-band-menu](https://github.com/Fronsipswu/qcom-band-menu) and
+[btsearch/bunnylock](https://github.com/btsearch/bunnylock). Their open protocol
+implementations, backends, and compatibility work make broader device support
+possible. Their original icons identify driver provenance in the app.
+
+See [backend integration and validation](docs/modem-backends.md).
+
+If cleanup readback still fails, a dialog lists known system NAS users, their live init
+state, roles, and the effects of pausing them. Recovery pauses one confirmed component at
+a time and checks the selected backend again. **Choose for me** defaults to on (selection
+still requires confirmation); **Automatic restore** defaults to off. When enabled, exit
+restores only components that this app paused from a running state. Previously stopped
+services are preserved. See [system channel recovery](docs/qmi-system-recovery.md).
 
 ## License
 
@@ -175,3 +209,7 @@ Original code in this project is licensed under the **Apache License 2.0**;
 see [LICENSE](LICENSE). The repository also contains third-party code under
 other licenses. Read [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md) and retain
 the applicable copyright and license notices.
+
+The vendored `bunny-modem` source remains GPL-3.0. The combined application
+containing this module is distributed under GPL-3.0 terms; existing Apache-2.0
+notices on original files remain in place. See [bunny-modem/LICENSE](bunny-modem/LICENSE).

@@ -199,7 +199,6 @@ class QmiProtocolTest {
         rejects { qmiCellCommand(QmiCellInput(channel = "4294967296", pcis = "1")) }
         rejects { qmiCellCommand(QmiCellInput(channel = "100", pcis = "504")) }
         rejects { qmiCellCommand(QmiCellInput(channel = "100", pcis = "-1")) }
-        rejects { qmiCellCommand(QmiCellInput(channel = "100", pcis = "1,")) }
         rejects { qmiCellCommand(QmiCellInput(mode = QmiCellMode.NR_PCI, channel = "640000", band = "78", pcis = "1008")) }
         rejects { qmiCellCommand(QmiCellInput(mode = QmiCellMode.NR_ARFCN, channel = "640000", scs = 42)) }
     }

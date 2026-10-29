@@ -1,0 +1,110 @@
+<resources>
+    <string name="modem_sentences">%1$s %2$s</string>
+    <string name="modem_couldnt">Nie udało się %1$s. %2$s</string>
+
+    <string name="modem_connect_checking">Sprawdzanie, co potrafi modem tego telefonu…</string>
+    <string name="modem_root_denied">Odmówiono dostępu roota.</string>
+    <string name="modem_sim">SIM %1$d</string>
+    <string name="modem_no_mtk_port">Żaden port AT MediaTeka nie odpowiedział. Wybierz go ręcznie w zakładce „Narzędzia”.</string>
+    <string name="modem_lock_unanswered">Radio nie odpowiedziało, więc pewnie nie obsługuje blokad przez HAL radia w Androidzie.</string>
+
+    <string name="modem_goal_refresh">odświeżyć</string>
+    <string name="modem_goal_lock_bands">zablokować pasm %1$s</string>
+    <string name="modem_goal_unlock_bands">zdjąć blokady pasm %1$s</string>
+    <string name="modem_goal_net_mode">zmienić trybu sieci</string>
+    <string name="modem_goal_nr_mode">przełączyć 5G na „%1$s”</string>
+    <string name="modem_goal_nr_dc_on">włączyć NSA (EN-DC)</string>
+    <string name="modem_goal_nr_dc_off">wyłączyć NSA (EN-DC)</string>
+    <string name="modem_goal_lock_cell">zablokować komórki</string>
+    <string name="modem_goal_unlock_cell">zdjąć blokady komórki</string>
+    <string name="modem_goal_lock_plmn">zablokować sieci</string>
+    <string name="modem_goal_unlock_plmn">wrócić do automatycznego wyboru sieci</string>
+    <string name="modem_goal_unlock_all">zdjąć wszystkich blokad</string>
+    <string name="modem_goal_restart_radio">zrestartować radia</string>
+    <string name="modem_goal_reattach">ponownie podłączyć SIM %1$d do sieci</string>
+    <string name="modem_goal_reboot">zrestartować modemu</string>
+    <string name="modem_goal_samsung_menu">otworzyć menu pasm Samsunga</string>
+    <string name="modem_goal_send_at">wysłać komendy AT</string>
+    <string name="modem_goal_send_qmi">wysłać komunikatu QMI 0x%1$04X</string>
+
+    <string name="modem_bands_locked">Zablokowano pasma %1$s.</string>
+    <string name="modem_bands_unlocked">Zdjęto blokadę pasm %1$s.</string>
+    <string name="modem_net_mode_set">Ustawiono tryb sieci „%1$s”.</string>
+    <string name="modem_nr_mode_set">Przełączono 5G na „%1$s”.</string>
+    <string name="modem_nr_dc_on">NSA (EN-DC) włączone.</string>
+    <string name="modem_nr_dc_off">NSA (EN-DC) wyłączone.</string>
+    <string name="modem_cell_locked">Komórka zablokowana.</string>
+    <string name="modem_cell_unlocked">Zdjęto blokadę komórki.</string>
+    <string name="modem_plmn_locked">Sieć zablokowana.</string>
+    <string name="modem_plmn_locked_to">SIM %1$d jest teraz zablokowana na sieć %2$s.</string>
+    <string name="modem_plmn_unlocked">Przywrócono automatyczny wybór sieci.</string>
+    <string name="modem_all_unlocked">Wszystkie blokady zdjęte.</string>
+    <string name="modem_radio_restarted">Radio zrestartowane.</string>
+    <string name="modem_reattached">SIM %1$d jest znowu podłączona do sieci.</string>
+    <string name="modem_rebooting">Modem uruchamia się ponownie.</string>
+    <string name="modem_samsung_menu_opened">Otwarto menu pasm Samsunga.</string>
+
+    <string name="modem_note_radio_restarted">Radio zrestartowało się, żeby zastosować zmianę.</string>
+    <string name="modem_note_radio_restart_failed">Nie udało się zrestartować radia. %1$s Włącz i wyłącz tryb samolotowy, żeby zastosować zmianę.</string>
+    <string name="modem_note_old_nr_bands">Jeśli telefon dalej trzyma się starych pasm 5G, zablokuj 5G na tych, których potrzebujesz (najwyżej %1$d). To zastąpi starą blokadę.</string>
+    <string name="modem_note_kept_lock_refused">Telefon zachował starą blokadę po odblokowaniu i odrzucił każdą listę wszystkich pasm, jaką wysłała aplikacja.</string>
+    <string name="modem_note_kept_lock_renamed">Telefon zachował starą blokadę po odblokowaniu, więc aplikacja jeszcze raz wysłała mu listę wszystkich pasm.</string>
+    <string name="modem_note_nr_bands_limit">Przyjmuje naraz najwyżej %1$d pasm 5G, więc teraz włączone są: %2$s.</string>
+    <string name="modem_note_legacy_back">2G i 3G znowu działają, ale GSM 1800 może pozostać wyłączone: oprogramowanie radiowe tego telefonu nie zna tego pasma.</string>
+    <string name="modem_note_qc_lte_off">Ten modem zmienia blokadę komórki LTE tylko przy wyłączonym radiu, więc na chwilę włączył się tryb samolotowy.</string>
+
+    <string name="modem_lock_unconfirmed">%1$s (modem tego nie potwierdził)</string>
+    <string name="modem_lock_separator">"; "</string>
+    <string name="modem_lock_channel_pci">%1$s %2$s, PCI %3$s</string>
+    <string name="modem_lock_nr_pci">ARFCN %1$d, PCI %2$d, n%3$d, %4$d kHz</string>
+    <string name="modem_lock_frequency_only">Tylko częstotliwość</string>
+    <string name="modem_lock_channel_frequency_only">%1$s %2$s (tylko częstotliwość)</string>
+    <string name="modem_lock_channel_several_pcis">%1$s %2$s, kilka PCI</string>
+    <string name="modem_lock_several_pcis">Kilka PCI</string>
+    <string name="modem_lock_type">Blokada typu %1$d</string>
+    <string name="modem_plmn_manual">Wybór ręczny</string>
+
+    <string name="modem_pick_band">Wybierz co najmniej jedno pasmo.</string>
+    <string name="modem_nr_list_too_long">Ten telefon przyjmuje w jednej blokadzie najwyżej %1$d pasm 5G, więc wybierz %1$d lub mniej.</string>
+    <string name="modem_note_needs_channels">Ten telefon potrzebuje widocznych częstotliwości razem z wybranymi pasmami, więc aplikacja dodała je do blokady.</string>
+    <string name="modem_no_gsm_1800">Oprogramowanie radiowe tego telefonu nie zna GSM 1800, więc odrzuca blokadę 2G na samo 1800.</string>
+    <string name="modem_note_fell_back">Przy blokadzie samych pasm telefon spadł do 2G lub 3G, więc blokadę ponowiono razem z widocznymi częstotliwościami. Od teraz aplikacja będzie tak robić na tym telefonie.</string>
+    <string name="modem_note_band_lock_ignored">Android przyjął blokadę %1$s, ale telefon nadal siedzi na %2$s. Wygląda na to, że ten modem ignoruje blokady pasm wysłane w ten sposób.</string>
+    <string name="modem_note_samsung_menu_hint">Zamiast tego może zadziałać menu pasm Samsunga w zakładce „Pasma”.</string>
+    <string name="modem_needs_visible_cell">Żeby zablokować wybrane pasma %1$s, ten telefon musi widzieć na nich jakąś komórkę. Odśwież listę komórek i spróbuj ponownie.</string>
+
+    <string name="modem_note_set_by_at">Android go odrzucił, więc aplikacja ustawiła go bezpośrednio w modemie. Działa do restartu telefonu.</string>
+    <string name="modem_note_mode_airplane">Modem zmienia tryb tylko przy wyłączonym radiu, więc na chwilę włączył się tryb samolotowy.</string>
+    <string name="modem_note_mode_reapplied">SIM %1$d została w starej sieci, więc tryb ustawiono jeszcze raz, na chwilę włączając tryb samolotowy.</string>
+    <string name="modem_note_mode_stayed">SIM %1$d została w starej sieci. Włączenie i wyłączenie trybu samolotowego może pomóc.</string>
+    <string name="modem_note_mode_held_back">%1$s Tryb zostaje ustawiony i zadziała w pełni, gdy to się zmieni.</string>
+    <string name="modem_backend_no_nr_mode">Backend %1$s nie obsługuje zmiany trybu 5G.</string>
+    <string name="modem_current_backend_no_nr_mode">Obecny backend nie obsługuje zmiany trybu 5G.</string>
+
+    <string name="modem_enter_earfcn">Najpierw wpisz EARFCN LTE.</string>
+    <string name="modem_enter_nr_arfcn">Najpierw wpisz NR-ARFCN.</string>
+    <string name="modem_qc_lte_needs_pci">Blokada LTE na Qualcommie wymaga co najmniej jednego PCI. Podaj kilka, żeby dopuścić grupę sektorów.</string>
+    <string name="modem_lte_anchor_locked">Zablokowano kotwicę LTE. MediaTek trzyma tylko jedną blokadę naraz, więc NR idzie za kotwicą.</string>
+    <string name="modem_note_mtk_one_pci">MediaTek blokuje tylko jedno PCI, więc użyto PCI %1$d.</string>
+    <string name="modem_unknown_earfcn">EARFCN %1$d nie należy do żadnego znanego pasma LTE.</string>
+    <string name="modem_unknown_nr_arfcn">ARFCN %1$d nie należy do żadnego znanego pasma NR.</string>
+    <string name="modem_note_band_only">Oprogramowanie radiowe tego telefonu nie przyjmuje blokad kanałów, więc zablokowano tylko pasmo (%1$s).</string>
+    <string name="modem_note_cell_lock_ignored">Android przyjął blokadę komórki, ale telefon nadal siedzi na %1$s. Wygląda na to, że ten modem ignoruje blokady częstotliwości wysłane w ten sposób.</string>
+    <string name="modem_note_frequency_only">Zablokowano tylko częstotliwość. HAL radia nie potrafi zablokować PCI.</string>
+
+    <string name="modem_mcc_digits">MCC musi mieć 3 cyfry.</string>
+    <string name="modem_mnc_digits">MNC musi mieć 2 lub 3 cyfry.</string>
+
+    <string name="modem_note_reattach_radio">Modem nie chciał ponownie podłączyć się do sieci, więc zamiast tego zrestartowano radio SIM %1$d. Powód: %2$s</string>
+    <string name="modem_note_reboot_radio">HAL radia nie zrestartował modemu, więc zamiast tego zrestartowano radio komórkowe.</string>
+
+    <string name="modem_helper_start_failed">%1$s nie uruchomił się.</string>
+    <string name="modem_helper_start_timed_out">%1$s nie uruchomił się na czas.</string>
+    <string name="modem_helper_stopped">%1$s nieoczekiwanie się zatrzymał.</string>
+    <string name="modem_helper_not_running">%1$s nie działa.</string>
+    <string name="modem_helper_no_answer">%1$s nie odpowiedział na czas.</string>
+    <string name="modem_root_start_failed">Odmówiono dostępu roota albo proces pomocniczy roota nie uruchomił się.</string>
+    <string name="modem_root_timed_out">Nie przyznano dostępu roota na czas. Sprawdź menedżer roota i spróbuj ponownie.</string>
+    <string name="modem_no_su">Nie znaleziono su. Aplikacja wymaga roota (Magisk, KernelSU lub APatch).</string>
+    <string name="modem_root_wrong_uid">Proces pomocniczy roota nie działa jako root (uid %1$d).</string>
+</resources>

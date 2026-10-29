@@ -53,8 +53,9 @@ class BroadcastNrCaTracker(
                     _bySlot.update { old -> old + (slot to info) }
                 }
             }.onFailure {
-                // 解析失败时可选：清除该slot的数据
-                _bySlot.update { old -> old - slot }
+                // A malformed frame must not evict a still-fresh engineering report and
+                // briefly promote QMI. Keep its original timestamp; normal expiry still applies.
+                android.util.Log.w("NrCaSource", "Ignored malformed engineering report for slot=$slot", it)
             }
         }
     }

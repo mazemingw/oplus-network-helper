@@ -71,7 +71,7 @@ fun NrCaDetailDialog(
                     Column(Modifier.fillMaxWidth().heightIn(max = 400.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                         Text(stringResource(R.string.qmi_nr_ca_frequency_note))
                         carriers.forEachIndexed { index, carrier ->
-                            Text("S${index + 1} · ${carrier.bandText} · NR-ARFCN ${carrier.dlArfcn}")
+                            Text("${if (carrier.ccId == 0) "PCC" else "S${carrier.ccId}"} · ${com.nvmex.networkhelper.util.qmi.qmiNrCaBandLabel(carrier)} · NR-ARFCN ${carrier.dlArfcn}")
                         }
                     }
                 } else if (info == null || carriers.isEmpty()) {

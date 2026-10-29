@@ -2,6 +2,10 @@ package com.nvmex.networkhelper.ui.base
 
 
 import android.graphics.BitmapFactory
+import android.net.Uri
+import androidx.navigation.NavType
+import androidx.navigation.navArgument
+import com.nvmex.networkhelper.util.qmi.QmiQuickLockRequest
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.slideInHorizontally
@@ -207,6 +211,9 @@ fun AppRoot(
             ) {
                 HomeScreen(
                     networkVm = sharedNetworkVm,
+                    onQuickLock = { request ->
+                        navController.navigate("quick_band_lock/${Uri.encode(request.json())}") { launchSingleTop = true }
+                    },
                     targetPkg = targetPkg,
                     targetActivity = targetActivity,
                     vendor = vendor,
@@ -269,6 +276,17 @@ fun AppRoot(
                 } else {
                     QmiBandLockScreen(onBack = { navController.popBackStack() }, networkVm = sharedNetworkVm)
                 }
+            }
+
+            composable(
+                Routes.QUICK_BAND_LOCK,
+                arguments = listOf(navArgument("target") { type = NavType.StringType })
+            ) { entry ->
+                val request = remember(entry) { runCatching {
+                    QmiQuickLockRequest.parse(entry.arguments?.getString("target").orEmpty())
+                }.getOrNull() }
+                QmiBandLockScreen(onBack = { navController.popBackStack() }, networkVm = sharedNetworkVm,
+                    quickRequest = request)
             }
 
             composable(
@@ -422,7 +440,7 @@ fun AppRoot(
                 ) {
                     Surface(
                         modifier = Modifier
-                            .fillMaxWidth(0.86f)
+                            .fillMaxWidth(0.90f)
                             .clip(CircleShape)
                             .hazeEffect(
                                 state = hazeState,

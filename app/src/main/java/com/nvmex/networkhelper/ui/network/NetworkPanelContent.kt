@@ -13,6 +13,9 @@ import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.LocalIndication
+import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.foundation.interaction.collectIsPressedAsState
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -42,6 +45,8 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.material3.Card
 import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.Button
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
@@ -127,7 +132,11 @@ fun NetworkPanelContent(
     modifier: Modifier = Modifier,
     s: NetworkPanelUiState,
     liveCellTimeline: List<CellTimelinePoint>,
+    timelineNeighbors: List<com.nvmex.networkhelper.util.qmi.QmiTimelineNeighbor> = emptyList(),
+    lockSnapshot: com.nvmex.networkhelper.util.qmi.QmiRadioSnapshot? = null,
     onRecordCellTimeline: (CellTimelinePoint) -> Unit,
+    quickLockSim: Int? = null,
+    onQuickLock: ((com.nvmex.networkhelper.util.qmi.QmiQuickLockRequest) -> Unit)? = null,
     showNrBandwidth: Boolean = true,
     onBandHelp: (() -> Unit)? = null,
     playbackFrameIndex: Int? = null,
@@ -149,6 +158,11 @@ fun NetworkPanelContent(
     rxLive: Boolean = true,
     rxActive: Boolean = true,
     rxExpanded: Boolean = false,
+    rxSim: Int? = null,
+    rxGroups: List<com.nvmex.networkhelper.util.qmi.QmiRxGroup> = emptyList(),
+    rxError: String? = null,
+    rxLoading: Boolean = false,
+    onRxRetry: () -> Unit = {},
     onRxExpandedChange: (Boolean) -> Unit = {}
 ) {
     // =========================
@@ -742,9 +756,10 @@ fun NetworkPanelContent(
                     else -> stringResource(R.string.state_no_data)
                 }
 
-                val caChips = remember(nrCarriers, nrBandwidthEncoding, s.nrCaInfo?.frequencyOnly) {
+                val caChips = remember(nrCarriers, nrBandwidthEncoding, s.nrCaInfo?.frequencyOnly, s.mcc, s.mnc) {
                     if (s.nrCaInfo?.frequencyOnly == true) {
-                        nrCarriers.take(6).map { c -> CaChip(text = "${c.bandText} · ${c.dlArfcn}", active = false) }
+                        nrCarriers.take(6).map { c -> CaChip(text =
+                            (if (c.ccId == 0) "PCC · " else "") + com.nvmex.networkhelper.util.qmi.qmiNrCaBandLabel(c, s.mcc, s.mnc), active = c.ccId == 0) }
                     } else if (nrCarriers.size < 2) {
                         emptyList()
                     } else {
@@ -855,8 +870,9 @@ fun NetworkPanelContent(
                 )
             }
 
-            if (showRxMeasurements) RxAntennaSection(subId = s.subId, live = rxLive, active = rxActive,
-                expanded = rxExpanded, onExpandedChange = onRxExpandedChange)
+            if (showRxMeasurements) RxAntennaSection(sim = rxSim, live = rxLive, active = rxActive,
+                expanded = rxExpanded, onExpandedChange = onRxExpandedChange, groups = rxGroups,
+                error = rxError, loading = rxLoading, onRetry = onRxRetry)
 
             if (!displayState.lastError.isNullOrBlank()) {
                 Spacer(Modifier.height(4.dp))
@@ -937,7 +953,14 @@ fun NetworkPanelContent(
         if (settings.enableCellTimeline) {
             CellTimelinePanel(
                 points = cellTimeline,
-                hideSensitive = hideSensitive
+                neighbors = timelineNeighbors,
+                locks = com.nvmex.networkhelper.util.qmi.qmiCurrentLocks(lockSnapshot, displayState.cellType,
+                    quickLockSim?.minus(1), System.currentTimeMillis()),
+                hideSensitive = hideSensitive,
+                sim = quickLockSim,
+                subId = s.subId,
+                live = rxLive,
+                onQuickLock = onQuickLock
             )
         }
     }
@@ -1256,11 +1279,61 @@ private fun signalHeaderText(s: NetworkPanelUiState, showRaw: Boolean): String {
 @Composable
 private fun CellTimelinePanel(
     points: List<CellTimelinePoint>,
-    hideSensitive: Boolean
+    neighbors: List<com.nvmex.networkhelper.util.qmi.QmiTimelineNeighbor>,
+    locks: com.nvmex.networkhelper.util.qmi.QmiCurrentLocks,
+    hideSensitive: Boolean,
+    sim: Int?,
+    subId: Int,
+    live: Boolean,
+    onQuickLock: ((com.nvmex.networkhelper.util.qmi.QmiQuickLockRequest) -> Unit)?
 ) {
-    val visible = remember(points) { points.takeLast(20) }
+    var selected by remember(sim, subId, live) { mutableStateOf<CellTimelinePoint?>(null) }
+    var expanded by rememberSaveable(sim, subId, live) { mutableStateOf(false) }
+    val neighborListState = rememberLazyListState()
+    val neighborInteraction = remember(sim, subId, live) { MutableInteractionSource() }
+    val neighborPressed by neighborInteraction.collectIsPressedAsState()
+    val neighborInteracting = neighborPressed || neighborListState.isScrollInProgress
+    val neighborHold = remember(sim, subId, live) { com.nvmex.networkhelper.util.qmi.QmiNeighborDisplayHold() }
+    var shownNeighbors by remember(sim, subId, live) { mutableStateOf(emptyList<com.nvmex.networkhelper.util.qmi.QmiTimelineNeighbor>()) }
+    LaunchedEffect(neighborHold, neighbors, expanded, neighborInteracting) {
+        val now = android.os.SystemClock.elapsedRealtime()
+        shownNeighbors = neighborHold.update(neighbors, now, neighborInteracting)
+        val remaining = if (neighborInteracting) 0 else neighborHold.remainingMs(now)
+        if (remaining > 0) {
+            kotlinx.coroutines.delay(remaining)
+            shownNeighbors = neighborHold.update(neighbors, android.os.SystemClock.elapsedRealtime(), neighborPressed || neighborListState.isScrollInProgress)
+        }
+    }
+    selected?.let { point ->
+        val cellRequest = remember(point, sim, subId) { runCatching {
+            com.nvmex.networkhelper.util.qmi.qmiQuickLockRequest(sim ?: -1, subId, point,
+                com.nvmex.networkhelper.util.qmi.QmiQuickLockKind.CELL)
+        }.getOrNull() }
+        val bandRequest = remember(point, sim, subId) { runCatching {
+            com.nvmex.networkhelper.util.qmi.qmiQuickLockRequest(sim ?: -1, subId, point,
+                com.nvmex.networkhelper.util.qmi.QmiQuickLockKind.BAND)
+        }.getOrNull() }
+        AlertDialog(onDismissRequest = { selected = null },
+            title = { Text(stringResource(R.string.qmi_quick_title, sim ?: 0)) },
+            text = { Text(stringResource(R.string.qmi_quick_confirm,
+                "${point.cellType} ${timelineBandLabel(point)} · " +
+                    if (hideSensitive) "***" else "${point.arfcn} · PCI ${point.pci}") +
+                if (cellRequest == null) "\n${stringResource(R.string.qmi_quick_cell_missing)}" else "") },
+            confirmButton = {
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    OutlinedButton(enabled = bandRequest != null, shape = RoundedCornerShape(4.dp), onClick = {
+                        selected = null; bandRequest?.let { onQuickLock?.invoke(it) }
+                    }) { Text(stringResource(R.string.qmi_quick_band)) }
+                    Button(enabled = cellRequest != null, shape = RoundedCornerShape(4.dp), onClick = {
+                        selected = null; cellRequest?.let { onQuickLock?.invoke(it) }
+                    }) { Text(stringResource(R.string.qmi_quick_cell)) }
+                }
+            }, dismissButton = { TextButton(onClick = { selected = null }, shape = RoundedCornerShape(4.dp)) {
+                Text(stringResource(R.string.action_cancel))
+            } })
+    }
+    val visible = remember(points, shownNeighbors.isNotEmpty()) { if (shownNeighbors.isEmpty()) points.takeLast(20) else emptyList() }
     val listState = rememberLazyListState()
-    var expanded by rememberSaveable { mutableStateOf(false) }
     val containListScroll = remember {
         object : NestedScrollConnection {
             override fun onPostScroll(
@@ -1294,9 +1367,21 @@ private fun CellTimelinePanel(
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.SpaceBetween
             ) {
-                Text(stringResource(R.string.network_cell_timeline), fontWeight = FontWeight.SemiBold)
-                if (visible.size > 5) {
-                    IconButton(onClick = { expanded = !expanded }, modifier = Modifier.size(32.dp)) {
+                Text(stringResource(if (shownNeighbors.isEmpty()) R.string.network_cell_timeline else R.string.qmi_timeline_neighbors), fontWeight = FontWeight.SemiBold)
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                if (live && sim != null) {
+                    fun status(value: Boolean?) = when (value) {
+                        true -> R.string.qmi_summary_locked; false -> R.string.qmi_summary_unlocked; null -> R.string.qmi_summary_unknown
+                    }
+                    Text(stringResource(R.string.qmi_current_lock_summary, stringResource(status(locks.cell)), stringResource(status(locks.rat))),
+                        style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        maxLines = 1)
+                }
+                if (visible.size > 5 || shownNeighbors.size > 5) {
+                    IconButton(onClick = {
+                        neighborHold.retainForInteraction(android.os.SystemClock.elapsedRealtime())
+                        expanded = !expanded
+                    }, modifier = Modifier.size(32.dp)) {
                         Icon(
                             imageVector = if (expanded) Icons.Default.ExpandLess else Icons.Default.ExpandMore,
                             contentDescription = stringResource(
@@ -1305,15 +1390,13 @@ private fun CellTimelinePanel(
                         )
                     }
                 }
+                }
             }
 
-            if (visible.isEmpty()) {
-                Text(
-                    stringResource(R.string.network_waiting_cell_data),
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
-            } else {
+            if (visible.isEmpty() && shownNeighbors.isEmpty()) {
+                TimelineHeader()
+                Column(verticalArrangement = Arrangement.spacedBy(5.dp)) { repeat(5) { EmptyTimelineRow() } }
+            } else if (visible.isNotEmpty()) {
                 TimelineHeader()
                 if (expanded && visible.size > 5) {
                     LazyColumn(
@@ -1332,7 +1415,8 @@ private fun CellTimelinePanel(
                             TimelineRow(
                                 point = visible[index],
                                 hideSensitive = hideSensitive,
-                                isCurrent = index == visible.lastIndex
+                                isCurrent = index == visible.lastIndex,
+                                onClick = if (onQuickLock != null && sim != null) ({ selected = visible[index] }) else null
                             )
                         }
                     }
@@ -1343,10 +1427,31 @@ private fun CellTimelinePanel(
                             TimelineRow(
                                 point = point,
                                 hideSensitive = hideSensitive,
-                                isCurrent = point.sameCell(visible.last())
+                                isCurrent = point.sameCell(visible.last()),
+                                onClick = if (onQuickLock != null && sim != null) ({ selected = point }) else null
                             )
                         }
+                        repeat((5 - collapsed.size).coerceAtLeast(0)) { EmptyTimelineRow() }
                     }
+                }
+            }
+            if (shownNeighbors.isNotEmpty()) {
+                TimelineHeader()
+                val neighborRow: @Composable (com.nvmex.networkhelper.util.qmi.QmiTimelineNeighbor) -> Unit = { neighbor ->
+                    TimelineRow(neighbor.point, hideSensitive, false,
+                        onClick = if (onQuickLock != null && sim != null) ({ selected = neighbor.point }) else null,
+                        sourceLabel = stringResource(R.string.qmi_neighbor_cell), interactionSource = neighborInteraction)
+                }
+                if (expanded && shownNeighbors.size > 5) {
+                    LazyColumn(Modifier.fillMaxWidth().height((shownNeighbors.size.coerceAtMost(6) * 42).dp)
+                        .nestedScroll(containListScroll), state = neighborListState, verticalArrangement = Arrangement.spacedBy(5.dp)) {
+                        items(count = shownNeighbors.size, key = { index -> shownNeighbors[index].point.let { "${it.cellType}:${it.arfcn}:${it.pci}" } }) {
+                            neighborRow(shownNeighbors[it])
+                        }
+                    }
+                } else Column(verticalArrangement = Arrangement.spacedBy(5.dp)) {
+                    shownNeighbors.take(5).forEach { neighborRow(it) }
+                    repeat((5 - shownNeighbors.size).coerceAtLeast(0)) { EmptyTimelineRow() }
                 }
             }
         }
@@ -1357,15 +1462,26 @@ private fun timelinePointKey(point: CellTimelinePoint): String =
     "${point.cellType}-${point.tac}-${point.pci}-${point.ci}"
 
 @Composable
+private fun EmptyTimelineRow() {
+    Box(Modifier.fillMaxWidth().height(40.dp).border(1.dp,
+        MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.35f), RoundedCornerShape(9.dp)))
+}
+
+@Composable
 private fun TimelineRow(
     point: CellTimelinePoint,
     hideSensitive: Boolean,
-    isCurrent: Boolean
+    isCurrent: Boolean,
+    onClick: (() -> Unit)? = null,
+    sourceLabel: String? = null,
+    interactionSource: MutableInteractionSource? = null
 ) {
+    val rowInteraction = interactionSource ?: remember { MutableInteractionSource() }
     val tac = if (hideSensitive) "***" else point.tac
     val pci = if (hideSensitive) "***" else point.pci
     val channel = if (hideSensitive) "***" else point.arfcn
-    val rsrp = com.nvmex.networkhelper.util.qmi.qmiRsrp(point.rsrp)?.toInt()?.toString() ?: "—"
+    val rsrpDbm = com.nvmex.networkhelper.util.qmi.qmiRsrp(point.rsrp)?.toInt()
+    val rsrp = rsrpDbm?.toString() ?: "—"
     val band = timelineBandLabel(point)
     val accent = timelineCellColor(point)
     val shape = RoundedCornerShape(9.dp)
@@ -1375,7 +1491,10 @@ private fun TimelineRow(
     Row(
         modifier = Modifier
             .fillMaxWidth()
+            .height(40.dp)
             .clip(shape)
+            .then(if (onClick != null) Modifier.clickable(interactionSource = rowInteraction,
+                indication = LocalIndication.current, onClick = onClick) else Modifier)
             .background(backgroundColor)
             .border(if (isCurrent) 2.dp else 1.dp, borderColor, shape)
             .padding(horizontal = 8.dp, vertical = 7.dp),
@@ -1396,7 +1515,8 @@ private fun TimelineRow(
             Modifier.width(36.dp),
             accent.copy(alpha = if (isCurrent) 1f else 0.72f)
         )
-        TimelineValue(rsrp, Modifier.width(45.dp))
+        TimelineValue(rsrp, Modifier.width(45.dp),
+            Color(com.nvmex.networkhelper.util.map.DriveStyle.colorByRsrp(rsrpDbm)), FontWeight.Bold)
         Box(modifier = Modifier.width(39.dp), contentAlignment = Alignment.CenterEnd) {
             if (isCurrent) {
                 Surface(
@@ -1413,6 +1533,9 @@ private fun TimelineRow(
                         maxLines = 1
                     )
                 }
+            } else if (sourceLabel != null) {
+                Text(sourceLabel, style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1)
             }
         }
     }
@@ -1442,12 +1565,12 @@ private fun TimelineHeaderText(text: String, modifier: Modifier) {
 }
 
 @Composable
-private fun TimelineValue(value: String, modifier: Modifier, color: Color? = null) {
+private fun TimelineValue(value: String, modifier: Modifier, color: Color? = null, fontWeight: FontWeight = FontWeight.SemiBold) {
     Text(
         value,
         modifier,
         style = MaterialTheme.typography.labelSmall,
-        fontWeight = FontWeight.SemiBold,
+        fontWeight = fontWeight,
         maxLines = 1,
         overflow = TextOverflow.Ellipsis,
         color = color ?: LocalContentColor.current

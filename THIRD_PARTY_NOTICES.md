@@ -58,6 +58,21 @@ on 2026-10-26. NR-mode rejection and partial-success behavior were ported into
 the app-side QMI client/UI; upstream native sources and NAS layouts are unchanged
 from the source base above. See `app/src/main/cpp/qmi/UPSTREAM.md` for scope.
 
+## bunnylock modem backend and Shizuku bridge
+
+`bunny-modem/` includes the modem library and the Root/Shizuku bridge from
+[btsearch/bunnylock](https://github.com/btsearch/bunnylock), revision
+`55f47a87344fd7a42f5d903c660776b334664556`. Copyright remains with the bunnylock
+authors and contributors. Licensed under GPL-3.0; the complete license and
+modified source are included in `bunny-modem/`. The combined app containing this
+module is distributed under GPL-3.0 terms, retaining existing compatible license
+notices. Source provenance and local adaptations: `bunny-modem/UPSTREAM.md`.
+
+`driver_bunnylock.xml` is extracted from bunnylock's launcher foreground;
+`driver_qcom_bandmenu.png` is extracted from qcom-band-menu's launcher resources.
+They identify and credit the respective upstream backends. Our thanks to both
+projects and their contributors.
+
 ## Other dependencies
 
 Gradle/Maven dependencies retain the licenses chosen by their respective

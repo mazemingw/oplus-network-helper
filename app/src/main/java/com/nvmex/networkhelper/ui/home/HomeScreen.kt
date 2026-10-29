@@ -65,6 +65,7 @@ fun HomeScreen(
     onPanelState: (NetworkPanelUiState) -> Unit,
     contentBottomPadding: Dp = 0.dp,
     onOpenEngineerBandLock: () -> Unit = {},
+    onQuickLock: ((com.nvmex.networkhelper.util.qmi.QmiQuickLockRequest) -> Unit)? = null,
     onOpenSignalComparison: () -> Unit = {},
     onPlaybackBarChange: (HomePlaybackBarState?) -> Unit = {},
     networkVm: com.nvmex.networkhelper.viewmodel.signal.NetworkPanelMultiSimViewModel = androidx.lifecycle.viewmodel.compose.viewModel()
@@ -319,6 +320,7 @@ fun HomeScreen(
                         onShowBandHelp = { showBandHelp = true },
                         onLaunchEngineerMode = if (playbackSample == null) onRootStart else null,
                         onOpenEngineerBandLock = if (playbackSample == null) onOpenEngineerBandLock else null,
+                        onQuickLock = if (playbackSample == null) onQuickLock else null,
                         onOpenSignalComparison = onOpenSignalComparison,
                         onAllStates = { allPanelStates = it },
                         overrideStates = playbackStates,

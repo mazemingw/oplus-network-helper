@@ -21,6 +21,14 @@ import java.util.UUID
 
 /** One owner, one authenticated root helper. All multi-command SIM sequences are serialized. */
 class QmiModemClient(context: Context) {
+    companion object {
+        private val owners = java.util.concurrent.ConcurrentHashMap<String, java.lang.ref.WeakReference<QmiModemClient>>()
+        suspend fun closeAll() {
+            owners.values.mapNotNull { it.get() }.forEach {
+                if (it.socket != null || it.pidFile.isFile) it.close()
+            }
+        }
+    }
     private val app = context.applicationContext
     private val mutex = Mutex()
     private val id = UUID.randomUUID().toString().replace("-", "")
@@ -38,6 +46,7 @@ class QmiModemClient(context: Context) {
     private var bindingsAt = 0L
     private var socketRuleTried = false
     private val nrModeReadOnly = mutableSetOf<Int>()
+    init { owners[id] = java.lang.ref.WeakReference(this) }
 
     suspend fun readHardware(): Map<QmiBand, Set<Int>> = transaction {
         val response = request(qmiCommand("query_hardware"))
@@ -124,6 +133,14 @@ class QmiModemClient(context: Context) {
                 ?.let { msg.toInt(16) to it.getString("rx") }
         }.toMap()
         QmiRadioDecoder.decode(sim - 1, System.currentTimeMillis(), replies)
+    }
+
+    suspend fun monitor(sim: Int, includeRx: Boolean): QmiMonitoringSnapshot = transaction {
+        val subscription = subscriptionFor(sim)
+        val result = request(qmiCommand("nas_read").put("sim", subscription)
+            .put("reads", JSONArray(qmiMonitoringReads(includeRx)))).getJSONObject("nas_read")
+        check(result.getInt("sim") == subscription) { "SIM mismatch" }
+        qmiDecodeMonitoring(sim - 1, System.currentTimeMillis(), result.getJSONArray("reads"), includeRx)
     }
 
     private fun select(sim: Int) {
@@ -258,6 +275,7 @@ class QmiModemClient(context: Context) {
             // Only kill our unique command line if startup failed or the socket was lost.
             stopOwnedProcess()
             tokenFile.delete(); pidFile.delete(); stderrFile.delete()
+            owners.remove(id)
         }
     }
 

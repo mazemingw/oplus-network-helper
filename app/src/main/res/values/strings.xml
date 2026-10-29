@@ -99,7 +99,7 @@
     <string name="settings_coolapk_subtitle">访问酷安主页</string>
     <string name="settings_github_title">GitHub</string>
     <string name="settings_github_subtitle">查看项目源码与更新</string>
-    <string name="settings_font_size_title">字体大小</string>
+    <string name="settings_font_size_title">显示大小</string>
     <string name="settings_font_size_current">当前：%1$s</string>
     <string name="settings_language_title">语言</string>
     <string name="settings_language_subtitle">当前：%1$s</string>
@@ -240,6 +240,7 @@
     <string name="band_lock_note_common">常见</string>
     <string name="band_lock_note_village_weak">村镇 / 残血</string>
     <string name="band_lock_note_rare">少见</string>
+    <string name="band_lock_note_uncommon">不常见</string>
     <string name="band_lock_note_basement">地库</string>
     <string name="band_lock_note_low_supplement">低频补充\n速度通常一般</string>
     <string name="band_lock_note_weak_shared_ctcc">残血覆盖，与电信共享</string>
@@ -571,8 +572,8 @@
     <string name="hotspot_config_apply_done">配置写入完成：%1$s ch=%2$d bw=%3$s%4$s</string>
     <string name="hotspot_config_apply_failed">配置写入失败（system + root）</string>
     <string name="hotspot_channel_label">信道</string>
-    <string name="font_size_title">字体大小</string>
-    <string name="font_size_current">当前大小</string>
+    <string name="font_size_title">显示大小</string>
+    <string name="font_size_current">当前显示大小</string>
     <string name="font_size_extra_small">特小</string>
     <string name="font_size_small">小</string>
     <string name="font_size_medium">中</string>
@@ -580,13 +581,13 @@
     <string name="font_size_large">大</string>
     <string name="font_size_extra_large">特大</string>
     <string name="font_size_huge">超大</string>
-    <string name="font_size_desc_extra_small">非常小的字体</string>
-    <string name="font_size_desc_small">适合视力较好</string>
-    <string name="font_size_desc_medium">默认大小</string>
-    <string name="font_size_desc_large">稍微放大</string>
-    <string name="font_size_desc_extra_large">明显放大</string>
-    <string name="font_size_desc_huge">适合视力不佳</string>
-    <string name="font_size_hint">字体大小调整会立即生效，你可以返回首页查看完整效果。</string>
+    <string name="font_size_desc_extra_small">80%</string>
+    <string name="font_size_desc_small">90%</string>
+    <string name="font_size_desc_medium">100% · 跟随系统</string>
+    <string name="font_size_desc_large">110%</string>
+    <string name="font_size_desc_extra_large">120%</string>
+    <string name="font_size_desc_huge">130%</string>
+    <string name="font_size_hint">同步缩放控件、间距和文字。100% 跟随系统显示大小，调小可显示更多内容。松开滑块后生效，不修改系统设置。</string>
     <string name="font_preview_title">网络面板（预览）</string>
     <string name="font_preview_operator">中国移动场馆VIP</string>
     <string name="font_preview_serving_cell">广西壮族自治区崇左市大新德天瀑布景区TEST-H5H-9</string>

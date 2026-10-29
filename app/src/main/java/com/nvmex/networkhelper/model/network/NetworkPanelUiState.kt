@@ -51,6 +51,8 @@ data class NetworkPanelUiState(
     val nrCa: String = "-",
     val nrCaInfo: NrCaInfo? = null,
     val lteCaInfo: LteCaInfo? = null,
+    // Fresh, non-serving cells from this subscription's callback, never NRCA-derived ARFCNs.
+    val neighborCells: List<CellTimelinePoint> = emptyList(),
 
     // =========================
     // NSA: LTE Anchor 备用信息（用于 UI 切换显示 4G）
@@ -104,7 +106,7 @@ data class NrCaInfo(
     val carriers: List<NrCaCarrier>,
     val updatedAt: Long,
     val bandwidthEncoding: NrcaBandwidthEncoding = NrcaBandwidthEncoding.LEGACY,
-    /** QMI reports only secondary frequencies, without PCI, bandwidth or activity. */
+    /** QMI frequency fallback includes the identified primary; secondary PCI/bandwidth/activity are unknown. */
     val frequencyOnly: Boolean = false
 )
 

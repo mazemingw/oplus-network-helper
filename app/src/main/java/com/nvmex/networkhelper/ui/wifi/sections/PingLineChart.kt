@@ -50,7 +50,7 @@ fun PingLineChart(
     showGrid: Boolean = true,
     showMinMax: Boolean = true,
     marks: List<Int> = emptyList(),
-    useEChartsChart: Boolean = false,
+    useEChartsChart: Boolean = true,
 ) {
     val lineColor = MaterialTheme.colorScheme.primary
     val gridColor = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.08f)

@@ -57,7 +57,8 @@ import com.nvmex.networkhelper.repository.CellParamLocalRepository
 import com.nvmex.networkhelper.ui.settings.AppLanguageManager
 import com.nvmex.networkhelper.util.map.AppDb
 import com.nvmex.networkhelper.util.map.DrivePointDao
-import com.nvmex.networkhelper.util.map.DrivePointEntity
+import com.nvmex.networkhelper.util.map.toDriveEntity
+import com.nvmex.networkhelper.util.map.toDrivePointOrNull
 import com.nvmex.networkhelper.util.map.DriveSampler
 import com.nvmex.networkhelper.util.map.DriveHistory
 import com.nvmex.networkhelper.util.map.DriveKeepAliveService
@@ -94,7 +95,9 @@ import com.nvmex.networkhelper.util.map.mergeNearbyProbeResults
 import com.nvmex.networkhelper.util.map.ProbeAntennaSelection
 import com.nvmex.networkhelper.util.map.ProbedStation
 import com.nvmex.networkhelper.util.map.driveBandLabel
-import com.nvmex.networkhelper.util.map.drivePreferInertial
+import com.nvmex.networkhelper.util.map.DrivePositionSelector
+import com.nvmex.networkhelper.util.map.DriveSamplePosition
+import com.nvmex.networkhelper.util.map.driveLog
 import com.nvmex.networkhelper.util.map.matching.*
 import android.text.TextUtils
 import android.widget.PopupMenu
@@ -139,6 +142,7 @@ class AmapMapActivity : AppCompatActivity(), LocationSource {
     private var mapMatching: MapMatchingController? = null
     private var lastMapMatchJson: String? = null
     private var lastAmapFixAt = -1L
+    private val samplePositions = DrivePositionSelector()
     private var lastAmapIsGps = false
     private var lastAmapSpeed: Double? = null
     private var isFirstFix = true
@@ -195,7 +199,8 @@ class AmapMapActivity : AppCompatActivity(), LocationSource {
         set(value) {
             field = value
             visibleHistory = value?.filteredBy(bandFilter)
-            locationMarker?.setVisible(value == null)
+            locationMarker?.setVisible(value == null && driveCourse.isMoving)
+            if (::aMap.isInitialized) updateDirectionDisplay()
         }
     private var restoreJob: Job? = null
     private var lastToggleAt = 0L
@@ -210,6 +215,7 @@ class AmapMapActivity : AppCompatActivity(), LocationSource {
     private var is3DMode = false
     private var lastBearingDeg: Float? = null
     private val driveCourse = DriveCourse()
+    private var sdkDirectionVisible: Boolean? = null
     private var locationMarker: DriveLocationMarker? = null
     private val followTilt3D = 55f
 
@@ -428,13 +434,15 @@ class AmapMapActivity : AppCompatActivity(), LocationSource {
             sampler = DriveSampler(
                 aMap = aMap,
                 scope = scope,
-                getLatLng = { lastLatLng?.takeIf {
-                    SystemClock.elapsedRealtime() - lastPositionAt <= 5000 &&
-                        (lastPositionEstimated || (lastPositionAccuracy ?: Float.MAX_VALUE) <= 100f)
-                } },
-                positionQuality = { lastPositionEstimated to lastPositionAccuracy },
-                rawPosition = { lastRawPosition },
-                mapMatchJson = { lastMapMatchJson },
+                position = {
+                    val now = SystemClock.elapsedRealtime()
+                    val reading = if (::motionTracker.isInitialized) motionTracker.engine.reading(now)
+                        else DeadReckoningEngine.Reading(DeadReckoningEngine.Mode.NO_FIX, reason = "tracker_not_started")
+                    val fix = samplePositions.select(now, reading, inertialEnabled)
+                    driveLog("position source=${fix.source} reason=${fix.reason} outageMs=${reading.outageMillis} " +
+                        if (::motionTracker.isInitialized) motionTracker.diagnostic(now) else "tracker_not_started")
+                    fix.copy(mapMatchJson = lastMapMatchJson.takeIf { fix.located && fix.measuredAt == lastPositionAt })
+                },
                 onCoverageChanged = { coverage ->
                     bandCoverage = coverage
                     updateBandCoveragePanel()
@@ -460,24 +468,9 @@ class AmapMapActivity : AppCompatActivity(), LocationSource {
                 maxMarkers = 4000,
                 resolvePersistSessionId = { persistSessionId },
                 onPersist = { points, sid ->
-                    dao.recordBatch(points.map { p ->
-                        DrivePointEntity(
-                            sessionId = sid,
-                            ts = p.ts,
-                            simSlot = p.simSlot,
-                            lat = p.latLng.latitude,
-                            lng = p.latLng.longitude,
-                            rsrpDbm = p.rsrpDbm,
-                            isHandover = p.isHandover,
-                            cellKey = p.cellKey ?: "",
-                            snapshotJson = SnapshotJson.withMapMatch(SnapshotJson.toJson(p.snapshot), p.mapMatchJson),
-                            estimated = p.estimated,
-                            accuracyMeters = p.accuracyMeters,
-                            segmentStart = p.segmentStart,
-                            rawLat = p.rawLat, rawLng = p.rawLng, rawCoordType = p.rawCoordType
-                        )
-                    }, sessionCities[sid].orEmpty())
-                    resolveSessionCity(sid, points.first().latLng)
+                    dao.recordBatch(points.map { it.toDriveEntity(sid) }, sessionCities[sid].orEmpty())
+                    points.firstNotNullOfOrNull { it.latLng }?.let { resolveSessionCity(sid, it) }
+                    driveLog("persist session=$sid rows=${points.size} located=${points.count { it.latLng != null }}")
                     val metadata = dao.getSession(sid)
                     withContext(Dispatchers.Main.immediate) {
                         if (currentSessionId == sid) {
@@ -540,9 +533,10 @@ class AmapMapActivity : AppCompatActivity(), LocationSource {
                 if (marker != null && station != null && !isDriving && restoredHistory == null) {
                     stationDistancePreview?.select(marker.position)
                     stationDistancePreview?.updatePosition(stationUserPosition())
-                    if (stationUserPosition() == null) showDriveMessage(R.string.map_station_preview_location_pending)
+                    if (stationDistancePreview?.hasPosition != true) showDriveMessage(R.string.map_station_preview_location_pending)
                 } else stationDistancePreview?.clear()
             }
+            sampler.resolveStationMarker = { probeAntennas.selectedStationKey?.let(::markerForStation) }
             applySectorDrawConfigToOverlays()
 
             setupFabs(root)
@@ -1221,6 +1215,15 @@ class AmapMapActivity : AppCompatActivity(), LocationSource {
         return null
     }
 
+    private fun markerForStation(key: String): Marker? {
+        val stationKey = key.substringAfter('|')
+        return when (key.substringBefore('|')) {
+            "LTE" -> nearbyLteOverlay.stationMarker(stationKey) ?: lteOverlay.stationMarker(stationKey)
+            "NR" -> nearbyNrOverlay.stationMarker(stationKey) ?: nrOverlay.stationMarker(stationKey)
+            else -> null
+        }
+    }
+
     private fun renderProbeAntennas() {
         if (!::probeAntennaLte.isInitialized) return
         val (lteRows, nrRows) = probeAntennas.displayed(stationExclusion)
@@ -1231,7 +1234,7 @@ class AmapMapActivity : AppCompatActivity(), LocationSource {
     private fun onMotionReading(reading: DeadReckoningEngine.Reading) {
         if (isDestroyed || !::speedView.isInitialized) return
         val now = SystemClock.elapsedRealtime()
-        val sdkFresh = lastAmapFixAt >= 0 && now - lastAmapFixAt in 0..3000
+        val sdkFresh = samplePositions.reliableGpsFresh(now)
         val speed = (if (sdkFresh && lastAmapIsGps) lastAmapSpeed ?: reading.speedMps else reading.speedMps)
             ?.let { String.format(Locale.getDefault(), "%.1f", it * 3.6) } ?: "—"
         val readiness = if (reading.mode == DeadReckoningEngine.Mode.ESTIMATED)
@@ -1244,7 +1247,7 @@ class AmapMapActivity : AppCompatActivity(), LocationSource {
             val point = LatLng(lat, lng)
             acceptMapPosition(point, reading.bearing?.toFloat(), reading.mode == DeadReckoningEngine.Mode.ESTIMATED,
                 reading.uncertaintyMeters?.toFloat(), Triple(reading.lat, reading.lng, "WGS84_ESTIMATED"),
-                reading.speedMps, motionTracker.engine.isReady(now), now)
+                reading.speedMps, motionTracker.engine.isReady(now), reading.measuredAtMillis)
             if (mapResumed) amapListener?.onLocationChanged(Location("drive").apply {
                 latitude = lat; longitude = lng
                 accuracy = reading.uncertaintyMeters?.toFloat() ?: 10f
@@ -1279,7 +1282,8 @@ class AmapMapActivity : AppCompatActivity(), LocationSource {
                 System.currentTimeMillis() - (SystemClock.elapsedRealtime() - fixAt).coerceAtLeast(0)))
         }
         if (!mapResumed) return
-        locationMarker?.update(point, lastBearingDeg?.toDouble(), estimated, restoredHistory == null)
+        updateDirectionDisplay()
+        locationMarker?.update(point, lastBearingDeg?.toDouble(), estimated, restoredHistory == null && driveCourse.isMoving)
         if (isFirstFix) {
             isFirstFix = false
             if (shouldSkipFirstFixCenter) shouldSkipFirstFixCenter = false
@@ -1295,7 +1299,7 @@ class AmapMapActivity : AppCompatActivity(), LocationSource {
     }
 
     private fun stationUserPosition(): LatLng? =
-        if (restoredHistory != null) visibleHistory?.pointsBySlot?.get(selectedSimSlot)?.firstOrNull()?.latLng
+        if (restoredHistory != null) visibleHistory?.pointsBySlot?.get(selectedSimSlot)?.firstNotNullOfOrNull { it.latLng }
         else lastLatLng?.takeIf {
             SystemClock.elapsedRealtime() - lastPositionAt in 0..5000 &&
                 (lastPositionEstimated || (lastPositionAccuracy ?: Float.MAX_VALUE) <= 100f)
@@ -1304,8 +1308,10 @@ class AmapMapActivity : AppCompatActivity(), LocationSource {
     private fun updateServingPosition() {
         val position = stationUserPosition()
         if (::servingStation.isInitialized) servingStation.updatePosition(position)
+        // Manual measuring keeps a valid live fix even if the next GPS sample is late.
+        // Serving-station matching retains its stricter freshness/accuracy checks above.
+        if (restoredHistory == null) stationDistancePreview?.updatePosition(position)
         if (isDriving || restoredHistory != null) stationDistancePreview?.clear()
-        else stationDistancePreview?.updatePosition(position)
     }
 
     private fun onMapMatchResult(result: MatchResult?, metadata: String?) {
@@ -1528,7 +1534,7 @@ class AmapMapActivity : AppCompatActivity(), LocationSource {
     private fun frameCurrentTrack(start: Boolean) {
         val points = (visibleHistory?.pointsBySlot?.get(selectedSimSlot)
             ?: if (restoredHistory == null) sampler.recordedPoints().filter { it.simSlot == selectedSimSlot && bandFilter.matches(it.snapshot) }
-            else emptyList()).filter { driveValidPosition(it.latLng.latitude, it.latLng.longitude, 0f) }
+            else emptyList()).filter { it.latLng?.let { p -> driveValidPosition(p.latitude, p.longitude, 0f) } == true }
         pendingTrackStart = null
         if (points.isEmpty()) return
         followMyLocation = false
@@ -1536,12 +1542,12 @@ class AmapMapActivity : AppCompatActivity(), LocationSource {
         updateCenterFabUi()
         if (mapView.width <= 0 || mapView.height <= 0) { pendingTrackStart = start; return }
         ignoreCameraMoveCancelOnce = true
-        val first = points.minBy { it.ts }.latLng
+        val first = points.minBy { it.ts }.latLng!!
         if (start || points.all { it.latLng == first }) {
             aMap.moveCamera(CameraUpdateFactory.newLatLngZoom(first, 17f))
         } else {
             val bounds = com.amap.api.maps.model.LatLngBounds.builder()
-            points.forEach { bounds.include(it.latLng) }
+            points.forEach { bounds.include(it.latLng!!) }
             val padding = dp(80).coerceAtMost(minOf(mapView.width, mapView.height) / 4)
             aMap.moveCamera(CameraUpdateFactory.newLatLngBounds(bounds.build(), mapView.width, mapView.height, padding))
         }
@@ -1573,8 +1579,9 @@ class AmapMapActivity : AppCompatActivity(), LocationSource {
         val keys = points.flatMap { listOf(it.cellKey, DriveStyle.cellKey(it.snapshot)) }.toHashSet()
         val stations = restoredStations.filter { it.simSlot == selectedSimSlot && it.cellKey in keys }
         servingStation.clear()
-        servingStation.updatePosition(points.firstOrNull()?.latLng)
-        servingStation.showHistory(stations, selectedSimSlot, points.firstOrNull())
+        val firstLocated = points.firstOrNull { it.latLng != null }
+        servingStation.updatePosition(firstLocated?.latLng)
+        servingStation.showHistory(stations, selectedSimSlot, firstLocated)
     }
 
     private fun showHistoryPointCount() {
@@ -1780,13 +1787,20 @@ class AmapMapActivity : AppCompatActivity(), LocationSource {
 
     private fun initMyLocation() {
         aMap.setLocationSource(this)
-        aMap.myLocationStyle = MyLocationStyle()
-            .myLocationType(MyLocationStyle.LOCATION_TYPE_FOLLOW_NO_CENTER)
-            .showMyLocation(isPickMode)
-            .interval(1000L)
+        updateDirectionDisplay()
         aMap.isMyLocationEnabled = true
         syncMapMatchingState()
         if (!isPickMode && ::motionTracker.isInitialized && mapResumed) motionTracker.start()
+    }
+
+    private fun updateDirectionDisplay() {
+        val show = isPickMode || restoredHistory == null && !driveCourse.isMoving
+        if (sdkDirectionVisible == show) return
+        sdkDirectionVisible = show
+        aMap.myLocationStyle = MyLocationStyle()
+            .myLocationType(MyLocationStyle.LOCATION_TYPE_LOCATION_ROTATE_NO_CENTER)
+            .showMyLocation(show).interval(1000L)
+        locationMarker?.setVisible(restoredHistory == null && driveCourse.isMoving)
     }
 
     override fun activate(listener: LocationSource.OnLocationChangedListener?) {
@@ -1808,13 +1822,41 @@ class AmapMapActivity : AppCompatActivity(), LocationSource {
                     if (loc != null && loc.errorCode == 0) {
                         val now = SystemClock.elapsedRealtime()
                         val fixAt = driveFixElapsedMillis(loc.elapsedRealtimeNanos, loc.time, now, System.currentTimeMillis())
-                        if (!driveValidPosition(loc.latitude, loc.longitude, loc.accuracy) || fixAt == null) return@setLocationListener
-                        if (!isPickMode && ::motionTracker.isInitialized && drivePreferInertial(
-                                loc.locationType == AMapLocation.LOCATION_TYPE_GPS, loc.accuracy,
-                                motionTracker.engine.reading(now))) return@setLocationListener
+                        if (!driveValidPosition(loc.latitude, loc.longitude, loc.accuracy) || fixAt == null || (!isPickMode && !loc.hasAccuracy())) {
+                            driveLog("SDK reject=invalid_coordinates_time_or_missing_accuracy type=${loc.locationType}")
+                            return@setLocationListener
+                        }
                         val coordinate = if (loc.coordType == AMapLocation.COORD_TYPE_WGS84)
                             Gcj02.wgs84ToGcj02(loc.latitude, loc.longitude) else loc.latitude to loc.longitude
                         val point = LatLng(coordinate.first, coordinate.second)
+                        if (!isPickMode) {
+                            // SAME_REQ/FIX_CACHE/LAST_LOCATION_CACHE are not fresh measurements.
+                            if (loc.locationType in setOf(AMapLocation.LOCATION_TYPE_SAME_REQ,
+                                    AMapLocation.LOCATION_TYPE_FIX_CACHE, AMapLocation.LOCATION_TYPE_LAST_LOCATION_CACHE)) {
+                                driveLog("SDK reject=cached_location type=${loc.locationType}")
+                                return@setLocationListener
+                            }
+                            // Observe first so a stale/jumping GPS fix cannot evict a valid IMU estimate.
+                            val gpsValidated = if (loc.locationType == AMapLocation.LOCATION_TYPE_GPS && ::motionTracker.isInitialized) {
+                                val wgs = if (loc.coordType == AMapLocation.COORD_TYPE_WGS84)
+                                    loc.latitude to loc.longitude else Gcj02.gcj02ToWgs84(loc.latitude, loc.longitude)
+                                runCatching {
+                                    motionTracker.acceptGps(Location(loc).apply {
+                                        latitude = wgs.first; longitude = wgs.second; elapsedRealtimeNanos = fixAt * 1_000_000
+                                    })
+                                }.onFailure { driveLog("IMU GPS observation failed: ${it.message}") }.getOrDefault(false)
+                            } else false
+                            val estimate = if (::motionTracker.isInitialized) motionTracker.engine.reading(now)
+                                else DeadReckoningEngine.Reading(DeadReckoningEngine.Mode.NO_FIX)
+                            val rejection = samplePositions.offerSdk(DriveSamplePosition(
+                                point.latitude, point.longitude,
+                                if (loc.locationType == AMapLocation.LOCATION_TYPE_GPS) "GPS" else "SDK", fixAt,
+                                loc.accuracy, loc.latitude, loc.longitude, loc.coordType ?: "GCJ02", reason = "sdk"), now, estimate, gpsValidated)
+                            if (rejection != null) {
+                                driveLog("SDK reject=$rejection type=${loc.locationType} ageMs=${now - fixAt}")
+                                return@setLocationListener
+                            }
+                        }
                         val city = loc.city?.takeIf { it.isNotBlank() } ?: loc.province.orEmpty()
                         if (city.isNotBlank()) { lastCityName = city; lastCityPoint = point }
                         lastAmapFixAt = fixAt
@@ -1828,21 +1870,12 @@ class AmapMapActivity : AppCompatActivity(), LocationSource {
                         lastPositionAt = fixAt
                         if (mapResumed) amapListener?.onLocationChanged(if (loc.coordType == AMapLocation.COORD_TYPE_WGS84)
                             Location(loc).apply { latitude = point.latitude; longitude = point.longitude } else loc)
-                        if (lastAmapIsGps && !isPickMode && ::motionTracker.isInitialized) {
-                            val (wgsLat, wgsLng) = if (loc.coordType == AMapLocation.COORD_TYPE_WGS84)
-                                loc.latitude to loc.longitude else Gcj02.gcj02ToWgs84(loc.latitude, loc.longitude)
-                            runCatching {
-                                motionTracker.acceptGps(Location(loc).apply {
-                                    latitude = wgsLat; longitude = wgsLng; elapsedRealtimeNanos = fixAt * 1_000_000
-                                })
-                            }.onFailure { Logger.log("Drive IMU observation failed: ${it.message}") }
-                        }
                         val sid = persistSessionId
                         if (sid != null && city.isNotBlank() && sessionCities[sid].isNullOrBlank()) {
                             // Only use an address associated with the first saved point, not a later city.
                             DrivePersistence.scope.launch {
                                 val first = dao.getFirstPoint(sid)
-                                if (first != null && driveDistanceMeters(first.lat, first.lng, point.latitude, point.longitude) < 500) {
+                                if (first?.lat != null && first.lng != null && driveDistanceMeters(first.lat, first.lng, point.latitude, point.longitude) < 500) {
                                     sessionCities[sid] = city
                                     dao.setCityIfEmpty(sid, city)
                                 }
@@ -2454,10 +2487,12 @@ class AmapMapActivity : AppCompatActivity(), LocationSource {
         val result = nearbyResult
         val summary = if (stationExclusion.active) getString(R.string.map_station_exclusion_summary, stationExclusion.summary()) else ""
         val message = if (result == null) summary else {
-            sampler.clearSelection()
             val visibleLte = result.lte.filterNot { stationExclusion.excludes(it) }
             val lteCount = nearbyLteOverlay.renderNearbyCells(visibleLte.take(1000))
             val nrCount = nearbyNrOverlay.renderNearbyCells(result.nr.take(1000))
+            // Nearby refresh replaces SDK Marker objects. Restore the same station by key
+            // before a camera refresh notices the removed marker and clears the preview.
+            sampler.refreshSelectedStationMarker()
             getString(R.string.map_nearby_result, nearbyRadiusKm, lteCount, nrCount) +
                 (nearbyRat?.let { if (it == "LTE") " · 4G" else " · 5G" } ?: "") +
                 (nearbyBand?.let { " · $it" } ?: "") +
@@ -2562,25 +2597,6 @@ class AmapMapActivity : AppCompatActivity(), LocationSource {
 
     private fun newSessionId(): String {
         return "S${System.currentTimeMillis()}_${kotlin.random.Random.nextInt(1000, 9999)}"
-    }
-
-    private fun DrivePointEntity.toDrivePointOrNull(): DrivePoint? {
-        val snap = runCatching { SnapshotJson.fromJson(snapshotJson) }
-            .getOrElse { return null }
-        return DrivePoint(
-            latLng = LatLng(lat, lng),
-            ts = ts,
-            simSlot = simSlot,
-            rsrpDbm = rsrpDbm,
-            isHandover = isHandover,
-            cellKey = cellKey,
-            snapshot = snap,
-            estimated = estimated,
-            accuracyMeters = accuracyMeters,
-            segmentStart = segmentStart,
-            rawLat = rawLat, rawLng = rawLng, rawCoordType = rawCoordType,
-            mapMatchJson = SnapshotJson.mapMatch(snapshotJson)
-        )
     }
 
     private fun logRestoreFieldStats(sessionId: String, points: List<DrivePoint>) {

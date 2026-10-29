@@ -1,10 +1,12 @@
-/* Network Helper adaptation, 2026-10-25. Upstream: Fronsipswu/qcom-band-menu
+/* Network Helper adaptation, updated 2026-10-27. Upstream: Fronsipswu/qcom-band-menu
  * bff702b5b4916f68feb3bf9308b91be56846f2e6, GPL-3.0 (see LICENSE-GPL-3.0).
  * Changes: own version, mandatory token authentication, defer SIM binding and
  * state/capability reads to requests, no SET-based NR probe at startup.
  * Reuse verified NAS bindings, preserve error stages/codes, recover QMI 5 by
  * releasing own clients and rebinding once; explicit read-only session reset.
  * Open NAS lazily and release clients immediately on owning app disconnect.
+ * Expose existing RAT/cell-lock GETs (0034/00d7/010f) over the read-only
+ * monitoring socket; no extra sockets or SET messages are permitted there.
  * Original implementation/history follows.
  */
 /*
@@ -955,6 +957,9 @@ static u32 now_ms(void){struct timespec64 t;if(sc2(SYS_clock_gettime,CLOCK_MONOT
 static int nas_read_allowed(u16 msg){
  switch(msg){
   case 0x0025: /* GET_HOME_NETWORK */
+  case 0x0034: /* GET_SYSTEM_SELECTION_PREFERENCE: read-only home RAT status */
+  case 0x00D7: /* GET_LTE_CELL_LOCK: read-only home cell-lock status */
+  case 0x010F: /* GET_NR_CELL_LOCK: read-only home cell-lock status */
   case 0x0031: /* GET_RF_BAND_INFO */
   case 0x0043: /* GET_CELL_LOCATION_INFO */
   case 0x004D: /* GET_SYS_INFO */

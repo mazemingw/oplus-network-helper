@@ -11,6 +11,7 @@ object Routes {
     const val IPERF_SERVER = "iperf_server"
     const val IPERF_CLIENT = "iperf_client"
     const val ENGINEER_BAND_LOCK = "engineer_band_lock"
+    const val QUICK_BAND_LOCK = "quick_band_lock/{target}"
     const val PLUGIN_SHARE = "plugin_share"
     const val INDOOR_DRIVE_TEST = "indoor_drive_test"
     const val FONT_SETTINGS = "font_settings"
