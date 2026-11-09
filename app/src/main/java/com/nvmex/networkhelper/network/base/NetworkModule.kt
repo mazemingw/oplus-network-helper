@@ -30,6 +30,7 @@ object NetworkModule {
             .connectTimeout(15, TimeUnit.SECONDS)
             .readTimeout(20, TimeUnit.SECONDS)
             .writeTimeout(20, TimeUnit.SECONDS)
+            .addInterceptor(com.nvmex.networkhelper.util.diagnostics.DiagnosticNetworkInterceptor())
             .addInterceptor(RawResponseInterceptor()) // ✅ 可开关、且只打印指定接口
             .addInterceptor(logging)
             .build()

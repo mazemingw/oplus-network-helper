@@ -1,0 +1,10 @@
+<resources>
+    <string name="efs_backup_force_skip">强制跳过</string>
+    <string name="efs_backup_bypassed">风险放行：完整备份尚未完成</string>
+    <string name="efs_backup_skip_title">危险：跳过完整备份</string>
+    <string name="efs_backup_skip_warning">备份未完成。继续修改可能导致基带崩溃、IMEI 丢失或无信号，且无法恢复，后果自负。\n\n建议先用“多系统工具箱”“爱玩机”等软件备份以下分区，并保留副本。\n\n本次放行仅在当前应用会话有效，不代表已有可恢复备份；仍需手动开启“允许修改”。</string>
+    <string name="efs_backup_skip_partitions">需备份分区（识别失败时仅供参考，须确认完整范围）</string>
+    <string name="efs_backup_skip_wait">请阅读风险（%1$d 秒）</string>
+    <string name="efs_backup_skip_continue">承担风险，继续</string>
+    <string name="efs_backup_skip_cancel">返回备份</string>
+</resources>

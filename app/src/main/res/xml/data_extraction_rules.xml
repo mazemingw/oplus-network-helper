@@ -5,15 +5,23 @@
 -->
 <data-extraction-rules>
     <cloud-backup>
+        <exclude domain="sharedpref" path="diagnostic-reporting.xml" />
+        <exclude domain="sharedpref" path="efs-vault.xml" />
+        <exclude domain="file" path="efs-cloud" />
+        <exclude domain="file" path="feature-backups" />
+        <exclude domain="file" path="initial-efs-backup.json" />
+        <exclude domain="file" path="logs" />
         <!-- TODO: Use <include> and <exclude> to control what is backed up.
         <include .../>
         <exclude .../>
         -->
     </cloud-backup>
-    <!--
     <device-transfer>
-        <include .../>
-        <exclude .../>
+        <exclude domain="sharedpref" path="diagnostic-reporting.xml" />
+        <exclude domain="sharedpref" path="efs-vault.xml" />
+        <exclude domain="file" path="efs-cloud" />
+        <exclude domain="file" path="feature-backups" />
+        <exclude domain="file" path="initial-efs-backup.json" />
+        <exclude domain="file" path="logs" />
     </device-transfer>
-    -->
 </data-extraction-rules>

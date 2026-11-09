@@ -51,6 +51,16 @@ import com.nvmex.networkhelper.viewmodel.signal.NetworkPanelMultiSimViewModel
 import kotlinx.coroutines.launch
 
 @Composable
+internal fun DefaultDataSimIcon(selected: Boolean) {
+    Icon(
+        painter = painterResource(R.drawable.sim_card),
+        contentDescription = stringResource(R.string.default_data_sim),
+        modifier = Modifier.size(14.dp),
+        tint = if (selected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant
+    )
+}
+
+@Composable
 fun NetworkPanelTabs(
     modifier: Modifier = Modifier,
     vm: NetworkPanelMultiSimViewModel = androidx.lifecycle.viewmodel.compose.viewModel(),

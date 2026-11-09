@@ -11,6 +11,7 @@ class App : be.mygod.vpnhotspot.App() {
 
     override fun onCreate() {
         super.onCreate()
+        com.nvmex.networkhelper.util.diagnostics.DiagnosticReporter.initialize(this)
         com.nvmex.networkhelper.util.modem.SystemQmiServices.initialize(this)
 
         // 高德地图 SDK 初始化

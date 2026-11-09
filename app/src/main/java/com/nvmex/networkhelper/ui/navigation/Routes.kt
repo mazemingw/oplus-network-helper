@@ -2,10 +2,13 @@ package com.nvmex.networkhelper.ui.navigation
 
 object Routes {
     const val HOME = "home"
+    const val EFS_EXPLORER = "qualcomm_efs_explorer"
+    const val MODEM_FEATURES = "qualcomm_modem_features"
     const val RADAR = "radar"
     const val WIFI = "wifi"
     const val MENU = "menu"
     const val SETTINGS = "settings"
+    const val DIAGNOSTICS = "diagnostic_console"
     const val CELL_QUERY = "cell_query"
     const val HOTSPOT = "hotspot"
     const val IPERF_SERVER = "iperf_server"

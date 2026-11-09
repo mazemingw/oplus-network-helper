@@ -44,6 +44,7 @@ import androidx.compose.material3.Slider
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.LaunchedEffect
@@ -112,6 +113,9 @@ fun AppRoot(
     navController: NavHostController = rememberNavController()
 ) {
     val sharedNetworkVm: com.nvmex.networkhelper.viewmodel.signal.NetworkPanelMultiSimViewModel = androidx.lifecycle.viewmodel.compose.viewModel()
+    // Capture the activity owner without creating the EFS session. Only the two opt-in routes instantiate it.
+    val efsSessionOwner = androidx.lifecycle.viewmodel.compose.LocalViewModelStoreOwner.current!!
+    var modemDataSlot by remember { mutableStateOf<Int?>(null) }
     var sharedPanelState by remember { mutableStateOf(NetworkPanelUiState()) }
     var playbackBarState by remember { mutableStateOf<HomePlaybackBarState?>(null) }
     var showEngineerBandLockDialog by remember { mutableStateOf(false) }
@@ -211,6 +215,7 @@ fun AppRoot(
             ) {
                 HomeScreen(
                     networkVm = sharedNetworkVm,
+                    onOpenModemFeatures = { slot -> modemDataSlot = slot; navController.navigate(Routes.MODEM_FEATURES) { launchSingleTop = true } },
                     onQuickLock = { request ->
                         navController.navigate("quick_band_lock/${Uri.encode(request.json())}") { launchSingleTop = true }
                     },
@@ -254,6 +259,28 @@ fun AppRoot(
 
             }
 
+            composable(Routes.DIAGNOSTICS) {
+                com.nvmex.networkhelper.ui.settings.DiagnosticConsoleScreen(onBack = { navController.popBackStack() })
+            }
+            composable(Routes.EFS_EXPLORER) {
+                val sharedEfsVm: dev.qcom.efs.MainViewModel = androidx.lifecycle.viewmodel.compose.viewModel(
+                    viewModelStoreOwner = efsSessionOwner, key = "network-helper-efs")
+                sharedEfsVm.configureCloud(com.nvmex.networkhelper.network.base.NetworkConfig.BASE_URL + "networkhelp/efs-backups/")
+                dev.qcom.efs.EfsExplorerScreen(sharedEfsVm, onBack = { navController.popBackStack() },
+                    onFeatures = { navController.navigate(Routes.MODEM_FEATURES) { launchSingleTop = true } })
+            }
+            composable(Routes.MODEM_FEATURES) {
+                val sharedEfsVm: dev.qcom.efs.MainViewModel = androidx.lifecycle.viewmodel.compose.viewModel(
+                    viewModelStoreOwner = efsSessionOwner, key = "network-helper-efs")
+                sharedEfsVm.configureCloud(com.nvmex.networkhelper.network.base.NetworkConfig.BASE_URL + "networkhelp/efs-backups/")
+                val liveDataSubId by sharedNetworkVm.dataSubId.collectAsState()
+                val liveSims by sharedNetworkVm.sims.collectAsState()
+                val liveDataSlot = liveSims.firstOrNull { it.subscriptionId == liveDataSubId }?.simSlotIndex?.takeIf { it in 0..1 }
+                val dataSlot = if (liveSims.isEmpty() && android.telephony.SubscriptionManager.isValidSubscriptionId(liveDataSubId)) modemDataSlot else liveDataSlot
+                dev.qcom.efs.ModemFeaturesScreen(sharedEfsVm, onBack = { navController.popBackStack() },
+                    defaultDataSlot = dataSlot,
+                    defaultDataIcon = { selected -> com.nvmex.networkhelper.ui.network.DefaultDataSimIcon(selected) })
+            }
             composable(
                 Routes.MENU,
                 enterTransition = { slideInHorizontally(initialOffsetX = { it }) + fadeIn() },

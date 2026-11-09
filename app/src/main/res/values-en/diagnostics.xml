@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="diagnostics_title">Automatic error reports</string>
+    <string name="diagnostics_description">Upload errors, device details and IMEI1. Exported and shared logs are redacted.</string>
+    <string name="diagnostics_export">Export logs</string>
+    <string name="diagnostics_share">Share logs</string>
+    <string name="diagnostics_export_failed">Could not export or share logs</string>
+</resources>

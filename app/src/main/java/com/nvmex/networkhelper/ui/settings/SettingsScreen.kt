@@ -32,6 +32,8 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
+import androidx.compose.material.icons.filled.BugReport
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.HorizontalDivider
@@ -148,12 +150,15 @@ fun SettingsScreen(
         verticalArrangement = Arrangement.spacedBy(16.dp)
     ) {
         item {
-            Column {
+            Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
                 Text(
                     text = stringResource(R.string.nav_settings),
-                    style = MaterialTheme.typography.headlineSmall
+                    style = MaterialTheme.typography.headlineSmall,
+                    modifier = Modifier.weight(1f)
                 )
-                Spacer(modifier = Modifier.height(6.dp))
+                IconButton(onClick = { navController.navigate(Routes.DIAGNOSTICS) { launchSingleTop = true } }) {
+                    Icon(Icons.Default.BugReport, "日志监控台")
+                }
             }
         }
 
@@ -166,15 +171,6 @@ fun SettingsScreen(
                     checked = settings.legacyBandLock,
                     onCheckedChange = { setSettings(settings.copy(legacyBandLock = it)) }
                 )
-                ThinDivider()
-                SwitchSettingItem(
-                    title = stringResource(R.string.map_matching_title),
-                    desc = stringResource(R.string.map_matching_description),
-                    checked = settings.enableMapMatching,
-                    onCheckedChange = { setSettings(settings.copy(enableMapMatching = it)) }
-                )
-                if (settings.enableMapMatching) Text(stringResource(R.string.map_matching_coverage),
-                    Modifier.padding(horizontal = 14.dp, vertical = 8.dp), style = MaterialTheme.typography.bodySmall)
                 ThinDivider()
                 SwitchSettingItem(
                     title = stringResource(R.string.settings_real_signal_icon_title),

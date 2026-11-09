@@ -1,0 +1,27 @@
+qcom-efs-browser
+Copyright (c) 2026, catxeon
+
+Licensed under the BSD 3-Clause License; see LICENSE.
+
+Third-party material
+====================
+
+This project was written from scratch, but its wire-format knowledge comes
+from other people's work:
+
+* qfenix -- https://github.com/iamromulan/qfenix -- BSD-3-Clause.
+  The EFS2 packet field layouts, the item-file interface and several
+  hard-won details (POSIX open flags, the int16 mode fields, the PUT
+  response offsets) were transcribed from its diag.c and diag.h.
+  Note that this project does NOT follow qfenix's opcode numbering; see
+  README.md for why.
+
+* libopenpst -- https://github.com/openpst/libopenpst -- the classic EFS2
+  opcode numbering, which is what shipping modems agree with.
+
+* QCSuper -- https://github.com/P1sec/QCSuper -- GPLv3 -- and MobileInsight's
+  diag_revealer, for documenting how DIAG works on Android. Their /dev/diag
+  container framing and their DIAG_IOCTL_SWITCH_LOGGING argument-probing
+  technique were reimplemented in earlier versions of this helper; that
+  transport has since been dropped in favour of DIAG over QRTR. No code was
+  copied.

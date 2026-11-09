@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="diagnostics_title">自动错误上报</string>
+    <string name="diagnostics_description">上传错误、设备信息及 IMEI1；导出分享自动脱敏。</string>
+    <string name="diagnostics_export">导出日志</string>
+    <string name="diagnostics_share">分享日志</string>
+    <string name="diagnostics_export_failed">日志导出或分享失败</string>
+</resources>

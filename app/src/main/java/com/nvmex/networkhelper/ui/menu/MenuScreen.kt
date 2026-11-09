@@ -43,6 +43,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.Dp
@@ -60,6 +61,7 @@ fun MenuScreen(
     contentBottomPadding: Dp = 0.dp,
 ) {
     val context = LocalContext.current
+    val qualcomm = dev.qcom.efs.rememberQualcommPlatform()
 
     Box(
         modifier = Modifier
@@ -89,6 +91,14 @@ fun MenuScreen(
                 subtitle = stringResource(R.string.menu_stable_subtitle),
                 leadingIcon = null
             ) {
+                MenuEntryItem(
+                    icon = { Icon(Icons.Default.BugReport, null) },
+                    title = stringResource(dev.qcom.efs.R.string.efs_browser_title),
+                    subtitle = stringResource(if (qualcomm) dev.qcom.efs.R.string.efs_browser_description else dev.qcom.efs.R.string.efs_browser_qualcomm_only),
+                    enabled = qualcomm,
+                    onClick = { navController.navigate(Routes.EFS_EXPLORER) { launchSingleTop = true } }
+                )
+                MenuEntryDivider()
                 MenuEntryItem(
                     icon = {
                         Icon(
@@ -358,13 +368,15 @@ private fun MenuEntryItem(
     icon: @Composable () -> Unit,
     title: String,
     subtitle: String,
+    enabled: Boolean = true,
     onClick: () -> Unit
 ) {
     Row(
         modifier = Modifier
             .fillMaxWidth()
             .clip(RoundedCornerShape(18.dp))
-            .clickable(onClick = onClick)
+            .alpha(if (enabled) 1f else 0.45f)
+            .clickable(enabled = enabled, onClick = onClick)
             .padding(horizontal = 8.dp, vertical = 10.dp),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(12.dp)

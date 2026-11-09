@@ -73,6 +73,16 @@ notices. Source provenance and local adaptations: `bunny-modem/UPSTREAM.md`.
 They identify and credit the respective upstream backends. Our thanks to both
 projects and their contributors.
 
+## Qualcomm EFS explorer module
+
+`qcom-efs/` vendors [catxeon/qcom-efs-browser](https://github.com/catxeon/qcom-efs-browser),
+upstream revision `b7fa178fbceb294e5f3e79cadcbf9a9f961670e4` (1.4.8), with the local
+Chinese, verified-backup and restoration enhancements. Copyright (c) 2026 catxeon.
+The upstream BSD-3-Clause license and NOTICE are retained in the module and included
+in APK resources under `META-INF/qcom-efs/`. Native helper source and build scripts
+are included; this executable uses an independent app-UID socket (`nh_efsd`).
+The host app's existing GPL distribution terms remain applicable to the combined app.
+
 ## Other dependencies
 
 Gradle/Maven dependencies retain the licenses chosen by their respective

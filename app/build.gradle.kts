@@ -34,8 +34,8 @@ android {
         applicationId = "com.nvmex.networkhelper"
         minSdk = 29
         targetSdk = 35
-        versionCode = 61
-        versionName = "1.6.1"
+        versionCode = 65
+        versionName = "1.6.5"
 
         // Inject the AMap key locally; never commit API credentials.
         manifestPlaceholders["AMAP_API_KEY"] =
@@ -113,6 +113,7 @@ android {
 
 
 dependencies {
+    implementation(project(":qcom-efs"))
     implementation(project(":bunny-modem"))
     implementation(libs.androidx.core.ktx)
     implementation(libs.androidx.appcompat)

@@ -949,4 +949,5 @@
     <string name="map_history_stop_recording">请先停止并保存当前路测，再回读记录。</string>
     <string name="map_drive_save_failed">部分采样写入失败，已写入的双卡数据组可保存。</string>
     <string name="map_drive_phone_required">请授予电话权限，以同步采集两张 SIM 的路测信息。</string>
+    <string name="default_data_sim">默认数据卡</string>
 </resources>

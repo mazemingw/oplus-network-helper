@@ -949,4 +949,5 @@
     <string name="map_history_stop_recording">Stop and save the current drive before loading a record.</string>
     <string name="map_drive_save_failed">Some samples could not be written. Successfully written SIM groups can still be saved.</string>
     <string name="map_drive_phone_required">Grant phone permission to record both SIMs together.</string>
+    <string name="default_data_sim">Default data SIM</string>
 </resources>

@@ -22,6 +22,13 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Settings
+import androidx.compose.ui.Alignment
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
@@ -67,11 +74,17 @@ fun HomeScreen(
     onOpenEngineerBandLock: () -> Unit = {},
     onQuickLock: ((com.nvmex.networkhelper.util.qmi.QmiQuickLockRequest) -> Unit)? = null,
     onOpenSignalComparison: () -> Unit = {},
+    onOpenModemFeatures: (Int?) -> Unit = {},
     onPlaybackBarChange: (HomePlaybackBarState?) -> Unit = {},
     networkVm: com.nvmex.networkhelper.viewmodel.signal.NetworkPanelMultiSimViewModel = androidx.lifecycle.viewmodel.compose.viewModel()
 ) {
     val scope = rememberCoroutineScope()
     val context = LocalContext.current
+    val qualcomm = dev.qcom.efs.rememberQualcommPlatform()
+    val dataSubId by networkVm.dataSubId.collectAsState()
+    val currentSims by networkVm.sims.collectAsState()
+    val defaultDataSlot = currentSims.firstOrNull { it.subscriptionId == dataSubId }?.simSlotIndex?.takeIf { it in 0..1 }
+    var showModemMenu by remember { mutableStateOf(false) }
     val scroll = rememberScrollState()
 
     var hasRoot by remember { mutableStateOf<Boolean?>(null) }
@@ -293,10 +306,11 @@ fun HomeScreen(
                 verticalArrangement = Arrangement.spacedBy(12.dp)
             ) {
                 if (!settings.hideHomeTopBar) {
+                    Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
                     Text(
                         text = stringResource(R.string.app_name_networkhelper),
                         style = MaterialTheme.typography.headlineSmall,
-                        modifier = Modifier.clickable {
+                        modifier = Modifier.weight(1f).clickable {
                             val now = System.currentTimeMillis()
                             titleTapCount = if (now - lastTitleTapAt <= 1600L) titleTapCount + 1 else 1
                             lastTitleTapAt = now
@@ -306,6 +320,18 @@ fun HomeScreen(
                             }
                         }
                     )
+                    Box {
+                        IconButton(onClick = { showModemMenu = true }) { Icon(Icons.Default.Settings, "功能设置") }
+                        DropdownMenu(expanded = showModemMenu, onDismissRequest = { showModemMenu = false }) {
+                            DropdownMenuItem(text = { Text(if (qualcomm) "基带功能与恢复" else "基带功能与恢复（仅高通）") },
+                                enabled = qualcomm, onClick = { showModemMenu = false; onOpenModemFeatures(defaultDataSlot) })
+                            DropdownMenuItem(text = { Text("添加 5G 网络磁贴") }, onClick = {
+                                showModemMenu = false
+                                com.nvmex.networkhelper.util.telephony.FiveGTileService.requestAdd(context)
+                            })
+                        }
+                    }
+                    }
                 }
 
                 NetworkPanelWithPermissionGate {

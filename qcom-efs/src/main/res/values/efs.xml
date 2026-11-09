@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="efs_browser_title">高通EFS浏览器</string>
+    <string name="efs_browser_description">EFS 浏览、完整分区备份和私有云备份</string>
+    <string name="efs_browser_qualcomm_only">仅支持已确认的高通处理器</string>
+</resources>

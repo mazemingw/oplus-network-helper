@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="efs_browser_title">Qualcomm EFS Browser</string>
+    <string name="efs_browser_description">Browse EFS, back up full partitions and use private cloud backups</string>
+    <string name="efs_browser_qualcomm_only">Only available on confirmed Qualcomm devices</string>
+</resources>

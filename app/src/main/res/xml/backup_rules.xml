@@ -6,6 +6,12 @@
    See https://developer.android.com/about/versions/12/backup-restore
 -->
 <full-backup-content>
+    <exclude domain="sharedpref" path="diagnostic-reporting.xml" />
+    <exclude domain="sharedpref" path="efs-vault.xml" />
+    <exclude domain="file" path="efs-cloud" />
+    <exclude domain="file" path="feature-backups" />
+    <exclude domain="file" path="initial-efs-backup.json" />
+    <exclude domain="file" path="logs" />
     <!--
    <include domain="sharedpref" path="."/>
    <exclude domain="sharedpref" path="device.xml"/>

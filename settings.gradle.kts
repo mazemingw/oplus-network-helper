@@ -29,3 +29,4 @@ rootProject.name = "欧加网络助手"
 include(":app")
 include(":bunny-modem")
 include(":vpnhotspot-mobile")
+include(":qcom-efs")

@@ -1,0 +1,10 @@
+<resources>
+    <string name="efs_backup_force_skip">Skip backup</string>
+    <string name="efs_backup_bypassed">Risk override: full backup incomplete</string>
+    <string name="efs_backup_skip_title">Danger: skip full backup</string>
+    <string name="efs_backup_skip_warning">Backup is incomplete. Further changes may crash the modem, lose the IMEI or leave the phone without service, with no way to recover. You accept responsibility for these consequences.\n\nFirst use tools such as “多系统工具箱” or “爱玩机” to back up the partitions below and keep a separate copy.\n\nThis override lasts only for the current app session. It does not mean a recoverable backup exists. You must still enable editing manually.</string>
+    <string name="efs_backup_skip_partitions">Partitions to back up (only a reference if discovery failed; confirm full coverage)</string>
+    <string name="efs_backup_skip_wait">Read the warning (%1$d s)</string>
+    <string name="efs_backup_skip_continue">Accept risk and continue</string>
+    <string name="efs_backup_skip_cancel">Back to backup</string>
+</resources>
