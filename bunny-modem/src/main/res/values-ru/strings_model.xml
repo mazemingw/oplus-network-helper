@@ -1,0 +1,42 @@
+<resources>
+    <string name="backend_qualcomm">Qualcomm QMI</string>
+    <string name="backend_mediatek">MediaTek AT</string>
+    <string name="backend_pixel">Pixel (Tensor NV)</string>
+    <string name="backend_android">Android Radio HAL</string>
+
+    <string name="net_mode_auto">Авто</string>
+    <string name="net_mode_nr_lte">5G и 4G</string>
+    <string name="net_mode_nr_only">Только 5G</string>
+    <string name="net_mode_lte_only">Только 4G</string>
+    <string name="net_mode_no_nr">Без 5G</string>
+    <string name="net_mode_wcdma_only">Только 3G</string>
+    <string name="net_mode_gsm_only">Только 2G</string>
+
+    <string name="nr_mode_both">SA и NSA</string>
+    <string name="nr_mode_nsa">NSA</string>
+    <string name="nr_mode_sa">SA</string>
+
+    <string name="lock_rat_lte">LTE</string>
+    <string name="lock_rat_nr">5G NR</string>
+    <string name="lock_rat_nsa">LTE и NR</string>
+
+    <string name="vendor_qualcomm">Qualcomm Snapdragon</string>
+    <string name="vendor_mediatek">MediaTek</string>
+    <string name="vendor_tensor">Google Tensor (модем Shannon)</string>
+    <string name="vendor_exynos">Samsung Exynos (модем Shannon)</string>
+    <string name="vendor_unisoc">Unisoc</string>
+    <string name="vendor_unknown">Неизвестный модем</string>
+
+    <string name="plmn_home">Домашняя</string>
+    <string name="plmn_current">Текущая</string>
+    <string name="plmn_visible">Видимая</string>
+
+    <string name="list_separator">", "</string>
+    <string name="list_and">%1$s и %2$s</string>
+    <string name="list_or">%1$s или %2$s</string>
+
+    <string name="helper_root">Вспомогательный root-процесс</string>
+    <string name="helper_shizuku">Вспомогательный процесс Shizuku</string>
+
+    <string name="something_went_wrong">Что-то пошло не так.</string>
+</resources>

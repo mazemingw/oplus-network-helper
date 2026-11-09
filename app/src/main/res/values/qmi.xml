@@ -3,6 +3,8 @@
     <string name="settings_legacy_band_lock">旧式锁频</string>
     <string name="settings_legacy_band_lock_desc">MTK用户可尝试打开。启用后使用原工程模式 / Xposed 锁频界面；默认使用高通直连锁频。</string>
     <string name="qmi_title">频段与小区控制</string>
+    <string name="qmi_5ga_notice_title">为什么我锁定不了 5G-A？</string>
+    <string name="qmi_5ga_notice_body">5G-A 是 5G NR 的一组增强能力，需要手机和基站共同支持。以载波聚合为例，手机上报支持的频段组合，基站根据双方能力和当前无线条件配置载波。\n\n锁频或锁小区只能缩小手机的接入范围。即使锁到支持 5G-A 的小区，也要等基站下发相应配置，手机才能使用这些能力。</string>
     <string name="qmi_intro">直接读取基带支持的频段，分别设置 SIM 的制式、频段和小区。需要高通设备及 Root 权限。</string>
     <string name="qmi_unsupported">当前设备未识别为高通平台。MTK 用户可在设置中尝试打开“旧式锁频”。</string>
     <string name="qmi_bands">频段与制式</string>

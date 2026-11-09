@@ -87,7 +87,7 @@ class BandPresentationTest {
         val target = qmiSelectedBandTarget(current, pruned)
         assertEquals(current.bands[QmiBand.NR_SA], target.bands[QmiBand.NR_SA])
         assertEquals("both", target.nrMode)
-        assertEquals(listOf("lte_set", "rat_set"), qmiBandChanges(current, target, hardware, false).map { it.getString("cmd") })
+        assertEquals(listOf("rat_set", "lte_set"), qmiBandChanges(current, target, hardware, false).map { it.getString("cmd") })
     }
 
     @Test fun changingCarrierPrunesNowHiddenChoices() {

@@ -1,5 +1,7 @@
 # Android executes this packaged shell asset directly; preserve LF on Windows clones.
 app/src/main/assets/qmi/*.sh text eol=lf
 app/src/main/assets/qmi/nh-qmi binary
+modules/coloros-wifi-sense/*.sh text eol=lf
+modules/coloros-wifi-sense/module.prop text eol=lf
 qcom-efs/daemon/build.sh text eol=lf
 qcom-efs/src/main/assets/nh-efsd binary

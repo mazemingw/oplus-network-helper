@@ -2,19 +2,21 @@
 
 - Upstream: https://github.com/Fronsipswu/qcom-band-menu
 - Native helper and NAS layout source base: `bff702b5b4916f68feb3bf9308b91be56846f2e6`.
-- Last reviewed upstream main: `d199690ec5a052553302ee4b4b460d681cbab1eb` (2026-10-26).
+- Last reviewed upstream main: `e924f388b8c69dfbe7f91e76a7721698d8099e5a` (2026-11-06).
 
-The four intervening upstream commits change Android socket setup, NR-mode
-compatibility, partial-success presentation and the upstream application version.
-They do not change the native helper or NAS message layouts. The existing
-modified `nh-qmi.c` and its corresponding executable therefore remain unchanged.
+The upstream NAS helper and message layouts still use the source base above.
+The newer native changes are for the standalone DIAG helper, including LTE PUSCH
+v50 decoding. This app integrates the NAS helper and its own Compose UI.
 
 Network Helper ports the NR-mode behavior in `QmiBandExecution.kt`,
 `QmiProtocol.kt`, `QmiModemClient.kt` and `QmiBandLockViewModel.kt`:
 
 - Send NR mode only when it differs from the reported mode.
-- On an explicit unsupported/internal mode rejection, continue subsequent band/RAT
-  commands, re-read the state, disable mode editing for that SIM and show a yellow
+- Send a changed RAT before the band masks, since some modems reset the masks
+  on a RAT write. Restore known masks for the enabled RATs afterwards. With an unchanged RAT, only
+  write masks that differ from the reported state.
+- On an explicit unsupported/internal mode rejection, continue processing the plan,
+  re-read the state, disable mode editing for that SIM and show a yellow
   partial-success alert. All attempted band/RAT changes still require readback.
 - Resource/client exhaustion (including QMI 5/7) and transport failures stay fatal;
   writes are not replayed. Cell + RAT coupling remains strict because failure to

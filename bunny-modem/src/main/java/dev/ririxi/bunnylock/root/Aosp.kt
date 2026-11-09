@@ -3,10 +3,12 @@ package dev.ririxi.bunnylock.root
 import android.os.Binder
 import android.os.IBinder
 import android.os.Parcel
+import android.os.PersistableBundle
 import android.os.Process
 import android.telephony.AccessNetworkConstants.AccessNetworkType
 import android.telephony.RadioAccessSpecifier
 import dev.ririxi.bunnylock.core.toIntList
+import dev.ririxi.bunnylock.modem.ImsFeature
 import dev.ririxi.bunnylock.modem.R
 import dev.ririxi.bunnylock.modem.Text
 import dev.ririxi.bunnylock.modem.toJson
@@ -134,6 +136,11 @@ object Aosp {
 
     private val callingPackage: String get() = if (Process.myUid() == 0) "root" else "com.android.shell"
 
+    fun disconnectWifi(): Boolean {
+        val wifi = systemInterface("wifi", "android.net.wifi.IWifiManager")
+        return wifi.javaClass.getMethod("disconnect", String::class.java).invoke(wifi, callingPackage) as Boolean
+    }
+
     /** Stands in for a trailing parameter the caller didn't pass. A String there is taken to be the calling package. */
     private fun defaultFor(type: Class<*>): Any? =
         when (type) {
@@ -196,6 +203,12 @@ object Aosp {
     private fun generations(mask: Long): List<Boolean> = GENERATION_BITS.map { mask and it != 0L }
 
     private fun hasAnyGeneration(mask: Long): Boolean = generations(mask).any { it }
+
+    /** Android drops the network types the radio lacks (e.g. 2G on a tablet without GSM) before the mask reaches the modem. */
+    private fun reachable(
+        mask: Long,
+        supported: Long?,
+    ): Long = supported?.let { mask and it }?.takeIf(::hasAnyGeneration) ?: mask
 
     private fun otherReasonMasks(subId: Int): Map<Int, Long> {
         val unset = unsetReasonMask()
@@ -280,18 +293,20 @@ object Aosp {
         val userAllowed = readMask("getAllowedNetworkTypesForReason", subId, REASON_USER)
         val modemAllowed = readMask("getAllowedNetworkTypesBitmask", subId)
         val otherReasons = otherReasonMasks(subId)
+        val supported = supportedTypes()
+        val expected = userAllowed?.let { reachable(it, supported) }
         val heldBack =
-            userAllowed !== null &&
+            expected !== null &&
                 modemAllowed !== null &&
-                generations(modemAllowed) != generations(userAllowed) &&
-                generations(modemAllowed) == generations(sentToModem(userAllowed, otherReasons))
+                generations(modemAllowed) != generations(expected) &&
+                generations(modemAllowed) == generations(sentToModem(expected, otherReasons))
         val shownAllowed = if (heldBack) userAllowed else modemAllowed ?: userAllowed
         shownAllowed?.let { json.put("allowed", it) }
-        if (heldBack) heldBackCause(userAllowed, otherReasons)?.let { json.put("modeHeldBack", it.toJson()) }
+        if (heldBack) heldBackCause(expected, otherReasons)?.let { json.put("modeHeldBack", it.toJson()) }
         json.put("modeMasks", reasonMasksText(subId))
         userAllowed?.let { json.put("userAllowed", it) }
         modemAllowed?.let { json.put("modemAllowed", it) }
-        supportedTypes()?.let { json.put("supportedTypes", it) }
+        supported?.let { json.put("supportedTypes", it) }
         runCatching { json.put("nrDc", call("isNrDualConnectivityEnabled", subId) as Boolean) }
         runCatching { json.put("channels", specsToJson(readChannels(subId))) }
             .onFailure { json.put("channelsError", it.message ?: it.javaClass.simpleName) }
@@ -363,7 +378,7 @@ object Aosp {
         for (attempt in attempts) {
             val result = runCatching { setAllowedOnce(subId, attempt) }
             val accepted = result.getOrNull() == true
-            if (accepted && modemSwitchesTo(subId, attempt, otherReasons)) return applied(subId, attempt, mask, otherReasons)
+            if (accepted && modemSwitchesTo(subId, attempt, otherReasons, supported)) return applied(subId, attempt, mask, otherReasons, supported)
             val error = result.exceptionOrNull()
             val failure =
                 when {
@@ -384,15 +399,15 @@ object Aosp {
                     inAirplaneMode {
                         // Android skips a value it already holds, so the old one goes back first.
                         if (previous !== null && previous != attempt) runCatching { setAllowedOnce(subId, previous) }
-                        setAllowedOnce(subId, attempt) && modemSwitchesTo(subId, attempt, otherReasons)
+                        setAllowedOnce(subId, attempt) && modemSwitchesTo(subId, attempt, otherReasons, supported)
                     }
                 }.getOrDefault(false)
-            if (switched) return applied(subId, attempt, mask, otherReasons).put("airplaneMode", true)
+            if (switched) return applied(subId, attempt, mask, otherReasons, supported).put("airplaneMode", true)
             failures += "mask 0x%X not taken with the radio off either".format(attempt)
         }
         val restored = previous !== null && runCatching { setAllowedOnce(subId, previous) }.getOrDefault(false)
         val refused = Text(if (restored) R.string.aosp_mode_refused_restored else R.string.aosp_mode_refused)
-        val message = heldBackCause(mask, otherReasons)?.let { Text(R.string.aosp_sentences, refused, it) } ?: refused
+        val message = heldBackCause(reachable(mask, supported), otherReasons)?.let { Text(R.string.aosp_sentences, refused, it) } ?: refused
         val after = networkModeDiagnostic(subId, slot)
         fail(R.string.aosp_with_details, message, "${failures.joinToString("; ")}. Before: $before. After: $after")
     }
@@ -418,10 +433,12 @@ object Aosp {
         attempt: Long,
         requested: Long,
         otherReasons: Map<Int, Long>,
+        supported: Long?,
     ): JSONObject {
         val json = JSONObject().put("allowed", attempt).put("requested", requested)
         val readback = readMask("getAllowedNetworkTypesBitmask", subId)
-        if (readback !== null && generations(readback) != generations(attempt)) heldBackCause(attempt, otherReasons)?.let { json.put("heldBack", it.toJson()) }
+        val expected = reachable(attempt, supported)
+        if (readback !== null && generations(readback) != generations(expected)) heldBackCause(expected, otherReasons)?.let { json.put("heldBack", it.toJson()) }
         return json
     }
 
@@ -429,8 +446,13 @@ object Aosp {
         subId: Int,
         mask: Long,
         otherReasons: Map<Int, Long>,
+        supported: Long?,
     ): Boolean {
-        val expected = listOfNotNull(mask, sentToModem(mask, otherReasons).takeIf(::hasAnyGeneration)).map(::generations)
+        val expected =
+            listOf(mask, reachable(mask, supported))
+                .flatMap { listOf(it, sentToModem(it, otherReasons)) }
+                .filter(::hasAnyGeneration)
+                .map(::generations)
         repeat(MODE_READBACK_CHECKS) { check ->
             if (check > 0) Thread.sleep(MODE_READBACK_RETRY_MS)
             val readback = readMask("getAllowedNetworkTypesBitmask", subId)
@@ -611,6 +633,120 @@ object Aosp {
         } catch (e: ExecutionException) {
             throw e.cause ?: e
         }
+    }
+
+    // MmTelCapabilities.CAPABILITY_TYPE_VOICE and ImsRegistrationImplBase.REGISTRATION_TECH_LTE and REGISTRATION_TECH_IWLAN.
+    private const val MMTEL_VOICE = 1
+    private const val TECH_LTE = 0
+    private const val TECH_IWLAN = 1
+
+    private const val IMS_READBACK_CHECKS = 4
+    private const val IMS_READBACK_RETRY_MS = 250L
+
+    private class ImsSwitch(
+        val getter: String,
+        val setter: String,
+        val tech: Int,
+        val carrierAvailable: String,
+        val carrierEditable: String?,
+        val carrierHidden: String?,
+    )
+
+    private val IMS_SWITCHES =
+        mapOf(
+            ImsFeature.VOLTE to
+                ImsSwitch(
+                    getter = "isAdvancedCallingSettingEnabled",
+                    setter = "setAdvancedCallingSettingEnabled",
+                    tech = TECH_LTE,
+                    carrierAvailable = "carrier_volte_available_bool",
+                    carrierEditable = "editable_enhanced_4g_lte_bool",
+                    carrierHidden = "hide_enhanced_4g_lte_bool",
+                ),
+            ImsFeature.VOWIFI to
+                ImsSwitch(
+                    getter = "isVoWiFiSettingEnabled",
+                    setter = "setVoWiFiSettingEnabled",
+                    tech = TECH_IWLAN,
+                    carrierAvailable = "carrier_wfc_ims_available_bool",
+                    carrierEditable = null,
+                    carrierHidden = null,
+                ),
+        )
+
+    private val IMS_CARRIER_KEYS =
+        IMS_SWITCHES.values.flatMap { listOfNotNull(it.carrierAvailable, it.carrierEditable, it.carrierHidden) }.toTypedArray()
+
+    private val carrierConfigLoader: Any by lazy { systemInterface("carrier_config", "com.android.internal.telephony.ICarrierConfigLoader") }
+
+    private fun carrierConfig(
+        subId: Int,
+        keys: Array<String>,
+    ): PersistableBundle? =
+        runCatching {
+            val methods = carrierConfigLoader.javaClass.methods
+            val subset = methods.firstOrNull { it.name == "getConfigSubsetForSubIdWithFeature" && it.parameterTypes.size == 4 }
+            val withFeature = methods.firstOrNull { it.name == "getConfigForSubIdWithFeature" && it.parameterTypes.size == 3 }
+            val plain = methods.firstOrNull { it.name == "getConfigForSubId" && it.parameterTypes.size == 2 }
+            when {
+                subset !== null -> subset.invoke(carrierConfigLoader, subId, callingPackage, null, keys)
+                withFeature !== null -> withFeature.invoke(carrierConfigLoader, subId, callingPackage, null)
+                else -> plain?.invoke(carrierConfigLoader, subId, callingPackage)
+            } as? PersistableBundle
+        }.getOrNull()
+
+    fun ims(subId: Int): JSONObject {
+        val config = carrierConfig(subId, IMS_CARRIER_KEYS)
+
+        fun carrierFlag(
+            key: String?,
+            default: Boolean,
+        ): Boolean = if (key !== null && config?.containsKey(key) == true) config.getBoolean(key) else default
+
+        val json = JSONObject()
+        for ((feature, switch) in IMS_SWITCHES) {
+            val enabled =
+                runCatching { call(switch.getter, subId) as Boolean }.getOrElse { error ->
+                    json.put(feature.key, JSONObject().put("error", errorText(error)))
+                    continue
+                }
+            val notOffered =
+                !carrierFlag(switch.carrierAvailable, default = true) ||
+                    !runCatching { call("getImsProvisioningStatusForCapability", subId, MMTEL_VOICE, switch.tech) as Boolean }.getOrDefault(true)
+            // Android puts the carrier default back on a setting the carrier marks as not editable or hidden.
+            val locked = !carrierFlag(switch.carrierEditable, default = true) || carrierFlag(switch.carrierHidden, default = false)
+            val setting = JSONObject().put("enabled", enabled)
+            when {
+                notOffered -> setting.put("blocked", "notOffered")
+                locked -> setting.put("blocked", "locked")
+            }
+            json.put(feature.key, setting)
+        }
+        return json
+    }
+
+    fun setIms(
+        subId: Int,
+        feature: ImsFeature,
+        enabled: Boolean,
+    ): JSONObject {
+        val switch = IMS_SWITCHES.getValue(feature)
+        call(switch.setter, subId, enabled)
+        // Android drops a value the carrier or provisioning doesn't allow without reporting an error.
+        if (!imsReadsBack(switch, subId, enabled)) fail(R.string.aosp_ims_kept)
+        return ims(subId)
+    }
+
+    private fun imsReadsBack(
+        switch: ImsSwitch,
+        subId: Int,
+        enabled: Boolean,
+    ): Boolean {
+        repeat(IMS_READBACK_CHECKS) { check ->
+            if (check > 0) Thread.sleep(IMS_READBACK_RETRY_MS)
+            if (runCatching { call(switch.getter, subId) == enabled }.getOrDefault(false)) return true
+        }
+        return false
     }
 
     /** When the radio HAL doesn't support or refuses the modem reboot, the radio is power-cycled instead and the reason is returned as rebootError. */

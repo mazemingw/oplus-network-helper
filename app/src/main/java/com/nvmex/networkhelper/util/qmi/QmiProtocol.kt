@@ -156,15 +156,19 @@ fun qmiBandChanges(before: QmiProfile, after: QmiProfile, hardware: Map<QmiBand,
     require(after.nrMode in setOf("sa", "nsa", "both", "unknown")) { "NR mode" }
     if (combinedNr) require(after.bands[QmiBand.NR_SA] == after.bands[QmiBand.NR_NSA]) { "Combined NR bands differ" }
     return buildList {
+        // Some modems reset the masks on a RAT write. Restore known masks for the enabled RATs.
+        val ratChanged = before.rats != after.rats
+        if (ratChanged) add(qmiCommand("rat_set").put("rat", after.rats.sorted().joinToString(",")))
+        fun needsWrite(domain: QmiBand): Boolean = before.bands[domain].orEmpty() != after.bands[domain].orEmpty() ||
+            (ratChanged && domain.rat in after.rats && !after.bands[domain].isNullOrEmpty())
         QmiBand.entries.forEach { domain ->
             if (combinedNr && domain.rat == "nr") return@forEach
-            if (before.bands[domain] != after.bands[domain]) add(qmiCommand("${domain.key}_set").put("bands", JSONArray(after.bands[domain].orEmpty().sorted())))
+            if (needsWrite(domain)) add(qmiCommand("${domain.key}_set").put("bands", JSONArray(after.bands[domain].orEmpty().sorted())))
         }
-        if (combinedNr && (before.bands[QmiBand.NR_SA] != after.bands[QmiBand.NR_SA] || before.bands[QmiBand.NR_NSA] != after.bands[QmiBand.NR_NSA])) {
+        if (combinedNr && (needsWrite(QmiBand.NR_SA) || needsWrite(QmiBand.NR_NSA))) {
             add(qmiCommand("nr_set").put("bands", JSONArray(after.bands[QmiBand.NR_SA].orEmpty().sorted())))
         }
         if (after.nrMode != before.nrMode && after.nrMode != "unknown") add(qmiCommand("mode_set").put("mode", after.nrMode))
-        if (before.rats != after.rats) add(qmiCommand("rat_set").put("rat", after.rats.sorted().joinToString(",")))
     }
 }
 
@@ -252,7 +256,8 @@ object QmiRxDecoder {
                 val r = ByteBuffer.wrap(payload).order(ByteOrder.LITTLE_ENDIAN)
                 val tuned = r.get().toInt() != 0
                 fun measurement() = r.int.takeIf { tuned && it != Int.MIN_VALUE }?.div(10.0)
-                val power = measurement(); val ecio = measurement(); val rscp = measurement(); val rsrp = measurement()
+                val power = measurement()?.takeIf { it < 0.0 }
+                val ecio = measurement(); val rscp = measurement(); val rsrp = measurement()
                 val phase = (r.int.toLong() and 0xffffffffL).takeIf { tuned && it != 0xffffffffL }?.div(100.0)
                 val wcdma = rat == "WCDMA"
                 QmiRxChain(index, tuned, power, if (rat in listOf("LTE", "NR")) rsrp?.takeIf { it > -200 } else null,

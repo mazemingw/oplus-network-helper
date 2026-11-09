@@ -53,16 +53,16 @@ NDJSON interface; the UI remains native to Network Helper.
 message layouts and decoding from upstream `network/NasDecode.kt` at the same
 commit, under GPL-3.0. It retains only reported measurements and uses Network
 Helper's own models, validation, source selection and presentation.
-Upstream changes through `d199690ec5a052553302ee4b4b460d681cbab1eb` were reviewed
-on 2026-10-26. NR-mode rejection and partial-success behavior were ported into
-the app-side QMI client/UI; upstream native sources and NAS layouts are unchanged
-from the source base above. See `app/src/main/cpp/qmi/UPSTREAM.md` for scope.
+Upstream changes through `e924f388b8c69dfbe7f91e76a7721698d8099e5a` were reviewed
+on 2026-11-06. The app-side QMI integration includes NR-mode rejection,
+partial success, and writing a changed RAT before restoring band masks.
+See `app/src/main/cpp/qmi/UPSTREAM.md` for scope.
 
 ## bunnylock modem backend and Shizuku bridge
 
 `bunny-modem/` includes the modem library and the Root/Shizuku bridge from
 [btsearch/bunnylock](https://github.com/btsearch/bunnylock), revision
-`55f47a87344fd7a42f5d903c660776b334664556`. Copyright remains with the bunnylock
+`dd1d728ac2718df588fb63f517265e27e118d5d8` for the modem library. Copyright remains with the bunnylock
 authors and contributors. Licensed under GPL-3.0; the complete license and
 modified source are included in `bunny-modem/`. The combined app containing this
 module is distributed under GPL-3.0 terms, retaining existing compatible license

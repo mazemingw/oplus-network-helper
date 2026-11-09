@@ -14,6 +14,7 @@ import androidx.compose.ui.unit.Density
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.nvmex.networkhelper.viewmodel.menu.ModemDriversViewModel
+import com.nvmex.networkhelper.viewmodel.menu.QmiBandUiState
 
 /** Debug-only layout harness. Opens no modem connection; absent from release APKs. */
 class BackendUiProbeActivity : ComponentActivity() {
@@ -33,7 +34,7 @@ class BackendUiProbeActivity : ComponentActivity() {
                                 }
                             }
                             Column(Modifier.fillMaxWidth().weight(1f).verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                                ModemDriverSettings(viewModel<ModemDriversViewModel>(), true, {}, {})
+                                ModemDriverSettings(viewModel<ModemDriversViewModel>(), true, {}, {}, QmiBandUiState())
                             }
                         }
                     }

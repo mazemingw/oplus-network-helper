@@ -14,10 +14,20 @@ import java.lang.reflect.Method
 object Samsung {
     private class SemTelephony(
         private val service: Any,
-        val getNrMode: Method,
-        val setNrMode: Method,
+        private val nrModeGetter: Method,
+        private val nrModeSetter: Method,
     ) {
-        fun call(
+        val perSlot = nrModeGetter.parameterCount == 1
+
+        fun nrMode(slot: Int): Int = (if (perSlot) call(nrModeGetter, slot) else call(nrModeGetter)) as Int
+
+        fun setNrMode(
+            slot: Int,
+            mode: Int,
+            callingPackage: String,
+        ): Boolean = (if (perSlot) call(nrModeSetter, slot, mode, false, callingPackage) else call(nrModeSetter, mode)) as Boolean
+
+        private fun call(
             method: Method,
             vararg args: Any?,
         ): Any? =
@@ -28,7 +38,11 @@ object Samsung {
             }
     }
 
-    /** Null on phones without the service, or where it lacks getNrMode(int) or setNrMode(int, int, boolean, String). */
+    private fun Array<Method>.method(
+        name: String,
+        vararg parameterTypes: Class<*>?,
+    ): Method? = firstOrNull { it.name == name && it.parameterTypes.contentEquals(parameterTypes) }
+
     private val semTelephony: SemTelephony? by lazy {
         runCatching {
             val binder =
@@ -42,44 +56,42 @@ object Samsung {
                     .getMethod("asInterface", IBinder::class.java)
                     .invoke(null, binder) ?: return@runCatching null
             val methods = service.javaClass.methods
-            val getNrMode =
-                methods.firstOrNull {
-                    it.name == "getNrMode" && it.parameterTypes.contentEquals(arrayOf(Int::class.javaPrimitiveType))
-                }
-            val setNrMode =
-                methods.firstOrNull {
-                    it.name == "setNrMode" &&
-                        it.parameterTypes.contentEquals(
-                            arrayOf(
-                                Int::class.javaPrimitiveType,
-                                Int::class.javaPrimitiveType,
-                                Boolean::class.javaPrimitiveType,
-                                String::class.java,
-                            ),
-                        )
-                }
-            if (getNrMode === null || setNrMode === null) null else SemTelephony(service, getNrMode, setNrMode)
+            val intType = Int::class.javaPrimitiveType
+            val booleanType = Boolean::class.javaPrimitiveType
+            listOf(
+                methods.method("getNrMode", intType) to methods.method("setNrMode", intType, intType, booleanType, String::class.java),
+                methods.method("getNrMode") to methods.method("setNrMode", intType),
+            ).firstNotNullOfOrNull { (getter, setter) ->
+                if (getter === null || setter === null) null else SemTelephony(service, getter, setter)
+            }
         }.getOrNull()
     }
 
     fun nrModeAvailable(): Boolean = semTelephony !== null
 
-    private fun requireSemTelephony(): SemTelephony =
-        semTelephony ?: fail(R.string.samsung_no_nr_mode)
-
-    fun nrMode(slot: Int): JSONObject {
-        val telephony = requireSemTelephony()
-        return JSONObject().put("mode", telephony.call(telephony.getNrMode, slot) as Int)
+    private fun requireSemTelephony(
+        subId: Int,
+        dataSubId: Int,
+    ): SemTelephony {
+        val telephony = semTelephony ?: fail(R.string.samsung_no_nr_mode)
+        if (!telephony.perSlot && subId != dataSubId) fail(R.string.samsung_nr_mode_data_sim_only)
+        return telephony
     }
+
+    fun nrMode(
+        slot: Int,
+        subId: Int,
+        dataSubId: Int,
+    ): JSONObject = JSONObject().put("mode", requireSemTelephony(subId, dataSubId).nrMode(slot))
 
     fun setNrMode(
         slot: Int,
+        subId: Int,
+        dataSubId: Int,
         mode: Int,
     ): JSONObject {
-        val telephony = requireSemTelephony()
         val callingPackage = if (Process.myUid() == 0) "root" else "com.android.shell"
-        val accepted = telephony.call(telephony.setNrMode, slot, mode, false, callingPackage) as Boolean
-        if (!accepted) fail(R.string.samsung_nr_mode_refused)
+        if (!requireSemTelephony(subId, dataSubId).setNrMode(slot, mode, callingPackage)) fail(R.string.samsung_nr_mode_refused)
         return JSONObject().put("mode", mode)
     }
 }

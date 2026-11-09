@@ -52,6 +52,18 @@ enum class Group(
             WCDMA -> Bands.WCDMA
             GSM -> Bands.GSM
         }
+
+    val generation: Long
+        get() =
+            when (this) {
+                LTE -> Masks.G4
+                NR, NR_SA, NR_NSA -> Masks.G5
+                WCDMA -> Masks.G3
+                GSM -> Masks.G2
+            }
+
+    /** The network mode has no separate bit for 5G SA or NSA, so neither can be turned off alone. */
+    val canTurnOff get() = this != NR_SA && this != NR_NSA
 }
 
 data class BandGroupState(
@@ -86,10 +98,14 @@ enum class NetMode(
          * The mode [mask] stands for, going by which of 2G, 3G, 4G and 5G it allows. A modem drops the network types
          * it lacks (TD-SCDMA or CDMA, say) from the mask it was given, so the bits themselves rarely match.
          */
-        fun of(mask: Long?): NetMode? {
+        fun of(
+            mask: Long?,
+            among: List<NetMode> = entries,
+            ignoring: Long = 0L,
+        ): NetMode? {
             mask ?: return null
-            val generations = listOf(Masks.G2, Masks.G3, Masks.G4, Masks.G5)
-            return entries.firstOrNull { mode -> generations.all { (mode.mask and it != 0L) == (mask and it != 0L) } }
+            val generations = listOf(Masks.G2, Masks.G3, Masks.G4, Masks.G5).filter { it and ignoring == 0L }
+            return among.firstOrNull { mode -> generations.all { (mode.mask and it != 0L) == (mask and it != 0L) } }
         }
     }
 }
@@ -127,6 +143,7 @@ object Masks {
         )
     val G4 = maskOf(TelephonyManager.NETWORK_TYPE_LTE)
     val G5 = maskOf(TelephonyManager.NETWORK_TYPE_NR)
+    val GENERATIONS = G2 or G3 or G4 or G5
 
     // TelephonyManager.NETWORK_TYPE_LTE_CA, which the SDK hides.
     private const val NETWORK_TYPE_LTE_CA = 19
@@ -186,6 +203,46 @@ private fun Context.joinNatural(
     } else {
         getString(last, items.dropLast(1).joinToString(getString(R.string.list_separator)), items.last())
     }
+
+enum class ImsFeature(
+    val key: String,
+    val label: String,
+) {
+    VOLTE("volte", "VoLTE"),
+    VOWIFI("vowifi", "VoWiFi"),
+}
+
+enum class ImsBlock {
+    NOT_OFFERED,
+    LOCKED,
+}
+
+sealed interface ImsSetting {
+    data class Readable(
+        val enabled: Boolean,
+        val blocked: ImsBlock?,
+    ) : ImsSetting
+
+    data class Unreadable(
+        val error: String,
+    ) : ImsSetting
+
+    companion object {
+        fun from(json: JSONObject): ImsSetting {
+            if (!json.has("enabled")) return Unreadable(json.optString("error"))
+            val blocked =
+                when (json.optString("blocked")) {
+                    "notOffered" -> ImsBlock.NOT_OFFERED
+                    "locked" -> ImsBlock.LOCKED
+                    else -> null
+                }
+            return Readable(json.getBoolean("enabled"), blocked)
+        }
+    }
+}
+
+fun imsSettingsFrom(json: JSONObject): Map<ImsFeature, ImsSetting> =
+    ImsFeature.entries.mapNotNull { feature -> json.optJSONObject(feature.key)?.let { feature to ImsSetting.from(it) } }.toMap()
 
 data class SimInfo(
     val slot: Int,
@@ -308,6 +365,8 @@ data class ModemState(
     val netModeMasks: String? = null,
     val nrMode: NrMode? = null,
     val nrDc: Boolean? = null,
+    val ims: Map<ImsFeature, ImsSetting> = emptyMap(),
+    val carrierAggregation: Boolean? = null,
     val cells: List<Cell> = emptyList(),
     /** Primary first. */
     val carriers: List<Carrier> = emptyList(),
@@ -327,6 +386,8 @@ data class ModemState(
     val homePlmn: String? = null,
     val homeName: String? = null,
     val persist: Boolean = true,
+    val halNeedsChannels: Boolean = false,
+    val settling: Boolean = false,
     val atNode: String = "",
     val log: List<String> = emptyList(),
 ) {
@@ -366,11 +427,24 @@ data class ModemState(
             return types and Masks.G4 == 0L || types and Masks.G5 != 0L || groups.any { it.group.isNr }
         }
 
+    /** Generations the radio reports it lacks, e.g. 2G on a tablet without GSM. Android drops them from any mask it's given. */
+    val missingGenerations: Long
+        get() {
+            val types = supportedTypes?.takeIf { it and Masks.G4 != 0L } ?: return 0L
+            val missing = listOf(Masks.G2, Masks.G3).filter { types and it == 0L }.fold(0L, Long::or)
+            return if (supports5g) missing else missing or Masks.G5
+        }
+
     val netModes: List<NetMode>
-        get() = if (supports5g) NetMode.entries else NetMode.entries.filter { it.mask and Masks.G5 == 0L } - NetMode.NO_NR
+        get() {
+            val modes = if (supports5g) NetMode.entries else NetMode.entries.filter { it.mask and Masks.G5 == 0L } - NetMode.NO_NR
+            return modes.filter { it.mask and Masks.GENERATIONS and missingGenerations.inv() != 0L }
+        }
 
     val netMode: NetMode?
-        get() = NetMode.of(allowedMask).let { if (it == NetMode.NO_NR && !supports5g) NetMode.AUTO else it }
+        get() = NetMode.of(allowedMask, netModes, missingGenerations)
+
+    fun isOff(group: Group) = allowedMask?.let { it and group.generation == 0L } == true
 
     val supportsNrMode
         get() =

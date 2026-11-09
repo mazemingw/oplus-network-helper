@@ -2,7 +2,7 @@
     <string name="modem_sentences">%1$s %2$s</string>
     <string name="modem_couldnt">Couldn\'t %1$s. %2$s</string>
 
-    <string name="modem_connect_checking">Checking what this phone\'s modem offers…</string>
+    <string name="modem_connect_checking">Checking what this phone\'s modem offers...</string>
     <string name="modem_root_denied">Root access was denied.</string>
     <string name="modem_sim">SIM %1$d</string>
     <string name="modem_no_mtk_port">No MediaTek AT port answered. Pick one in Tools.</string>
@@ -12,9 +12,16 @@
     <string name="modem_goal_lock_bands">lock the %1$s bands</string>
     <string name="modem_goal_unlock_bands">unlock the %1$s bands</string>
     <string name="modem_goal_net_mode">change the network mode</string>
+    <string name="modem_goal_network_off">turn %1$s off</string>
     <string name="modem_goal_nr_mode">switch the 5G mode to %1$s</string>
     <string name="modem_goal_nr_dc_on">turn on NSA (EN-DC)</string>
     <string name="modem_goal_nr_dc_off">turn off NSA (EN-DC)</string>
+    <string name="modem_goal_volte_on">turn on VoLTE</string>
+    <string name="modem_goal_volte_off">turn off VoLTE</string>
+    <string name="modem_goal_vowifi_on">turn on VoWiFi</string>
+    <string name="modem_goal_vowifi_off">turn off VoWiFi</string>
+    <string name="modem_goal_ca_on">turn on carrier aggregation</string>
+    <string name="modem_goal_ca_off">turn off carrier aggregation</string>
     <string name="modem_goal_lock_cell">lock the cell</string>
     <string name="modem_goal_unlock_cell">clear the cell lock</string>
     <string name="modem_goal_lock_plmn">lock the network</string>
@@ -22,6 +29,7 @@
     <string name="modem_goal_unlock_all">unlock everything</string>
     <string name="modem_goal_restart_radio">restart the radio</string>
     <string name="modem_goal_reattach">re-attach SIM %1$d</string>
+    <string name="modem_goal_relock">re-lock SIM %1$d</string>
     <string name="modem_goal_reboot">reboot the modem</string>
     <string name="modem_goal_samsung_menu">open the Samsung band menu</string>
     <string name="modem_goal_send_at">send the AT command</string>
@@ -30,9 +38,18 @@
     <string name="modem_bands_locked">%1$s bands locked.</string>
     <string name="modem_bands_unlocked">%1$s bands unlocked.</string>
     <string name="modem_net_mode_set">Network mode is now \"%1$s\".</string>
+    <string name="modem_network_off">%1$s turned off.</string>
+    <string name="modem_network_back_on">%1$s turned back on.</string>
     <string name="modem_nr_mode_set">5G mode switched to %1$s.</string>
     <string name="modem_nr_dc_on">NSA (EN-DC) is on.</string>
     <string name="modem_nr_dc_off">NSA (EN-DC) is off.</string>
+    <string name="modem_volte_on">VoLTE is on.</string>
+    <string name="modem_volte_off">VoLTE is off.</string>
+    <string name="modem_vowifi_on">VoWiFi is on.</string>
+    <string name="modem_vowifi_off">VoWiFi is off.</string>
+    <string name="modem_ca_on">Carrier aggregation is on.</string>
+    <string name="modem_ca_off">Carrier aggregation is off.</string>
+    <string name="modem_ca_restart_failed">The modem didn\'t restart, so the change applies after the next modem or phone restart. %1$s</string>
     <string name="modem_cell_locked">Cell locked.</string>
     <string name="modem_cell_unlocked">Cell lock cleared.</string>
     <string name="modem_plmn_locked">Network locked.</string>
@@ -41,6 +58,7 @@
     <string name="modem_all_unlocked">Everything is unlocked.</string>
     <string name="modem_radio_restarted">Radio restarted.</string>
     <string name="modem_reattached">SIM %1$d is attached again.</string>
+    <string name="modem_relocked">SIM %1$d picked a cell again and its locks were sent again.</string>
     <string name="modem_rebooting">Modem is rebooting.</string>
     <string name="modem_samsung_menu_opened">Opened the Samsung band menu.</string>
 
@@ -65,6 +83,7 @@
     <string name="modem_plmn_manual">Manual selection</string>
 
     <string name="modem_pick_band">Pick at least one band.</string>
+    <string name="modem_last_network">At least one network has to stay on.</string>
     <string name="modem_nr_list_too_long">This phone only takes %1$d 5G bands in one lock, so pick %1$d or fewer.</string>
     <string name="modem_note_needs_channels">This phone needs visible frequencies together with the selected bands, so bunnylock included them in the lock.</string>
     <string name="modem_no_gsm_1800">This phone\'s radio software doesn\'t know GSM 1800, so it refuses a 2G lock to 1800 alone.</string>
@@ -72,6 +91,9 @@
     <string name="modem_note_band_lock_ignored">Android accepted the %1$s lock, but the phone is still on %2$s. This modem doesn\'t seem to follow band locks sent this way.</string>
     <string name="modem_note_samsung_menu_hint">Samsung\'s own band menu on the Bands screen may work instead.</string>
     <string name="modem_needs_visible_cell">This phone needs a visible cell on the selected %1$s bands to lock them. Refresh the cell list and try again.</string>
+    <string name="modem_blind_lock_reverted">The phone found no cell on the selected bands, so bunnylock went back to the previous bands.</string>
+    <string name="modem_blind_lock_restore_failed">The phone found no cell on the selected bands, and bunnylock couldn\'t go back to the previous bands. Use Unlock all to get service back.</string>
+    <string name="modem_blind_lock_searching">No cell is visible on the selected %1$s bands, so the phone has to search for one. This can take a minute or two.</string>
 
     <string name="modem_note_set_by_at">Android refused it, so bunnylock set it on the modem directly. It lasts until the phone restarts.</string>
     <string name="modem_note_mode_airplane">The modem only switches modes with the radio off, so airplane mode came on for a moment.</string>
@@ -79,6 +101,7 @@
     <string name="modem_note_mode_stayed">SIM %1$d stayed on its old network. Turning airplane mode on and off may apply the mode.</string>
     <string name="modem_note_mode_held_back">%1$s The mode stays set and applies in full once that changes.</string>
     <string name="modem_backend_no_nr_mode">The %1$s backend can\'t change the 5G mode.</string>
+    <string name="modem_no_ca_control">Only the MediaTek backend can turn carrier aggregation on or off.</string>
     <string name="modem_current_backend_no_nr_mode">The current backend can\'t change the 5G mode.</string>
 
     <string name="modem_enter_earfcn">Enter the LTE EARFCN first.</string>

@@ -60,7 +60,6 @@ import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.layout.ContentScale
-import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
@@ -94,6 +93,7 @@ import com.nvmex.networkhelper.ui.settings.rememberAppSettings
 import com.nvmex.networkhelper.ui.settings.fonts.FontSettingsScreen
 import com.nvmex.networkhelper.ui.signalradar.SignalScanScreen
 import com.nvmex.networkhelper.ui.wifi.WifiScreen
+import com.nvmex.networkhelper.ui.wifi.WifiSettingsScreen
 import com.nvmex.networkhelper.util.home.detectOplusVendor
 import dev.chrisbanes.haze.hazeEffect
 import dev.chrisbanes.haze.hazeSource
@@ -148,33 +148,25 @@ fun AppRoot(
     data class BottomItem(
         val route: String,
         val label: String,
-        val iconResName: String
+        val iconResId: Int
     )
 
     val bottomItems = listOf(
-        BottomItem(Routes.HOME, stringResource(R.string.nav_home), "home"),
-        BottomItem(Routes.RADAR, stringResource(R.string.nav_radar), "radar"),
-        BottomItem(Routes.WIFI, stringResource(R.string.nav_wifi), "wifi"),
-        BottomItem(Routes.MENU, stringResource(R.string.nav_menu), "menu"),
-        BottomItem(Routes.SETTINGS, stringResource(R.string.nav_settings), "settings"),
+        BottomItem(Routes.HOME, stringResource(R.string.nav_home), R.drawable.home),
+        BottomItem(Routes.LOCK, stringResource(R.string.nav_lock), R.drawable.nav_lock),
+        BottomItem(Routes.WIFI, stringResource(R.string.nav_wifi), R.drawable.wifi),
+        BottomItem(Routes.MENU, stringResource(R.string.nav_menu), R.drawable.menu),
+        BottomItem(Routes.SETTINGS, stringResource(R.string.nav_settings), R.drawable.settings),
     )
 
     // ✅ 当前 route（用 Compose 官方姿势，而不是自己 collect Flow）
     val backStackEntry by navController.currentBackStackEntryAsState()
     val currentRoute = backStackEntry?.destination?.route ?: Routes.HOME
 
-    // ✅ 哪些页面显示底栏（按 route 管，不按 index 管）
-    val bottomBarRoutes = remember {
-        setOf(
-            Routes.HOME,
-            Routes.RADAR,
-            Routes.WIFI,
-            Routes.MENU,
-            Routes.SETTINGS
-        )
-    }
-    val showBottomBar = currentRoute in bottomBarRoutes
+    val showBottomBar = bottomItems.any { it.route == currentRoute }
     val bottomPageInset = 96.dp
+    val bottomBarHeight = 64.dp
+    val bottomBarGap = 14.dp
 
     MaterialTheme(colorScheme = activeColorScheme) {
         Box(
@@ -224,9 +216,9 @@ fun AppRoot(
                     vendor = vendor,
                     onPanelState = { sharedPanelState = it },
                     contentBottomPadding = bottomPageInset,
-                    onOpenEngineerBandLock = {
+                    onOpenEngineerBandLock = { sim ->
                         if (appSettings.legacyBandLock) showEngineerBandLockDialog = true
-                        else navController.navigate(Routes.ENGINEER_BAND_LOCK) { launchSingleTop = true }
+                        else navController.navigate("${Routes.ENGINEER_BAND_LOCK}?sim=${sim ?: 0}") { launchSingleTop = true }
                     },
                     onOpenSignalComparison = {
                         navController.navigate(Routes.SIGNAL_COMPARISON) {
@@ -239,11 +231,23 @@ fun AppRoot(
             }
 
             composable(
+                Routes.LOCK,
+                enterTransition = { slideInHorizontally(initialOffsetX = { it }) + fadeIn() },
+                exitTransition = { slideOutHorizontally(targetOffsetX = { -it }) + fadeOut() }
+            ) {
+                QmiBandLockScreen(
+                    onBack = { navController.popBackStack() },
+                    networkVm = sharedNetworkVm,
+                    contentBottomPadding = bottomBarHeight + bottomBarGap
+                )
+            }
+
+            composable(
                 Routes.RADAR,
                 enterTransition = { slideInHorizontally(initialOffsetX = { it }) + fadeIn() },
                 exitTransition = { slideOutHorizontally(targetOffsetX = { -it }) + fadeOut() }
             ) {
-                SignalScanScreen(contentBottomPadding = bottomPageInset)
+                SignalScanScreen(onBack = { navController.popBackStack() })
             }
 
             composable(
@@ -281,6 +285,10 @@ fun AppRoot(
                     defaultDataSlot = dataSlot,
                     defaultDataIcon = { selected -> com.nvmex.networkhelper.ui.network.DefaultDataSimIcon(selected) })
             }
+            composable(Routes.WIFI_SETTINGS) {
+                WifiSettingsScreen(onBack = { navController.popBackStack() })
+            }
+
             composable(
                 Routes.MENU,
                 enterTransition = { slideInHorizontally(initialOffsetX = { it }) + fadeIn() },
@@ -294,14 +302,19 @@ fun AppRoot(
             }
 
             composable(
-                Routes.ENGINEER_BAND_LOCK,
+                Routes.ENGINEER_BAND_LOCK_ROUTE,
+                arguments = listOf(navArgument("sim") {
+                    type = NavType.IntType
+                    defaultValue = 0
+                }),
                 enterTransition = { slideInHorizontally(initialOffsetX = { it }) + fadeIn() },
                 exitTransition = { slideOutHorizontally(targetOffsetX = { -it }) + fadeOut() }
-            ) {
+            ) { entry ->
                 if (appSettings.legacyBandLock) {
                     EngineerBandLockScreen(onBack = { navController.popBackStack() })
                 } else {
-                    QmiBandLockScreen(onBack = { navController.popBackStack() }, networkVm = sharedNetworkVm)
+                    QmiBandLockScreen(onBack = { navController.popBackStack() }, networkVm = sharedNetworkVm,
+                        initialSim = entry.arguments?.getInt("sim")?.takeIf { it in 1..2 })
                 }
             }
 
@@ -462,7 +475,7 @@ fun AppRoot(
                         .align(Alignment.BottomCenter)
                         .fillMaxWidth()
                         .navigationBarsPadding()
-                        .padding(bottom = 14.dp),
+                        .padding(bottom = bottomBarGap),
                     contentAlignment = Alignment.Center
                 ) {
                     Surface(
@@ -483,34 +496,25 @@ fun AppRoot(
                         )
                     ) {
                         NavigationBar(
-                            modifier = Modifier.height(64.dp),
+                            modifier = Modifier.height(bottomBarHeight),
                             containerColor = Color.Transparent,
                             tonalElevation = 0.dp
                         ) {
                             bottomItems.forEach { item ->
                                 val selected = currentRoute == item.route
 
-                                // ✅ 图标只做“资源名 -> id”的映射；不存在就给个兜底，避免炸
-                                val ctx = LocalContext.current
-                                val iconResId = remember(item.iconResName) {
-                                    ctx.resources.getIdentifier(
-                                        item.iconResName,
-                                        "drawable",
-                                        ctx.packageName
-                                    )
-                                }
-
                                 NavigationBarItem(
                                     selected = selected,
                                     onClick = {
-                                        // ✅ 传统做法：点击底栏就是切换“一级目的地”
-                                        navController.navigate(item.route) {
-                                            launchSingleTop = true
-                                            restoreState = true
+                                        if (!selected || item.route != Routes.LOCK) {
+                                            navController.navigate(item.route) {
+                                                launchSingleTop = true
+                                                restoreState = item.route != Routes.LOCK
 
-                                            // ✅ 关键：回到起点并保留状态（避免堆栈越堆越多）
-                                            popUpTo(navController.graph.startDestinationId) {
-                                                saveState = true
+                                                popUpTo(navController.graph.startDestinationId) {
+                                                    // A popped lock page must release its modem session.
+                                                    saveState = currentRoute != Routes.LOCK
+                                                }
                                             }
                                         }
                                     },
@@ -529,15 +533,11 @@ fun AppRoot(
                                                 horizontalAlignment = Alignment.CenterHorizontally,
                                                 verticalArrangement = Arrangement.Center
                                             ) {
-                                                if (iconResId != 0) {
-                                                    Icon(
-                                                        painter = painterResource(id = iconResId),
-                                                        contentDescription = item.label,
-                                                        modifier = Modifier.size(19.dp)
-                                                    )
-                                                } else {
-                                                    Box(Modifier.size(19.dp))
-                                                }
+                                                Icon(
+                                                    painter = painterResource(item.iconResId),
+                                                    contentDescription = item.label,
+                                                    modifier = Modifier.size(19.dp)
+                                                )
                                                 Text(
                                                     text = item.label,
                                                     fontSize = 10.sp,

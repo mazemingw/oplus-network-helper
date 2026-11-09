@@ -4,6 +4,7 @@ import android.content.Context
 import android.telephony.CellSignalStrengthLte
 import android.telephony.CellSignalStrengthNr
 import android.telephony.TelephonyManager
+import dev.ririxi.bunnylock.core.Bands
 import org.json.JSONArray
 import org.json.JSONObject
 
@@ -53,19 +54,33 @@ object Carriers {
 
     fun fromReport(report: JSONArray?): List<Carrier> {
         if (report === null) return emptyList()
-        return (0 until report.length()).mapNotNull { index ->
-            val carrier = report.getJSONObject(index)
-            val rat = Rat.entries.firstOrNull { it.name == carrier.optString("rat") } ?: return@mapNotNull null
-            val arfcn = if (carrier.has("channel")) carrier.optLong("channel") else null
-            Carrier(
-                rat,
-                carrier.optBoolean("primary"),
-                arfcn,
-                carrier.intOrNull("pci"),
-                bandOf(rat, arfcn, carrier.intOrNull("band")),
-                carrier.intOrNull("bandwidth")?.takeIf { it > 0 },
-            )
+        val carriers = (0 until report.length()).mapNotNull { carrierOf(report.getJSONObject(it)) }
+        return carriers.map { carrier ->
+            if (carrier.hasBorrowedChannel(carriers)) {
+                carrier.copy(arfcn = null)
+            } else {
+                carrier.copy(band = bandOf(carrier.rat, carrier.arfcn, carrier.band))
+            }
         }
+    }
+
+    private fun carrierOf(json: JSONObject): Carrier? {
+        val rat = Rat.entries.firstOrNull { it.name == json.optString("rat") } ?: return null
+        return Carrier(
+            rat,
+            json.optBoolean("primary"),
+            if (json.has("channel")) json.optLong("channel") else null,
+            json.intOrNull("pci"),
+            json.intOrNull("band"),
+            json.intOrNull("bandwidth")?.takeIf { it > 0 },
+        )
+    }
+
+    // With NR-DC, some radios give the secondary cell group's primary cell the master group's channel.
+    private fun Carrier.hasBorrowedChannel(carriers: List<Carrier>): Boolean {
+        if (rat != Rat.NR || arfcn === null || band === null) return false
+        if (band in Bands.nrBandsOf(arfcn.toInt())) return false
+        return carriers.any { it.rat == rat && it.arfcn == arfcn && it.pci != pci }
     }
 
     private fun bandOf(

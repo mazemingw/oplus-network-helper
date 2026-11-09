@@ -22,6 +22,7 @@ import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.width
@@ -73,7 +74,6 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardCapitalization
-import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.nvmex.networkhelper.R
@@ -88,8 +88,8 @@ import kotlin.math.min
 
 @Composable
 fun SignalScanScreen(
+    onBack: () -> Unit,
     modifier: Modifier = Modifier,
-    contentBottomPadding: Dp = 0.dp,
     vm: SignalScanViewModel = viewModel()
 ) {
     val ui by vm.ui.collectAsState()
@@ -224,6 +224,7 @@ fun SignalScanScreen(
             modifier = modifier
                 .fillMaxSize()
                 .statusBarsPadding()
+                .navigationBarsPadding()
         ) {
             Column(
                 modifier = Modifier
@@ -232,10 +233,14 @@ fun SignalScanScreen(
                     .padding(
                         start = 18.dp,
                         end = 18.dp,
-                        bottom = 18.dp + contentBottomPadding
+                        bottom = 18.dp
                     ),
                 verticalArrangement = Arrangement.spacedBy(12.dp)
             ) {
+                Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                    Text(stringResource(R.string.nav_radar), Modifier.weight(1f), style = MaterialTheme.typography.headlineSmall)
+                    TextButton(onClick = onBack) { Text(stringResource(R.string.action_back)) }
+                }
 
                 val sims = ui.sims
                 val selectedIndex = sims.indexOfFirst { it.subId == ui.selectedSubId }.coerceAtLeast(0)

@@ -24,15 +24,16 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.saveable.listSaver
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.layout.onSizeChanged
-import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.LiveRegionMode
 import androidx.compose.ui.semantics.liveRegion
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.stateDescription
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.text.style.TextOverflow
 import com.nvmex.networkhelper.ui.network.sections.NetworkSignalProgressBar
 import androidx.lifecycle.viewmodel.compose.viewModel
@@ -43,6 +44,8 @@ import com.nvmex.networkhelper.viewmodel.menu.QmiBandLockViewModel
 import com.nvmex.networkhelper.viewmodel.menu.QmiBandUiState
 import com.nvmex.networkhelper.viewmodel.menu.QmiNoticeLevel
 import com.nvmex.networkhelper.viewmodel.signal.NetworkPanelMultiSimViewModel
+import com.nvmex.networkhelper.ui.network.DefaultDataSimIcon
+import com.nvmex.networkhelper.ui.settings.AppSettingsStore
 import com.nvmex.networkhelper.ui.settings.rememberAppSettings
 import com.nvmex.networkhelper.viewmodel.menu.ModemDriversViewModel
 import com.nvmex.networkhelper.viewmodel.menu.ModemControlActions
@@ -61,12 +64,16 @@ private val cellInputSaver = listSaver<QmiCellInput, String>(
 @Composable
 fun QmiBandLockScreen(onBack: () -> Unit, legacyVm: QmiBandLockViewModel = viewModel(),
                      networkVm: NetworkPanelMultiSimViewModel = viewModel(), quickRequest: QmiQuickLockRequest? = null,
-                     drivers: ModemDriversViewModel = viewModel()) {
+                     initialSim: Int? = null,
+                     drivers: ModemDriversViewModel = viewModel(), contentBottomPadding: Dp = 0.dp) {
     val legacyUi by legacyVm.state.collectAsState()
     val bunnyUi by drivers.controls.state.collectAsState()
     val supported = remember { SocVendorDetector.isQualcomm() }
     val driver by drivers.selected.collectAsState()
     val bunnyState by drivers.state.collectAsState()
+    val sims by networkVm.sims.collectAsState()
+    val dataSubId by networkVm.dataSubId.collectAsState()
+    val dataSim = sims.firstOrNull { it.subscriptionId == dataSubId }?.simSlotIndex?.plus(1)
     val driverBusy by drivers.busy.collectAsState()
     val driverNotice by drivers.notice.collectAsState()
     val driverFailed by drivers.failed.collectAsState()
@@ -85,19 +92,23 @@ fun QmiBandLockScreen(onBack: () -> Unit, legacyVm: QmiBandLockViewModel = viewM
         legacyVm.refreshForRecovery()
         legacyMonitoring = true
     }
+    FiveGAdvancedNotice()
     SystemQmiRecoveryDialog(drivers, releaseLegacy, nativeReady)
     val (settings, setSettings) = rememberAppSettings()
     val pager = rememberPagerState(initialPage = if (quickRequest?.kind == QmiQuickLockKind.CELL) 1 else 0, pageCount = { 3 })
     val tab = pager.currentPage
     val scope = rememberCoroutineScope()
-    var dockHeightPx by remember { mutableIntStateOf(0) }
-    val dockHeight = with(LocalDensity.current) { dockHeightPx.toDp() }
     var cell by rememberSaveable(ui.sim, stateSaver = cellInputSaver) { mutableStateOf(QmiCellInput()) }
     var consumedQuickId by rememberSaveable(driver) { mutableStateOf<String?>(null) }
     var pendingCell by remember(ui.sim) { mutableStateOf<QmiCellInput?>(null) }
     LaunchedEffect(Unit) {
         com.nvmex.networkhelper.util.modem.SystemQmiServices.channelsBlocked.first { !it }
-        if (bunny) drivers.select(driver, releaseLegacy, nativeReady)
+        if (drivers.selected.value.isBunny) drivers.connect(quickRequest?.sim ?: initialSim, releaseLegacy)
+        else if (supported && quickRequest == null) {
+            val current = legacyVm.state.value
+            val sim = initialSim ?: current.sim
+            if (current.device == null || current.sim != sim) legacyVm.refresh(sim)
+        }
     }
     LaunchedEffect(bunny, bunnyState.root, bunnyState.sim, bunnyState.groups, driverBusy, quickRequest?.id) {
         val request = quickRequest
@@ -106,7 +117,7 @@ fun QmiBandLockScreen(onBack: () -> Unit, legacyVm: QmiBandLockViewModel = viewM
             else vm.prepareQuickLock(request)
         }
     }
-    ObserveBandNetwork(ui.sim, vm, networkVm, legacyMonitoring && !driverBusy)
+    ObserveBandNetwork(ui.sim, vm, networkVm, legacyMonitoring && !driverBusy && ui.device?.controlReady == true)
     LaunchedEffect(driver, bunnyState.supportsPciLock) {
         if (bunny && !bunnyState.supportsPciLock) cell = cell.copy(
             mode = if (cell.mode in setOf(QmiCellMode.NR_PCI, QmiCellMode.NR_MULTI_PCI)) QmiCellMode.NR_ARFCN else cell.mode, pcis = "")
@@ -121,11 +132,8 @@ fun QmiBandLockScreen(onBack: () -> Unit, legacyVm: QmiBandLockViewModel = viewM
                 Text(stringResource(R.string.qmi_cell_rat_only)) } })
     }
     LaunchedEffect(settings.mainlandBandMode, bunny) { vm.configureMainlandMode(settings.mainlandBandMode) }
-    LaunchedEffect(quickRequest?.id, bunny, channelsBlocked) {
-        if (supported && !bunny && !channelsBlocked && !driverBusy) {
-            if (quickRequest != null) vm.prepareQuickLock(quickRequest)
-            else if (ui.device == null) vm.refresh()
-        }
+    LaunchedEffect(quickRequest?.id, bunny, channelsBlocked, driverBusy, ui.busy) {
+        if (quickRequest != null && supported && !bunny && !allBusy) vm.prepareQuickLock(quickRequest)
     }
     LaunchedEffect(ui.quickPrefill?.id) {
         ui.quickPrefill?.takeIf { it.id != consumedQuickId }?.let { request ->
@@ -134,24 +142,24 @@ fun QmiBandLockScreen(onBack: () -> Unit, legacyVm: QmiBandLockViewModel = viewM
             consumedQuickId = request.id
         }
     }
-    LaunchedEffect(ui.busy, ui.device) {
-        if (!bunny && !ui.busy && ui.device?.controlReady == true) networkVm.retryQmiMonitoring()
-    }
-    Box(Modifier.fillMaxSize().statusBarsPadding().navigationBarsPadding().imePadding()) {
-    Column(Modifier.fillMaxSize()) {
-    Column(Modifier.padding(16.dp),
-        verticalArrangement = Arrangement.spacedBy(14.dp)) {
+    Column(Modifier.fillMaxSize().statusBarsPadding().navigationBarsPadding().imePadding().padding(bottom = contentBottomPadding)) {
+    Column(Modifier.padding(horizontal = 12.dp).padding(top = 4.dp)) {
         Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-            Text(stringResource(R.string.qmi_title), Modifier.weight(1f), style = MaterialTheme.typography.headlineSmall)
+            Text(stringResource(R.string.qmi_title), Modifier.weight(1f), style = MaterialTheme.typography.titleLarge)
             TextButton(shape = lockControlShape, onClick = onBack) { Text(stringResource(R.string.action_back)) }
         }
         if (!supported && !bunny) {
             Text(stringResource(R.string.qmi_unsupported), style = MaterialTheme.typography.bodySmall)
         }
         FlowRow(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            (1..2).forEach { sim -> FilterChip(shape = lockControlShape, selected = (if (bunny) bunnyState.sim else ui.sim) == sim,
-                enabled = !allBusy && (!bunny || bunnyState.sims.any { it.slot == sim - 1 }),
-                onClick = { if (bunny) drivers.sim(sim) else if (ui.sim != sim) vm.refresh(sim) }, label = { Text("SIM $sim") }) }
+            (1..2).forEach { sim ->
+                val selected = (if (bunny) bunnyState.sim else ui.sim) == sim
+                FilterChip(shape = lockControlShape, selected = selected,
+                    enabled = !allBusy && (!bunny || bunnyState.sims.any { it.slot == sim - 1 }),
+                    onClick = { if (bunny) drivers.sim(sim) else if (ui.sim != sim) vm.refresh(sim) },
+                    label = { Text("SIM$sim") },
+                    trailingIcon = if (sim == dataSim) ({ DefaultDataSimIcon(selected) }) else null)
+            }
             AssistChip(shape = lockControlShape, onClick = {
                 if (bunny) drivers.refresh() else { legacyMonitoring = true; legacyVm.refresh() }
             }, enabled = !allBusy,
@@ -167,10 +175,10 @@ fun QmiBandLockScreen(onBack: () -> Unit, legacyVm: QmiBandLockViewModel = viewM
     }
     HorizontalPager(state = pager, modifier = Modifier.weight(1f).fillMaxWidth(), verticalAlignment = Alignment.Top) { page ->
     Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState())
-        .padding(start = 16.dp, end = 16.dp, bottom = if (page == 2) 100.dp else dockHeight + 48.dp),
+        .padding(horizontal = 12.dp, vertical = 8.dp),
         verticalArrangement = Arrangement.spacedBy(14.dp)) {
         if (page == 2) {
-            ModemDriverSettings(drivers, !allBusy, releaseLegacy, nativeReady)
+            ModemDriverSettings(drivers, !allBusy, releaseLegacy, nativeReady, legacyUi)
         } else {
         val device = ui.device
         val draft = ui.draft
@@ -295,8 +303,6 @@ fun QmiBandLockScreen(onBack: () -> Unit, legacyVm: QmiBandLockViewModel = viewM
             }
         }
         }
-        Spacer(Modifier.height(16.dp))
-    }
     }
     }
     if (supported || bunny) {
@@ -305,13 +311,21 @@ fun QmiBandLockScreen(onBack: () -> Unit, legacyVm: QmiBandLockViewModel = viewM
         val ready = !allBusy && device?.controlReady == true && (tab == 1 || device.hardware != null)
         val hasSelection = draft != null && (draft.bands.values.any { it.isNotEmpty() } ||
             draft.rats != device?.profile?.rats || draft.nrMode != device?.profile?.nrMode)
-        Column(Modifier.align(Alignment.BottomCenter).fillMaxWidth().padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-            val status = if (allBusy) stringResource(R.string.qmi_reading) else driverNotice ?: ui.error ?: ui.message
-            if (status != null) QmiStatusAlert(status, if (driverNotice != null && driverFailed || ui.error != null) QmiNoticeLevel.ERROR else ui.noticeLevel,
-                allBusy) { drivers.dismiss(); vm.dismissStatus() }
-            if (tab < 2) Surface(modifier = Modifier.onSizeChanged { dockHeightPx = it.height }, shape = lockControlShape, shadowElevation = 8.dp,
+        val status = if (allBusy) stringResource(R.string.qmi_reading) else driverNotice ?: ui.error ?: ui.message
+        if (status != null || tab < 2) Column(Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 4.dp),
+            verticalArrangement = Arrangement.spacedBy(4.dp)) {
+            if (status != null) {
+                val level = when {
+                    allBusy -> QmiNoticeLevel.INFO
+                    driverNotice != null -> if (driverFailed) QmiNoticeLevel.ERROR else QmiNoticeLevel.SUCCESS
+                    ui.error != null -> QmiNoticeLevel.ERROR
+                    else -> ui.noticeLevel
+                }
+                QmiStatusAlert(status, level, allBusy) { drivers.dismiss(); vm.dismissStatus() }
+            }
+            if (tab < 2) Surface(shape = lockControlShape, shadowElevation = 3.dp,
                 color = MaterialTheme.colorScheme.surfaceContainerHigh) {
-                Row(Modifier.fillMaxWidth().padding(10.dp), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                Row(Modifier.fillMaxWidth().padding(horizontal = 8.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     Button(shape = lockControlShape, onClick = {
                         if (tab == 0) vm.apply()
                         else if (cell.mode == QmiCellMode.PLMN) vm.lock(cell)
@@ -329,6 +343,27 @@ fun QmiBandLockScreen(onBack: () -> Unit, legacyVm: QmiBandLockViewModel = viewM
         }
     }
     }
+}
+
+@Composable
+private fun FiveGAdvancedNotice() {
+    val context = LocalContext.current
+    var visible by rememberSaveable { mutableStateOf(!AppSettingsStore.is5gAdvancedNoticeDismissed(context)) }
+    if (!visible) return
+    AlertDialog(
+        onDismissRequest = { visible = false },
+        title = { Text(stringResource(R.string.qmi_5ga_notice_title)) },
+        text = { Text(stringResource(R.string.qmi_5ga_notice_body)) },
+        confirmButton = {
+            TextButton(onClick = { visible = false }) { Text(stringResource(R.string.action_close)) }
+        },
+        dismissButton = {
+            TextButton(onClick = {
+                AppSettingsStore.dismiss5gAdvancedNotice(context)
+                visible = false
+            }) { Text(stringResource(R.string.action_dont_show_again)) }
+        }
+    )
 }
 
 @OptIn(ExperimentalLayoutApi::class)
@@ -389,14 +424,17 @@ private fun CellLockReadback(ui: QmiBandUiState, device: QmiDeviceState) {
 
 @Composable
 private fun QmiStatusAlert(message: String, level: QmiNoticeLevel, busy: Boolean, onDismiss: () -> Unit) {
+    val darkSurface = MaterialTheme.colorScheme.surface.luminance() < 0.5f
     val background = when (level) {
         QmiNoticeLevel.ERROR -> MaterialTheme.colorScheme.errorContainer
+        QmiNoticeLevel.REGISTERED -> if (darkSurface) Color(0xFF183B2A) else Color(0xFFD8F5DE)
         QmiNoticeLevel.WARNING -> Color(0xFFFFEDAD)
         QmiNoticeLevel.SUCCESS -> MaterialTheme.colorScheme.primaryContainer
         QmiNoticeLevel.INFO -> MaterialTheme.colorScheme.secondaryContainer
     }
     val foreground = when (level) {
         QmiNoticeLevel.ERROR -> MaterialTheme.colorScheme.onErrorContainer
+        QmiNoticeLevel.REGISTERED -> if (darkSurface) Color(0xFFABF0BD) else Color(0xFF173E25)
         QmiNoticeLevel.WARNING -> Color(0xFF463500)
         QmiNoticeLevel.SUCCESS -> MaterialTheme.colorScheme.onPrimaryContainer
         QmiNoticeLevel.INFO -> MaterialTheme.colorScheme.onSecondaryContainer
@@ -411,7 +449,7 @@ private fun QmiStatusAlert(message: String, level: QmiNoticeLevel, busy: Boolean
                     QmiNoticeLevel.ERROR -> Icons.Default.ErrorOutline
                     QmiNoticeLevel.WARNING -> Icons.Default.WarningAmber
                     QmiNoticeLevel.INFO -> Icons.Default.Info
-                    QmiNoticeLevel.SUCCESS -> Icons.Default.CheckCircle
+                    QmiNoticeLevel.SUCCESS, QmiNoticeLevel.REGISTERED -> Icons.Default.CheckCircle
                 }, contentDescription = null)
                 Text(message, Modifier.weight(1f).heightIn(max = 140.dp).verticalScroll(rememberScrollState()), style = MaterialTheme.typography.bodySmall)
                 if (!busy) IconButton(onClick = onDismiss, modifier = Modifier.size(32.dp)) {

@@ -71,7 +71,7 @@ fun HomeScreen(
     vendor: OplusVendor,
     onPanelState: (NetworkPanelUiState) -> Unit,
     contentBottomPadding: Dp = 0.dp,
-    onOpenEngineerBandLock: () -> Unit = {},
+    onOpenEngineerBandLock: (Int?) -> Unit = {},
     onQuickLock: ((com.nvmex.networkhelper.util.qmi.QmiQuickLockRequest) -> Unit)? = null,
     onOpenSignalComparison: () -> Unit = {},
     onOpenModemFeatures: (Int?) -> Unit = {},

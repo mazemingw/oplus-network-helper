@@ -1,0 +1,25 @@
+<resources>
+    <string name="at_open_failed">Не вдалося відкрити %1$s (%2$s).</string>
+    <string name="at_not_accepted">Модем не прийняв %1$s. Відповідь: %2$s</string>
+    <string name="at_read_failed">Не вдалося прочитати з %1$s (%2$s).</string>
+    <string name="at_no_reply">Команда %1$s не отримала відповіді від %2$s.</string>
+
+    <string name="mtk_erat_no_mode">Для такої комбінації в AT+ERAT немає режиму.</string>
+    <string name="mtk_ca_kept">Модем залишив попереднє налаштування.</string>
+    <string name="mtk_epbse_unreadable">%1$s (%2$s відповів: %3$s).</string>
+    <string name="mtk_no_band_lock">Порт AT %1$s не підтримує блокування діапазонів</string>
+    <string name="mtk_current_bands_unreadable">Не вдалося прочитати поточні діапазони з %1$s</string>
+    <string name="mtk_no_epbseh">Цей модем не підтримує AT+EPBSEH, тож у нього може не бути 5G.</string>
+
+    <string name="oem_working_through">Робота через %1$s.</string>
+    <string name="oem_no_passthrough">На цьому телефоні не відповів жоден канал передавання OEM-запитів.</string>
+    <string name="oem_no_ril_passthrough">На цьому телефоні немає каналу передавання команд через RIL.</string>
+    <string name="oem_no_raw_route">У цього телефона немає маршруту OEM-запитів для перевірки.</string>
+    <string name="oem_no_callback_reply">Немає відповіді зворотного виклику для %1$s.</string>
+    <string name="oem_timeout">Модем не відповів на %1$s вчасно.</string>
+    <string name="oem_service_refused">Служба відхилила %1$s (%2$s).</string>
+
+    <string name="oem_probe_failed">%1$s завершилося помилкою: %2$s</string>
+    <string name="oem_probe_replied">%1$s відповів: %2$s</string>
+    <string name="oem_probe_silent">%1$s не відповів.</string>
+</resources>

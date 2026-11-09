@@ -1,0 +1,72 @@
+<resources>
+    <string name="qmi_refused">Модем отклонил %1$s: %2$s.</string>
+    <string name="qmi_reply_too_short">Ответ модема был короче ожидаемого.</string>
+    <string name="qmi_hex_odd_digits">В полезной нагрузке (hex) нечётное число цифр.</string>
+
+    <string name="qmi_error_no_result">нет результата от модема</string>
+    <string name="qmi_error_none">нет ошибки (0x00)</string>
+    <string name="qmi_error_malformed">некорректный запрос (0x01)</string>
+    <string name="qmi_error_no_memory">нехватка памяти (0x02)</string>
+    <string name="qmi_error_internal">внутренняя ошибка (0x03)</string>
+    <string name="qmi_error_no_free_client">нет свободного слота для ещё одного приложения (поможет перезагрузка телефона) (0x05)</string>
+    <string name="qmi_error_call_failed">вызов не удался (0x0E)</string>
+    <string name="qmi_error_not_provisioned">не активировано (0x10)</string>
+    <string name="qmi_error_missing_arg">отсутствующее значение (0x11)</string>
+    <string name="qmi_error_arg_too_long">слишком длинное значение (0x13)</string>
+    <string name="qmi_error_not_supported_modem">не поддерживается этим модемом (0x19)</string>
+    <string name="qmi_error_no_effect">изменения не требуются (0x1A)</string>
+    <string name="qmi_error_invalid_profile_type">недопустимый тип профиля (0x1E)</string>
+    <string name="qmi_error_invalid_service_type">недопустимый тип службы (0x1F)</string>
+    <string name="qmi_error_invalid_qos_id">недопустимый QoS ID (0x29)</string>
+    <string name="qmi_error_unknown">неизвестная ошибка (0x2F)</string>
+    <string name="qmi_error_invalid_arg">недопустимое значение (0x30)</string>
+    <string name="qmi_error_not_ready">ещё не готово (0x34)</string>
+    <string name="qmi_error_invalid_transition">недопустимое изменение состояния (0x3C)</string>
+    <string name="qmi_error_info_unavailable">сведения недоступны (0x4A)</string>
+    <string name="qmi_error_access_denied">доступ запрещён (0x52)</string>
+    <string name="qmi_error_incompatible_state">невозможно в текущем состоянии модема (0x5A)</string>
+    <string name="qmi_error_not_supported">не поддерживается (0x5E)</string>
+    <string name="qmi_error_other">ошибка %1$s</string>
+
+    <string name="qc_op_band_caps_query">запрос возможностей диапазонов</string>
+    <string name="qc_op_ssp_query">запрос системного выбора</string>
+    <string name="qc_op_lte_cell_lock_query">запрос блокировки соты LTE</string>
+    <string name="qc_op_nr_cell_lock_query">запрос блокировки соты NR</string>
+    <string name="qc_op_legacy_band_query">запрос диапазонов 2G и 3G</string>
+    <string name="qc_op_lte_band_lock">блокировку диапазонов LTE</string>
+    <string name="qc_op_nr_band_lock">блокировку диапазонов NR</string>
+    <string name="qc_op_gsm_band_lock">блокировку диапазонов GSM</string>
+    <string name="qc_op_wcdma_band_lock">блокировку диапазонов WCDMA</string>
+    <string name="qc_op_lte_band_restore">восстановление диапазонов LTE</string>
+    <string name="qc_op_network_mode">изменение режима сети</string>
+    <string name="qc_op_nr_mode">изменение режима 5G</string>
+    <string name="qc_op_plmn_lock">блокировку PLMN</string>
+    <string name="qc_op_plmn_unlock">разблокировку PLMN</string>
+    <string name="qc_op_lte_cell_lock">блокировку соты LTE</string>
+    <string name="qc_op_lte_cell_unlock">разблокировку соты LTE</string>
+    <string name="qc_op_nr_cell_lock">блокировку соты NR</string>
+    <string name="qc_op_nr_cell_unlock">разблокировку соты NR</string>
+    <string name="qc_op_offline">запрос перехода в офлайн</string>
+    <string name="qc_op_reboot">запрос перезагрузки</string>
+    <string name="qc_op_data_detach">отключение данных</string>
+    <string name="qc_op_data_attach">подключение данных</string>
+
+    <string name="qc_sim_switch_failed">Модем не захотел переключаться на SIM %1$d: %2$s.</string>
+    <string name="qc_lte_lock_too_many_pcis">Модем отклонил %1$s: он принимает меньше PCI. Старые модемы принимают не более %2$d.</string>
+    <string name="qc_note_nr_bands_combined">Этот модем не может задать диапазоны %1$s отдельно, поэтому диапазоны были применены и к SA, и к NSA.</string>
+    <string name="qc_invalid_scs">%1$d кГц не является допустимым разносом поднесущих.</string>
+    <string name="qc_unknown_band_group">Неизвестная группа диапазонов: %1$s.</string>
+    <string name="qc_pci_count">Введите от 1 до %1$d PCI.</string>
+    <string name="qc_needs_nr_band">Для этой блокировки нужен диапазон NR.</string>
+    <string name="qc_unknown_nr_lock_type">Неизвестный тип блокировки NR: %1$s.</string>
+
+    <string name="qrtr_failed">%1$s (%2$s).</string>
+    <string name="qrtr_lookup">Не удалось найти службу QMI модема</string>
+    <string name="qrtr_socket">Не удалось открыть сокет QRTR</string>
+    <string name="qrtr_connect">Не удалось подключиться к службе QMI модема</string>
+    <string name="qrtr_length">Запрос QMI имеет недопустимую длину</string>
+    <string name="qrtr_send">Не удалось отправить запрос QMI</string>
+    <string name="qrtr_timeout">Модем не ответил на запрос QMI вовремя</string>
+    <string name="qrtr_wait">Не удалось дождаться ответа QMI</string>
+    <string name="qrtr_recv">Не удалось прочитать ответ QMI</string>
+</resources>

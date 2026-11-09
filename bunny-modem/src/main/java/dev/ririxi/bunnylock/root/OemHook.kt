@@ -292,8 +292,9 @@ object OemHook {
     }
 
     private fun isMediatek(): Boolean {
-        val props = listOf("ro.soc.manufacturer", "ro.hardware", "ro.board.platform").joinToString(" ") { Sys.prop(it) }.lowercase()
-        return "mediatek" in props || Regex("\\bmt\\d{4}").containsMatchIn(props)
+        val props =
+            listOf("ro.soc.manufacturer", "ro.hardware", "ro.board.platform", "gsm.version.ril-impl").joinToString(" ") { Sys.prop(it) }.lowercase()
+        return Sys.isMediatek(props)
     }
 
     fun available(): Boolean = workingTarget !== null

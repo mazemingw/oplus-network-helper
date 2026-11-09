@@ -4,7 +4,8 @@
     <string name="xposed_module_description">Manual network debugging module for learning and research only. Use the community group; do not bother after-sales support. Coolapk: NVMEX Nightingale</string>
 
     <string name="nav_home">Home</string>
-    <string name="nav_radar">Radar</string>
+    <string name="nav_radar">Signal radar</string>
+    <string name="nav_lock">Lock</string>
     <string name="nav_wifi">WiFi</string>
     <string name="nav_menu">Menu</string>
     <string name="nav_settings">Settings</string>
@@ -46,6 +47,7 @@
     <string name="menu_stable_subtitle">These features are mostly stable</string>
     <string name="menu_cell_query_title">LTE/NR Cell Query</string>
     <string name="menu_cell_query_subtitle">Query 4G / 5G engineering parameters and cell information</string>
+    <string name="menu_radar_subtitle">View nearby cells and live signal readings to help locate the signal source</string>
     <string name="menu_hotspot_title">Hotspot Console</string>
     <string name="menu_hotspot_subtitle">Hotspot features and controls</string>
     <string name="menu_iperf_client_title">LAN Speed Test (Client)</string>
@@ -950,4 +952,13 @@
     <string name="map_drive_save_failed">Some samples could not be written. Successfully written SIM groups can still be saved.</string>
     <string name="map_drive_phone_required">Grant phone permission to record both SIMs together.</string>
     <string name="default_data_sim">Default data SIM</string>
+    <string name="wifi_settings_title">Wi‑Fi settings</string>
+    <string name="wifi_cutoff_title">Disconnect from a weak access point</string>
+    <string name="wifi_cutoff_description">Check the connected signal every %1$d seconds. Two readings at or below the threshold disconnect the current access point and keep Wi‑Fi enabled. Android can reconnect automatically. The next cutoff waits at least %2$d seconds.</string>
+    <string name="wifi_cutoff_threshold">Cutoff threshold %1$d dBm</string>
+    <string name="wifi_cutoff_monitoring">Monitoring the connected Wi‑Fi signal in the background</string>
+    <string name="wifi_cutoff_stop">Stop monitoring</string>
+    <string name="wifi_cutoff_permission">Disconnecting the current access point requires root, authorized Shizuku or system device management privileges.</string>
+    <string name="wifi_cutoff_start_failed">Could not start Wi‑Fi monitoring.</string>
+    <string name="wifi_cutoff_disconnect_failed">Android rejected the request to disconnect the current access point. Monitoring stopped. Check access and try again.</string>
 </resources>

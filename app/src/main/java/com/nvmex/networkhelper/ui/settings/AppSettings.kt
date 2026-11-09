@@ -44,6 +44,13 @@ object AppSettingsStore {
     private const val KEY_CUSTOM_BACKGROUND_PATH = "custom_background_path"
     private const val KEY_CUSTOM_BACKGROUND_ALPHA = "custom_background_alpha"
     private const val KEY_SUPPRESS_ENGINEER_GUIDE_PROMPT = "suppress_engineer_guide_prompt"
+    private const val KEY_DISMISS_5GA_NOTICE = "dismiss_5ga_notice"
+
+    fun is5gAdvancedNoticeDismissed(context: Context) = preferences(context).getBoolean(KEY_DISMISS_5GA_NOTICE, false)
+
+    fun dismiss5gAdvancedNotice(context: Context) {
+        preferences(context).edit(commit = true) { putBoolean(KEY_DISMISS_5GA_NOTICE, true) }
+    }
 
     // ✅ 内部存储目录和文件名（Xposed模块将直接读取这个路径）
     private const val XPOSED_CONFIG_DIR = "xposed_config"

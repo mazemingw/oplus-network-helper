@@ -2,7 +2,7 @@
     <string name="backend_qualcomm">Qualcomm QMI</string>
     <string name="backend_mediatek">MediaTek AT</string>
     <string name="backend_pixel">Pixel (Tensor NV)</string>
-    <string name="backend_android">HAL radia Androida</string>
+    <string name="backend_android">Android radio HAL</string>
 
     <string name="net_mode_auto">Auto</string>
     <string name="net_mode_nr_lte">5G i 4G</string>

@@ -4,7 +4,8 @@
     <string name="xposed_module_description">手动调试网络模块，仅用于学习交流。善用交流群，勿打扰售后。酷安：NVMEX夜莺</string>
 
     <string name="nav_home">首页</string>
-    <string name="nav_radar">雷达</string>
+    <string name="nav_radar">信号雷达</string>
+    <string name="nav_lock">锁定</string>
     <string name="nav_wifi">WiFi</string>
     <string name="nav_menu">菜单</string>
     <string name="nav_settings">设置</string>
@@ -46,6 +47,7 @@
     <string name="menu_stable_subtitle">这些功能基本稳定了</string>
     <string name="menu_cell_query_title">LTE/NR 基站查询</string>
     <string name="menu_cell_query_subtitle">查询 4G / 5G 工参与小区信息</string>
+    <string name="menu_radar_subtitle">查看周边小区和实时信号，辅助寻找信号方向</string>
     <string name="menu_hotspot_title">热点控制台</string>
     <string name="menu_hotspot_subtitle">热点相关功能与控制入口</string>
     <string name="menu_iperf_client_title">内网测速（客户端）</string>
@@ -950,4 +952,13 @@
     <string name="map_drive_save_failed">部分采样写入失败，已写入的双卡数据组可保存。</string>
     <string name="map_drive_phone_required">请授予电话权限，以同步采集两张 SIM 的路测信息。</string>
     <string name="default_data_sim">默认数据卡</string>
+    <string name="wifi_settings_title">Wi‑Fi 设置</string>
+    <string name="wifi_cutoff_title">弱信号时断开当前接入点</string>
+    <string name="wifi_cutoff_description">连接后每 %1$d 秒读取一次信号。连续两次达到或低于阈值时断开当前接入点，Wi‑Fi 开关保持开启。系统可自动重连，断开后至少间隔 %2$d 秒才会再次触发。</string>
+    <string name="wifi_cutoff_threshold">切断阈值 %1$d dBm</string>
+    <string name="wifi_cutoff_monitoring">正在后台监测已连接的 Wi‑Fi</string>
+    <string name="wifi_cutoff_stop">停止监测</string>
+    <string name="wifi_cutoff_permission">断开当前接入点需要 Root、已授权的 Shizuku 或系统设备管理权限。</string>
+    <string name="wifi_cutoff_start_failed">启动 Wi‑Fi 监测失败。</string>
+    <string name="wifi_cutoff_disconnect_failed">系统拒绝断开当前接入点。已停止监测，请检查权限后重试。</string>
 </resources>

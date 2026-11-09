@@ -19,6 +19,7 @@ import androidx.compose.ui.unit.dp
 import com.nvmex.networkhelper.R
 import com.nvmex.networkhelper.util.modem.ModemDriver
 import com.nvmex.networkhelper.viewmodel.menu.ModemDriversViewModel
+import com.nvmex.networkhelper.viewmodel.menu.QmiBandUiState
 import dev.ririxi.bunnylock.modem.RootState
 
 private val driverShape = RoundedCornerShape(4.dp)
@@ -43,7 +44,8 @@ private fun DriverSourceIcon(bunny: Boolean) {
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
 internal fun ModemDriverSettings(vm: ModemDriversViewModel, enabled: Boolean,
-                                 releaseLegacy: suspend () -> Unit, nativeReady: suspend () -> Unit) {
+                                 releaseLegacy: suspend () -> Unit, nativeReady: suspend () -> Unit,
+                                 nativeState: QmiBandUiState) {
     val selected by vm.selected.collectAsState()
     val state by vm.state.collectAsState()
     val recovery by vm.systemRecovery.collectAsState()
@@ -71,7 +73,13 @@ internal fun ModemDriverSettings(vm: ModemDriversViewModel, enabled: Boolean,
                 }
             }
         }
-        Text("权限：${state.access?.label ?: "尚未连接"} · 当前：${if (selected.isBunny) state.backend?.name ?: "等待识别" else "原有高通 QMI"}",
+        val access = if (selected.isBunny) state.access?.label ?: "尚未连接" else when {
+            nativeState.busy -> "读取中"
+            nativeState.device?.controlReady == true -> "Root · 已连接"
+            nativeState.device != null -> "仅硬件信息可用"
+            else -> "尚未连接"
+        }
+        Text("权限：$access · 当前：${if (selected.isBunny) state.backend?.name ?: "等待识别" else "原有高通 QMI"}",
             style = MaterialTheme.typography.bodySmall)
         if (state.root is RootState.Denied && selected.isBunny) Text((state.root as RootState.Denied).reason, style = MaterialTheme.typography.bodySmall)
         if (state.root == RootState.Checking && selected.isBunny) Text(state.connectStep.ifBlank { "连接后端…" }, style = MaterialTheme.typography.bodySmall)

@@ -69,7 +69,7 @@ fun NetworkPanelTabs(
     onCurrentState: (NetworkPanelUiState) -> Unit,
     onShowBandHelp: () -> Unit,
     onLaunchEngineerMode: (() -> Unit)? = null,
-    onOpenEngineerBandLock: (() -> Unit)? = null,
+    onOpenEngineerBandLock: ((Int?) -> Unit)? = null,
     onQuickLock: ((com.nvmex.networkhelper.util.qmi.QmiQuickLockRequest) -> Unit)? = null,
     onOpenSignalComparison: () -> Unit = {},
     onAllStates: ((Map<Int, NetworkPanelUiState>) -> Unit)? = null,
@@ -121,8 +121,9 @@ fun NetworkPanelTabs(
     }
 
     val currentSubId = panelSubIds[pagerState.currentPage]
-    QmiRadioObservation(vm, sims.firstOrNull { it.subscriptionId == currentSubId }?.simSlotIndex?.plus(1), overrideStates == null,
-        currentSubId, includeRx = settings.rxMeasurementsExpanded)
+    val currentSim = sims.firstOrNull { it.subscriptionId == currentSubId }?.simSlotIndex?.plus(1)
+    QmiRadioObservation(vm, currentSim, overrideStates == null && isQualcommPlatform,
+        currentSubId, includeRx = isQualcommPlatform && settings.rxMeasurementsExpanded)
     val currentState = states[currentSubId] ?: NetworkPanelUiState(lastError = "加载中...", subId = currentSubId)
     LaunchedEffect(currentSubId, currentState.updatedAt) {
         onCurrentState(currentState)
@@ -207,16 +208,7 @@ fun NetworkPanelTabs(
                                         style = MaterialTheme.typography.labelMedium
                                     )
                                     if (isDataSim) {
-                                        Icon(
-                                            painter = painterResource(R.drawable.sim_card),
-                                            contentDescription = "默认数据卡",
-                                            modifier = Modifier.size(14.dp),
-                                            tint = if (idx == pagerState.currentPage) {
-                                                MaterialTheme.colorScheme.primary
-                                            } else {
-                                                MaterialTheme.colorScheme.onSurfaceVariant
-                                            }
-                                        )
+                                        DefaultDataSimIcon(idx == pagerState.currentPage)
                                     }
                                 }
                             },
@@ -250,7 +242,7 @@ fun NetworkPanelTabs(
                             }
                         }
                         if (onOpenEngineerBandLock != null) {
-                            IconButton(onClick = onOpenEngineerBandLock) {
+                            IconButton(onClick = { onOpenEngineerBandLock(currentSim) }) {
                                 Icon(
                                     imageVector = Icons.Default.Lock,
                                     contentDescription = stringResource(R.string.engineer_band_lock_title),

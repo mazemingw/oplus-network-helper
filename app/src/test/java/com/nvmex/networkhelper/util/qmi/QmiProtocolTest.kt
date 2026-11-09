@@ -150,6 +150,14 @@ class QmiProtocolTest {
         assertTrue(qmiBandChanges(profile, profile, hardware, false).isEmpty())
     }
 
+    @Test fun changingRatRestoresKnownMasksAfterTheRatWrite() {
+        val before = profile.copy(bands = profile.bands + (QmiBand.LTE to setOf(3)))
+        val after = before.copy(rats = setOf("lte"))
+        val commands = qmiBandChanges(before, after, hardware, false)
+        assertEquals(listOf("rat_set", "lte_set"), commands.map { it.getString("cmd") })
+        assertEquals(3, commands[1].getJSONArray("bands").getInt(0))
+    }
+
     @Test fun unsupportedBandIsRejectedBeforeWriting() {
         rejects { qmiBandChanges(profile, profile.copy(bands = hardware + (QmiBand.LTE to setOf(999))), hardware, false) }
     }
@@ -253,6 +261,10 @@ class QmiProtocolTest {
         assertFalse(untuned.tuned); assertNull(untuned.power); assertNull(untuned.rsrp); assertNull(untuned.phase)
         val missing = QmiRxDecoder.decode(frame(0x005a, 0x15 to chain(true, Int.MIN_VALUE, -2000, -1)), "LTE").single()
         assertEquals(2, missing.index); assertNull(missing.power); assertNull(missing.rsrp); assertNull(missing.phase)
+        val zeroPower = QmiRxDecoder.decode(frame(0x005a, 0x10 to chain(true, 0, -1000)), "LTE").single()
+        assertNull(zeroPower.power)
+        assertEquals(-100.0, zeroPower.rsrp!!, 0.001)
+        assertEquals(0.0, zeroPower.phase!!, 0.001)
     }
 
     @Test fun malformedOrRejectedRxFramesAreRejected() {

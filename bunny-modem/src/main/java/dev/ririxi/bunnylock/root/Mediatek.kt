@@ -172,6 +172,29 @@ object Mediatek {
         nrWordsOf(currentHex)?.let { out.optJSONObject("current")?.put("nr", JSONArray(Bands.fromWords(it))) }
         runCatching { out.put("cellLock", cellLockState(node)) }
         runCatching { ratMask(node)?.let { out.put("ratMask", it) } }
+        runCatching { carrierAggregation(node)?.let { out.put("ca", it) } }
+        return out
+    }
+
+    private fun carrierAggregation(node: String): Boolean? {
+        // +ECASW: <on>, the switch MediaTek's engineering mode shows as "LTE CA".
+        val line = At.send(node, "AT+ECASW?").lines().firstOrNull { it.startsWith("+ECASW:") } ?: return null
+        return when (line.removePrefix("+ECASW:").split(',').first().trim()) {
+            "1" -> true
+            "0" -> false
+            else -> null
+        }
+    }
+
+    fun setCarrierAggregation(
+        node: String,
+        enabled: Boolean,
+    ): JSONObject {
+        At.ok(node, "AT+ECASW=${if (enabled) 1 else 0}")
+        val readback = runCatching { carrierAggregation(node) }.getOrNull()
+        if (readback !== null && readback != enabled) fail(R.string.mtk_ca_kept)
+        val out = JSONObject()
+        readback?.let { out.put("ca", it) }
         return out
     }
 
@@ -191,14 +214,14 @@ object Mediatek {
             else -> ERAT_PREFER_NONE
         }
 
-    /** A modem that already allows the same generations is left alone. */
+    /** A modem that already allows the same generations is left alone. One whose mode can't be read is set anyway. */
     fun setRat(
         node: String,
         mask: Long,
     ): JSONObject {
         val wanted = mask and GENERATIONS
-        val current = ratMask(node) ?: fail(R.string.mtk_no_network_mode)
-        if (current and GENERATIONS != wanted) {
+        val current = runCatching { ratMask(node) }.getOrNull()
+        if (current === null || current and GENERATIONS != wanted) {
             val rat = ERAT_MASKS.entries.firstOrNull { it.value == wanted }?.key ?: fail(R.string.mtk_erat_no_mode)
             At.ok(node, "AT+ERAT=$rat,${preferenceFor(wanted)}")
         }

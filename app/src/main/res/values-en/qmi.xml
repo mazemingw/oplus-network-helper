@@ -3,6 +3,8 @@
     <string name="settings_legacy_band_lock">Legacy band locking</string>
     <string name="settings_legacy_band_lock_desc">MTK users can try enabling this. Uses the original engineering / Xposed controls; Qualcomm direct control is the default.</string>
     <string name="qmi_title">Bands and cell control</string>
+    <string name="qmi_5ga_notice_title">Why can’t I lock to 5G-A?</string>
+    <string name="qmi_5ga_notice_body">5G-A is a set of enhancements to 5G NR that require support from both the phone and the base station. For example, the phone reports the band combinations it supports, and the base station configures carrier aggregation based on what both sides support and on current radio conditions.\n\nA band or cell lock narrows where the phone can connect. Even on a cell that supports 5G-A, those features become available when the base station configures them for the phone.</string>
     <string name="qmi_intro">Read hardware-supported bands and configure each SIM directly through the modem. Requires a Qualcomm device and root.</string>
     <string name="qmi_unsupported">This device was not identified as Qualcomm. MTK users can try Legacy band locking in Settings.</string>
     <string name="qmi_bands">Bands and RAT</string>

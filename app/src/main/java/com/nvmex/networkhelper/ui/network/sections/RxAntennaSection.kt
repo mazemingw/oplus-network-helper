@@ -22,7 +22,6 @@ import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.nvmex.networkhelper.R
-import com.nvmex.networkhelper.util.network.SocVendorDetector
 import com.nvmex.networkhelper.util.qmi.QmiRxGroup
 import com.nvmex.networkhelper.util.qmi.qmiRxMetricFraction
 import com.nvmex.networkhelper.util.qmi.qmiRxSlots
@@ -33,7 +32,6 @@ import java.util.Locale
 @Composable
 fun RxAntennaSection(sim: Int?, live: Boolean, active: Boolean, expanded: Boolean, onExpandedChange: (Boolean) -> Unit,
                      groups: List<QmiRxGroup>, error: String?, loading: Boolean, onRetry: () -> Unit, modifier: Modifier = Modifier) {
-    val qualcomm = remember { SocVendorDetector.isQualcomm() }
     var retainedRats by remember(sim, expanded, live) { mutableStateOf(emptyList<String>()) }
     val displayGroups = qmiRxDisplayGroups(groups, retainedRats)
     LaunchedEffect(sim, expanded, live, active, displayGroups.map { it.rat }) {
@@ -50,7 +48,6 @@ fun RxAntennaSection(sim: Int?, live: Boolean, active: Boolean, expanded: Boolea
             when {
                 !live -> Text(stringResource(R.string.qmi_rx_paused))
                 !active -> Unit
-                !qualcomm -> Text(stringResource(R.string.qmi_unsupported))
                 sim == null -> Text(stringResource(R.string.qmi_rx_sim_unknown))
                 else -> {
                     if (loading) LinearProgressIndicator(Modifier.fillMaxWidth().height(4.dp))
@@ -110,7 +107,8 @@ private fun RxMetricBar(measurement: RxMetric, modifier: Modifier = Modifier) {
         }
         Text(metric(measurement.value), style = MaterialTheme.typography.labelSmall,
             fontFamily = FontFamily.Monospace, fontWeight = FontWeight.SemiBold, maxLines = 1, overflow = TextOverflow.Ellipsis)
-        NetworkSignalProgressBar(fraction, Modifier.fillMaxWidth().height(8.dp))
+        if (fraction == null) Spacer(Modifier.height(8.dp))
+        else NetworkSignalProgressBar(fraction, Modifier.fillMaxWidth().height(8.dp))
     }
 }
 

@@ -71,6 +71,11 @@ data class Cell(
     val frequencyName get() = rat.frequencyName(band)
 }
 
+private val FRESH_SCAN_WAIT = 4.seconds
+
+// Samsung's RIL reports n14 for n28 cells.
+private val NR_RIL_MISLABELS = mapOf(14 to 28)
+
 object Cells {
     private val callbackExecutor = Executors.newSingleThreadExecutor()
 
@@ -80,19 +85,34 @@ object Cells {
             .thenByDescending { it.rat.ordinal }
             .thenByDescending { it.rsrp ?: -200 }
 
-    @SuppressLint("MissingPermission")
     suspend fun scan(
         context: Context,
         subId: Int,
-        freshWait: Duration = 4.seconds,
+        freshWait: Duration = FRESH_SCAN_WAIT,
     ): List<Cell> {
-        val defaultTelephony = context.getSystemService(TelephonyManager::class.java) ?: return emptyList()
-        val telephony = if (subId >= 0) defaultTelephony.createForSubscriptionId(subId) else defaultTelephony
+        freshScan(context, subId, freshWait)?.let { return it }
         // The refresh callback isn't guaranteed to arrive, so the wait is capped and an earlier list is used instead.
-        val fresh = withTimeoutOrNull(freshWait) { freshCellInfo(telephony) }
-        if (fresh !== null) lastCellInfo[subId] = fresh
-        val cellInfos = fresh ?: lastCellInfo[subId] ?: cachedCellInfo(telephony)
-        return cellInfos.mapNotNull(::toCell)
+        val telephony = telephonyFor(context, subId) ?: return emptyList()
+        return (lastCellInfo[subId] ?: cachedCellInfo(telephony)).mapNotNull(::toCell)
+    }
+
+    suspend fun freshScan(
+        context: Context,
+        subId: Int,
+        freshWait: Duration = FRESH_SCAN_WAIT,
+    ): List<Cell>? {
+        val telephony = telephonyFor(context, subId) ?: return null
+        val fresh = withTimeoutOrNull(freshWait) { freshCellInfo(telephony) } ?: return null
+        lastCellInfo[subId] = fresh
+        return fresh.mapNotNull(::toCell)
+    }
+
+    private fun telephonyFor(
+        context: Context,
+        subId: Int,
+    ): TelephonyManager? {
+        val defaultTelephony = context.getSystemService(TelephonyManager::class.java) ?: return null
+        return if (subId >= 0) defaultTelephony.createForSubscriptionId(subId) else defaultTelephony
     }
 
     private val lastCellInfo = ConcurrentHashMap<Int, List<CellInfo>>()
@@ -158,7 +178,8 @@ object Cells {
         arfcn: Int,
     ): Int? {
         val candidates = Bands.nrBandsOf(arfcn)
-        return reported.firstOrNull { it in candidates } ?: candidates.firstOrNull() ?: reported.firstOrNull()
+        val corrected = reported.map { band -> NR_RIL_MISLABELS[band]?.takeIf { it in candidates } ?: band }
+        return corrected.firstOrNull { it in candidates } ?: candidates.firstOrNull() ?: corrected.firstOrNull()
     }
 
     private fun baseCell(info: CellInfo): Cell? =

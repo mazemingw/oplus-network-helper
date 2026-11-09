@@ -45,6 +45,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
@@ -109,6 +110,15 @@ fun MenuScreen(
                     title = stringResource(R.string.menu_cell_query_title),
                     subtitle = stringResource(R.string.menu_cell_query_subtitle),
                     onClick = { navController.navigate(Routes.CELL_QUERY) }
+                )
+
+                MenuEntryDivider()
+
+                MenuEntryItem(
+                    icon = { Icon(painterResource(R.drawable.radar), contentDescription = null) },
+                    title = stringResource(R.string.nav_radar),
+                    subtitle = stringResource(R.string.menu_radar_subtitle),
+                    onClick = { navController.navigate(Routes.RADAR) { launchSingleTop = true } }
                 )
 
                 MenuEntryDivider()

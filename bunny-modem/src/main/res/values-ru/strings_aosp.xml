@@ -1,0 +1,47 @@
+<resources>
+    <string name="aosp_sentences">%1$s %2$s</string>
+    <string name="aosp_with_details">%1$s (%2$s)</string>
+    <string name="aosp_unknown_error">неизвестная ошибка</string>
+
+    <string name="aosp_no_method">Эта версия Android не предоставляет ITelephony.%1$s.</string>
+
+    <string name="aosp_held_back">Android пока не разрешает %1$s: %2$s.</string>
+    <string name="aosp_held_back_power">включена экономия энергии (режим энергосбережения или адаптивное подключение)</string>
+    <string name="aosp_held_back_carrier">настройки оператора не включают %1$s</string>
+    <string name="aosp_held_back_2g">параметр «Разрешить 2G» выключен</string>
+
+    <string name="aosp_plmn_not_registered">Не удалось зарегистрироваться в %1$s %2$s. Сеть может быть вне зоны действия или не принимать эту SIM.</string>
+
+    <string name="aosp_mode_refused">Радиомодуль отклонил этот режим сети.</string>
+    <string name="aosp_mode_refused_restored">Радиомодуль отклонил этот режим сети. Предыдущий режим сети восстановлен.</string>
+    <string name="aosp_mode_refused_radio_off">Радиомодуль отклонил режим сети, пока был выключен.</string>
+
+    <string name="aosp_nr_dc_unavailable">Радиомодуль сейчас недоступен.</string>
+    <string name="aosp_nr_dc_error">Радиомодуль вернул ошибку. Возможно, он не поддерживает переключение EN-DC.</string>
+    <string name="aosp_nr_dc_refused">Радиомодуль не принял это состояние EN-DC.</string>
+    <string name="aosp_nr_dc_code">Радиомодуль вернул ошибку %1$d.</string>
+
+    <string name="aosp_ims_kept">Android оставил прежнюю настройку. Настройки оператора для этой SIM могут не разрешать это изменение.</string>
+
+    <string name="aosp_no_subscription">Android не видит эту SIM-карту среди активных, поэтому отправлять блокировку некуда. Проверьте, что SIM-карта вставлена и включена, а у bunnylock есть разрешение «Телефон».</string>
+    <string name="aosp_channels_rejected">Служба радиосвязи Android отклонила блокировку каналов.</string>
+    <string name="aosp_channels_rejected_fewer">Служба радиосвязи Android отклонила блокировку каналов. На этом телефоне может сработать выбор %1$d или меньшего числа диапазонов.</string>
+    <string name="aosp_channels_rejected_split">Служба радиосвязи Android отклонила блокировку каналов, в том числе при разбиении диапазонов на группы по %1$d. На этом телефоне может сработать выбор %1$d или меньшего числа диапазонов.</string>
+    <string name="aosp_channels_not_started">Служба радиосвязи Android не смогла запустить блокировку каналов.</string>
+
+    <string name="aosp_reboot_refused">Radio HAL отклонил перезагрузку модема.</string>
+    <string name="aosp_no_sim_radio_restart">Эта версия Android не может перезапустить радиомодуль отдельной SIM-карты.</string>
+    <string name="aosp_sim_radio_off">Радиомодуль этой SIM-карты выключен.</string>
+    <string name="aosp_radio_not_on">Радиомодуль не включился снова: %1$s.</string>
+    <string name="aosp_radio_not_off">Радиомодуль не выключился: %1$s.</string>
+
+    <string name="sys_samsung_menu_denied">Samsung разрешает открывать Band Menu только своим приложениям.</string>
+    <string name="sys_samsung_menu_missing">Не удалось найти Samsung Band Menu на этом телефоне.</string>
+
+    <string name="samsung_no_nr_mode">На этом телефоне нет управления режимом 5G от Samsung.</string>
+    <string name="samsung_nr_mode_refused">Телефонная служба Samsung не приняла этот режим 5G.</string>
+    <string name="samsung_nr_mode_data_sim_only">На этом телефоне режим 5G от Samsung можно изменить только на SIM-карте для мобильных данных. Сначала переключите мобильные данные на эту SIM-карту.</string>
+
+    <string name="server_unknown_subscription">Эта SIM-карта не найдена среди активных.</string>
+    <string name="server_unknown_command">Неизвестная команда: %1$s.</string>
+</resources>

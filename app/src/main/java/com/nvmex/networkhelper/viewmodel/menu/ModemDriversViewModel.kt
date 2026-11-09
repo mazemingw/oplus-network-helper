@@ -44,6 +44,7 @@ class ModemDriversViewModel(app: Application) : AndroidViewModel(app) {
     val failed = _failed.asStateFlow()
     private var sessionScope: CoroutineScope? = null
     private var controller: ModemController? = null
+    private var entrySim: Int? = null
     private var noticeJob: Job? = null
     private var lastCleanup = ""
     val systemRecovery = SystemQmiServices.state
@@ -119,10 +120,27 @@ class ModemDriversViewModel(app: Application) : AndroidViewModel(app) {
         stop()
         _selected.value = driver
         prefs.edit().putString("driver", driver.name).apply()
-        if (driver.isBunny) open() else nativeReady()
+        if (driver.isBunny) refreshSelectedSim(open()) else nativeReady()
     }
 
-    fun refresh() = action { open().refreshNow() }
+    fun connect(sim: Int?, releaseLegacy: suspend () -> Unit) = action {
+        entrySim = sim
+        releaseLegacy()
+        refreshSelectedSim(open())
+    }
+
+    fun refresh() = action {
+        val modem = open()
+        if (!refreshSelectedSim(modem)) modem.refreshNow()
+    }
+
+    private suspend fun refreshSelectedSim(modem: ModemController): Boolean {
+        val sim = entrySim ?: return false
+        entrySim = null
+        if (modem.state.value.sim == sim || modem.state.value.sims.none { it.slot == sim - 1 }) return false
+        modem.setSimAndRefresh(sim)
+        return true
+    }
 
     fun validateQuick(request: QmiQuickLockRequest): QmiQuickLockRequest? = try {
         request.validate()
@@ -173,11 +191,13 @@ class ModemDriversViewModel(app: Application) : AndroidViewModel(app) {
             Regex("(?i)(QMI(?:\\s+error)?[ :]*5\\b|ClientIdsExhausted|[（(]0x0*5[)）])").containsMatchIn(it.message.orEmpty())
     }
 
-    private suspend fun reconnect(nativeReady: suspend () -> Unit) {
+    private suspend fun reconnectAndRead(nativeReady: suspend () -> Unit) {
         if (_selected.value.isBunny) {
+            // Recovery callers have released the old controller. Opening the new one reads the selected backend.
             val modem = open()
-            modem.refreshNow()
+            check(modem.helperRunning) { "后端未连接" }
             modem.lastRefreshFailure?.let { error(it) }
+            controls.observe(modem.state.value)
         } else nativeReady()
         SystemQmiServices.allowChannels()
     }
@@ -193,24 +213,27 @@ class ModemDriversViewModel(app: Application) : AndroidViewModel(app) {
 
     fun clearChannels(releaseLegacy: suspend () -> Unit, nativeReady: suspend () -> Unit) = action {
         val access = _state.value.access
-        releaseLegacy()
-        stop()
-        var cleanupMessage = "已成功释放后端服务"
-        SystemQmiServices.releaseAll()
         try {
-            if (access != Access.SHIZUKU_ADB) cleanupMessage = strongModemCleanup(getApplication()) { lastCleanup = it }
-            else lastCleanup = "Shizuku ADB: released only this app's services"
-        } catch (e: CancellationException) { throw e }
-        catch (e: Exception) { lastCleanup += "\n${e.message}" }
-        try {
-            // Await NAS readback. A queued Compose refresh cannot prove resources were released.
-            reconnect(nativeReady)
-            show(cleanupMessage)
-        } catch (e: CancellationException) { throw e }
-        catch (e: Exception) {
-            releaseLegacy(); stop()
-            offerSystemRecovery(e)
-            show("通道重连失败，请检查系统组件", true)
+            releaseLegacy()
+            stop()
+            var cleanupMessage = "已成功释放后端服务"
+            SystemQmiServices.releaseAll()
+            try {
+                if (access != Access.SHIZUKU_ADB) cleanupMessage = strongModemCleanup(getApplication()) { lastCleanup = it }
+                else lastCleanup = "Shizuku ADB: released only this app's services"
+            } catch (e: CancellationException) { throw e }
+            catch (e: Exception) { lastCleanup += "\n${e.message}" }
+
+            _systemDialog.value = false
+            try {
+                reconnectAndRead(nativeReady)
+                show(cleanupMessage)
+            } catch (e: CancellationException) { throw e }
+            catch (e: Exception) {
+                releaseLegacy(); stop()
+                offerSystemRecovery(e)
+                show("通道重连失败，请检查系统组件", true)
+            }
         } finally {
             SystemQmiServices.allowChannels()
         }
@@ -234,12 +257,13 @@ class ModemDriversViewModel(app: Application) : AndroidViewModel(app) {
                 releaseLegacy(); stop()
                 _recoveryProgress.value = "暂停 $service，随后验证实际可用的客户端…"
                 SystemQmiServices.pause(service)
+                _systemDialog.value = false
                 try {
                     // init's stopped state can precede the modem releasing its client table.
                     var verified = false
                     repeat(3) { attempt ->
                         if (!verified) {
-                            try { reconnect(nativeReady); verified = true }
+                            try { reconnectAndRead(nativeReady); verified = true }
                             catch (e: CancellationException) { throw e }
                             catch (e: Exception) {
                                 if (!capacityError(e) || attempt == 2) throw e
@@ -261,11 +285,16 @@ class ModemDriversViewModel(app: Application) : AndroidViewModel(app) {
                     if (!_capacityFailure.value) throw e
                 }
             }
+            _systemDialog.value = true
             show("所选组件已暂停，但客户端验证仍失败；可恢复组件或查看诊断", true)
+        } catch (e: CancellationException) { throw e }
+        catch (e: Exception) {
+            _systemDialog.value = true
+            throw e
         } finally {
             _recoveryProgress.value = ""
             SystemQmiServices.allowChannels()
-            SystemQmiServices.inspect()
+            if (_systemDialog.value) SystemQmiServices.inspect()
         }
     }
 
@@ -275,7 +304,7 @@ class ModemDriversViewModel(app: Application) : AndroidViewModel(app) {
             releaseLegacy(); stop()
             SystemQmiServices.resume(service)
             _systemReason.value = "${service ?: "助手暂停的组件"}已恢复。"
-            try { reconnect(nativeReady) }
+            try { reconnectAndRead(nativeReady) }
             catch (e: CancellationException) { throw e }
             catch (e: Exception) { _systemReason.value += "\n恢复后通道可能再次不足：${e.message}" }
             show("组件已恢复；读取结果见面板")

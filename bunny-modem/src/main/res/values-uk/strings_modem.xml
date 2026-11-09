@@ -1,0 +1,133 @@
+<resources>
+    <string name="modem_sentences">%1$s %2$s</string>
+    <string name="modem_couldnt">Не вдалося %1$s. %2$s</string>
+
+    <string name="modem_connect_checking">Перевірка можливостей модема цього телефона...</string>
+    <string name="modem_root_denied">У root-доступі відмовлено.</string>
+    <string name="modem_sim">SIM %1$d</string>
+    <string name="modem_no_mtk_port">Жоден порт AT MediaTek не відповів. Виберіть його в розділі «Інструменти».</string>
+    <string name="modem_lock_unanswered">Радіомодуль не відповів, тож він може не підтримувати блокування через Radio HAL в Android.</string>
+
+    <string name="modem_goal_refresh">оновити</string>
+    <string name="modem_goal_lock_bands">заблокувати діапазони %1$s</string>
+    <string name="modem_goal_unlock_bands">розблокувати діапазони %1$s</string>
+    <string name="modem_goal_net_mode">змінити режим мережі</string>
+    <string name="modem_goal_network_off">вимкнути %1$s</string>
+    <string name="modem_goal_nr_mode">перемкнути режим 5G на %1$s</string>
+    <string name="modem_goal_nr_dc_on">увімкнути NSA (EN-DC)</string>
+    <string name="modem_goal_nr_dc_off">вимкнути NSA (EN-DC)</string>
+    <string name="modem_goal_volte_on">увімкнути VoLTE</string>
+    <string name="modem_goal_volte_off">вимкнути VoLTE</string>
+    <string name="modem_goal_vowifi_on">увімкнути VoWiFi</string>
+    <string name="modem_goal_vowifi_off">вимкнути VoWiFi</string>
+    <string name="modem_goal_ca_on">увімкнути агрегацію частот</string>
+    <string name="modem_goal_ca_off">вимкнути агрегацію частот</string>
+    <string name="modem_goal_lock_cell">заблокувати соту</string>
+    <string name="modem_goal_unlock_cell">зняти блокування соти</string>
+    <string name="modem_goal_lock_plmn">заблокувати мережу</string>
+    <string name="modem_goal_unlock_plmn">повернутися до автоматичного вибору мережі</string>
+    <string name="modem_goal_unlock_all">розблокувати все</string>
+    <string name="modem_goal_restart_radio">перезапустити радіомодуль</string>
+    <string name="modem_goal_reattach">перепідключити SIM %1$d</string>
+    <string name="modem_goal_relock">заново заблокувати SIM %1$d</string>
+    <string name="modem_goal_reboot">перезавантажити модем</string>
+    <string name="modem_goal_samsung_menu">відкрити меню діапазонів Samsung</string>
+    <string name="modem_goal_send_at">надіслати AT-команду</string>
+    <string name="modem_goal_send_qmi">надіслати повідомлення QMI 0x%1$04X</string>
+
+    <string name="modem_bands_locked">Діапазони %1$s заблоковано.</string>
+    <string name="modem_bands_unlocked">Діапазони %1$s розблоковано.</string>
+    <string name="modem_net_mode_set">Режим мережі тепер «%1$s».</string>
+    <string name="modem_network_off">%1$s вимкнено.</string>
+    <string name="modem_network_back_on">%1$s знову ввімкнено.</string>
+    <string name="modem_nr_mode_set">Режим 5G перемкнено на %1$s.</string>
+    <string name="modem_nr_dc_on">NSA (EN-DC) увімкнено.</string>
+    <string name="modem_nr_dc_off">NSA (EN-DC) вимкнено.</string>
+    <string name="modem_volte_on">VoLTE увімкнено.</string>
+    <string name="modem_volte_off">VoLTE вимкнено.</string>
+    <string name="modem_vowifi_on">VoWiFi увімкнено.</string>
+    <string name="modem_vowifi_off">VoWiFi вимкнено.</string>
+    <string name="modem_ca_on">Агрегацію частот увімкнено.</string>
+    <string name="modem_ca_off">Агрегацію частот вимкнено.</string>
+    <string name="modem_ca_restart_failed">Модем не перезавантажився, тому зміна набуде чинності після наступного перезавантаження модема або телефону. %1$s</string>
+    <string name="modem_cell_locked">Соту заблоковано.</string>
+    <string name="modem_cell_unlocked">Блокування соти знято.</string>
+    <string name="modem_plmn_locked">Мережу заблоковано.</string>
+    <string name="modem_plmn_locked_to">SIM %1$d заблоковано на %2$s.</string>
+    <string name="modem_plmn_unlocked">Знову використовується автоматичний вибір мережі.</string>
+    <string name="modem_all_unlocked">Усе розблоковано.</string>
+    <string name="modem_radio_restarted">Радіомодуль перезапущено.</string>
+    <string name="modem_reattached">SIM %1$d знову підключено.</string>
+    <string name="modem_relocked">SIM %1$d знову вибрала соту, і її блокування надіслано заново.</string>
+    <string name="modem_rebooting">Модем перезавантажується.</string>
+    <string name="modem_samsung_menu_opened">Меню діапазонів Samsung відкрито.</string>
+
+    <string name="modem_note_radio_restarted">Радіомодуль перезапущено, щоб застосувати зміну.</string>
+    <string name="modem_note_radio_restart_failed">Не вдалося перезапустити радіомодуль. %1$s Увімкніть і вимкніть режим польоту, щоб застосувати зміну.</string>
+    <string name="modem_note_old_nr_bands">Якщо телефон усе ще тримається за старі діапазони 5G, натомість заблокуйте 5G на потрібних, не більше %1$d. Це замінить старе блокування.</string>
+    <string name="modem_note_kept_lock_refused">Цей телефон зберіг старе блокування після розблокування й відхилив кожен список усіх діапазонів, який спробував bunnylock.</string>
+    <string name="modem_note_kept_lock_renamed">Цей телефон зберіг старе блокування після розблокування, тож bunnylock ще раз явно вказав усі діапазони.</string>
+    <string name="modem_note_nr_bands_limit">Він приймає лише %1$d діапазонів 5G одночасно, тож зараз увімкнено: %2$s.</string>
+    <string name="modem_note_legacy_back">2G і 3G знову ввімкнено, хоча GSM 1800 може залишитися вимкненим: програмне забезпечення радіомодуля цього телефона не може його вказати.</string>
+    <string name="modem_note_qc_lte_off">Цей модем змінює блокування соти LTE лише тоді, коли радіомодуль вимкнено, тож режим польоту ненадовго вмикався.</string>
+
+    <string name="modem_lock_unconfirmed">%1$s (не підтверджено модемом)</string>
+    <string name="modem_lock_separator">"; "</string>
+    <string name="modem_lock_channel_pci">%1$s %2$s, PCI %3$s</string>
+    <string name="modem_lock_nr_pci">ARFCN %1$d, PCI %2$d на n%3$d, SCS %4$d кГц</string>
+    <string name="modem_lock_frequency_only">Лише частота</string>
+    <string name="modem_lock_channel_frequency_only">%1$s %2$s (лише частота)</string>
+    <string name="modem_lock_channel_several_pcis">%1$s %2$s, кілька PCI</string>
+    <string name="modem_lock_several_pcis">Кілька PCI</string>
+    <string name="modem_lock_type">Тип блокування %1$d</string>
+    <string name="modem_plmn_manual">Ручний вибір</string>
+
+    <string name="modem_pick_band">Виберіть хоча б один діапазон.</string>
+    <string name="modem_last_network">Хоча б одна мережа має залишатися ввімкненою.</string>
+    <string name="modem_nr_list_too_long">Цей телефон приймає лише %1$d діапазонів 5G в одному блокуванні, тож виберіть не більше %1$d.</string>
+    <string name="modem_note_needs_channels">Цьому телефону потрібні видимі частоти разом із вибраними діапазонами, тож bunnylock додав їх до блокування.</string>
+    <string name="modem_no_gsm_1800">Програмне забезпечення радіомодуля цього телефона не знає GSM 1800, тож воно відмовляється блокувати 2G лише на 1800.</string>
+    <string name="modem_note_fell_back">Цей телефон перемкнувся на 2G або 3G з блокуванням лише діапазонів, тож блокування було виконано заново з видимими частотами. Відтепер bunnylock робитиме так на цьому телефоні.</string>
+    <string name="modem_note_band_lock_ignored">Android прийняв блокування %1$s, але телефон досі працює на %2$s. Схоже, цей модем не дотримується блокувань діапазонів, надісланих у такий спосіб.</string>
+    <string name="modem_note_samsung_menu_hint">Натомість може спрацювати власне меню діапазонів Samsung на екрані «Діапазони».</string>
+    <string name="modem_needs_visible_cell">Цьому телефону потрібна видима сота у вибраних діапазонах %1$s, щоб їх заблокувати. Оновіть список сот і спробуйте ще раз.</string>
+    <string name="modem_blind_lock_reverted">Телефон не знайшов жодної соти у вибраних діапазонах, тож bunnylock відновив попередні діапазони.</string>
+    <string name="modem_blind_lock_restore_failed">Телефон не знайшов жодної соти у вибраних діапазонах, а відновити попередні діапазони bunnylock не зміг. Натисніть «Зняти все», щоб повернути зв\'язок.</string>
+    <string name="modem_blind_lock_searching">У вибраних діапазонах %1$s не видно жодної соти, тож телефону доведеться її пошукати. Це може тривати хвилину-дві.</string>
+
+    <string name="modem_note_set_by_at">Android відхилив це, тож bunnylock задав це безпосередньо в модемі. Це діє до перезавантаження телефона.</string>
+    <string name="modem_note_mode_airplane">Модем перемикає режими лише тоді, коли радіомодуль вимкнено, тож режим польоту ненадовго вмикався.</string>
+    <string name="modem_note_mode_reapplied">SIM %1$d залишилася в старій мережі, тож режим було задано знову з короткочасним увімкненням режиму польоту.</string>
+    <string name="modem_note_mode_stayed">SIM %1$d залишилася в старій мережі. Увімкнення й вимкнення режиму польоту може застосувати режим.</string>
+    <string name="modem_note_mode_held_back">%1$s Режим залишиться заданим і застосується повністю, щойно це зміниться.</string>
+    <string name="modem_backend_no_nr_mode">Бекенд %1$s не може змінювати режим 5G.</string>
+    <string name="modem_no_ca_control">Перемикати агрегацію частот може лише бекенд MediaTek.</string>
+    <string name="modem_current_backend_no_nr_mode">Поточний бекенд не може змінювати режим 5G.</string>
+
+    <string name="modem_enter_earfcn">Спочатку введіть LTE EARFCN.</string>
+    <string name="modem_enter_nr_arfcn">Спочатку введіть NR-ARFCN.</string>
+    <string name="modem_qc_lte_needs_pci">Для блокування LTE у Qualcomm потрібен хоча б один PCI. Укажіть кілька, щоб дозволити групу секторів.</string>
+    <string name="modem_lte_anchor_locked">Опорну соту LTE заблоковано. MediaTek підтримує лише одне блокування одночасно, тож NR іде слідом за опорною сотою.</string>
+    <string name="modem_note_mtk_one_pci">MediaTek блокує лише на одному PCI, тож використано тільки PCI %1$d.</string>
+    <string name="modem_unknown_earfcn">EARFCN %1$d не входить до жодного відомого діапазону LTE.</string>
+    <string name="modem_unknown_nr_arfcn">ARFCN %1$d не входить до жодного відомого діапазону NR.</string>
+    <string name="modem_note_band_only">Програмне забезпечення радіомодуля цього телефона не приймає блокувань каналів, тож заблоковано лише діапазон (%1$s).</string>
+    <string name="modem_note_cell_lock_ignored">Android прийняв блокування соти, але телефон досі працює на %1$s. Схоже, цей модем не дотримується блокувань частот, надісланих у такий спосіб.</string>
+    <string name="modem_note_frequency_only">Заблоковано лише частоту. Radio HAL не може блокувати на PCI.</string>
+
+    <string name="modem_mcc_digits">MCC має містити 3 цифри.</string>
+    <string name="modem_mnc_digits">MNC має містити 2 або 3 цифри.</string>
+
+    <string name="modem_note_reattach_radio">Модем не захотів перепідключатися, тож натомість було перезапущено радіомодуль для SIM %1$d. Причина: %2$s</string>
+    <string name="modem_note_reboot_radio">Radio HAL не захотів перезавантажувати модем, тож натомість було перезапущено радіомодуль.</string>
+
+    <string name="modem_helper_start_failed">%1$s не зміг запуститися.</string>
+    <string name="modem_helper_start_timed_out">%1$s не запустився вчасно.</string>
+    <string name="modem_helper_stopped">%1$s неочікувано зупинився.</string>
+    <string name="modem_helper_not_running">%1$s не працює.</string>
+    <string name="modem_helper_no_answer">%1$s не відповів вчасно.</string>
+    <string name="modem_root_start_failed">У root-доступі відмовлено або root-помічник не зміг запуститися.</string>
+    <string name="modem_root_timed_out">Root-доступ не було надано вчасно. Перевірте менеджер root і спробуйте ще раз.</string>
+    <string name="modem_no_su">Не вдалося знайти su. bunnylock потребує root (Magisk, KernelSU або APatch).</string>
+    <string name="modem_root_wrong_uid">Root-помічник працює не від root (uid %1$d).</string>
+</resources>

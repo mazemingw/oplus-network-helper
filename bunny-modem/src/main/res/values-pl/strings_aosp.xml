@@ -21,23 +21,26 @@
     <string name="aosp_nr_dc_refused">Radio nie przyjęło tego stanu EN-DC.</string>
     <string name="aosp_nr_dc_code">Radio zwróciło błąd %1$d.</string>
 
+    <string name="aosp_ims_kept">Android zostawił poprzednie ustawienie. Ustawienia operatora dla tej karty SIM mogą nie pozwalać na tę zmianę.</string>
+
     <string name="aosp_no_subscription">Android nie widzi aktywnej subskrypcji dla tej karty SIM, więc nie ma dokąd wysłać blokady. Sprawdź, czy karta jest włożona i włączona oraz czy aplikacja ma uprawnienie „Telefon”.</string>
     <string name="aosp_channels_rejected">Usługa radiowa Androida odrzuciła tę blokadę.</string>
     <string name="aosp_channels_rejected_fewer">Usługa radiowa Androida odrzuciła tę blokadę. Na tym telefonie może zadziałać wybranie do %1$d pasm.</string>
     <string name="aosp_channels_rejected_split">Usługa radiowa Androida odrzuciła tę blokadę, nawet po podzieleniu pasm na grupy po %1$d. Na tym telefonie może zadziałać wybranie do %1$d pasm.</string>
     <string name="aosp_channels_not_started">Usługa radiowa Androida nie mogła wystartować z blokadą.</string>
 
-    <string name="aosp_reboot_refused">HAL radia odmówił restartu modemu.</string>
+    <string name="aosp_reboot_refused">Radio HAL odmówił restartu modemu.</string>
     <string name="aosp_no_sim_radio_restart">Ta wersja Androida nie umie zrestartować radia pojedynczej karty SIM.</string>
     <string name="aosp_sim_radio_off">Radio tej karty SIM jest wyłączone.</string>
     <string name="aosp_radio_not_on">Radio nie chciało się z powrotem włączyć: %1$s.</string>
     <string name="aosp_radio_not_off">Radio nie chciało się wyłączyć: %1$s.</string>
 
-    <string name="sys_samsung_menu_denied">Ten telefon pozwala otwierać menu pasm tylko aplikacjom Samsunga, więc potrzebny jest root.</string>
+    <string name="sys_samsung_menu_denied">Samsung pozwala otwierać menu pasm tylko własnym aplikacjom.</string>
     <string name="sys_samsung_menu_missing">Nie znaleziono menu pasm Samsunga na tym telefonie.</string>
 
     <string name="samsung_no_nr_mode">Ten telefon nie ma samsungowego przełącznika trybu 5G.</string>
     <string name="samsung_nr_mode_refused">Usługa telefonii Samsunga nie przyjęła tego trybu 5G.</string>
+    <string name="samsung_nr_mode_data_sim_only">Na tym telefonie tryb 5G Samsunga można zmienić tylko na karcie SIM używanej do danych mobilnych. Najpierw przełącz dane mobilne na tę kartę.</string>
 
     <string name="server_unknown_subscription">Subskrypcja tej karty SIM jest nieznana.</string>
     <string name="server_unknown_command">Nieznane polecenie: %1$s.</string>

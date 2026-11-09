@@ -13,6 +13,7 @@ import com.nvmex.networkhelper.ui.onboarding.EnvironmentGuideActivity
 import com.nvmex.networkhelper.ui.onboarding.EnvironmentGuidePrefs
 import com.nvmex.networkhelper.ui.settings.AppLanguageManager
 import com.nvmex.networkhelper.ui.theme.NetworkHelperTheme
+import com.nvmex.networkhelper.util.wifi.WifiCutoffService
 import com.nvmex.networkhelper.xposed.DiagRouterClient
 import dagger.hilt.android.AndroidEntryPoint
 import android.content.Intent
@@ -26,6 +27,11 @@ class MainActivity : ComponentActivity() {
 
     override fun attachBaseContext(newBase: Context) {
         super.attachBaseContext(AppLanguageManager.wrap(newBase))
+    }
+
+    override fun onResume() {
+        super.onResume()
+        WifiCutoffService.startIfEnabled(this)
     }
 
     override fun onCreate(savedInstanceState: Bundle?) {

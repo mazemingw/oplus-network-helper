@@ -19,7 +19,7 @@ import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
-enum class QmiNoticeLevel { INFO, SUCCESS, WARNING, ERROR }
+enum class QmiNoticeLevel { INFO, SUCCESS, REGISTERED, WARNING, ERROR }
 
 data class QmiBandUiState(
     val sim: Int = 1, val busy: Boolean = false, val device: QmiDeviceState? = null,
@@ -78,7 +78,8 @@ class QmiBandLockViewModel(app: Application) : AndroidViewModel(app) {
         if (check.firstMatchAt == 0L) { check.firstMatchAt = observation.sampleAt; return }
         if (observation.sampleAt - check.firstMatchAt < 500) return
         cancelVerification()
-        postStatus(message = getApplication<Application>().getString(R.string.qmi_target_registered, matching.joinToString("、")))
+        postStatus(message = getApplication<Application>().getString(R.string.qmi_target_registered, matching.joinToString("、")),
+            level = QmiNoticeLevel.REGISTERED)
     }
 
     fun configureMainlandMode(enabled: Boolean) {
@@ -379,7 +380,8 @@ class QmiBandLockViewModel(app: Application) : AndroidViewModel(app) {
         if (check.firstMatchAt == 0L) { check.firstMatchAt = at; return }
         if (at - check.firstMatchAt < 500) return
         cancelVerification()
-        postStatus(message = getApplication<Application>().getString(R.string.qmi_cell_registered, matched.joinToString("、") { it.label }))
+        postStatus(message = getApplication<Application>().getString(R.string.qmi_cell_registered, matched.joinToString("、") { it.label }),
+            level = QmiNoticeLevel.REGISTERED)
     }
 
     private fun cancelVerification() {

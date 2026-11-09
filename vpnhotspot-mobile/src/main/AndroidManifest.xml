@@ -70,12 +70,9 @@
 
         <activity
             android:name=".MainActivity"
+            android:theme="@style/AppTheme"
             android:exported="true"
-            android:launchMode="singleTask">
-            <intent-filter>
-                <action android:name="android.service.quicksettings.action.QS_TILE_PREFERENCES" />
-            </intent-filter>
-        </activity>
+            android:launchMode="singleTask" />
 
         <activity android:name=".AboutLibrariesActivity" />
         <activity

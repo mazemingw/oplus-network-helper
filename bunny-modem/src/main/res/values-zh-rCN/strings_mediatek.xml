@@ -4,8 +4,8 @@
     <string name="at_read_failed">无法读取 %1$s（%2$s）。</string>
     <string name="at_no_reply">%2$s 未响应命令 %1$s。</string>
 
-    <string name="mtk_no_network_mode">基带未返回网络模式。</string>
     <string name="mtk_erat_no_mode">AT+ERAT 不支持这种制式组合。</string>
+    <string name="mtk_ca_kept">基带保留了之前的设置。</string>
     <string name="mtk_epbse_unreadable">%1$s（%2$s 返回：%3$s）。</string>
     <string name="mtk_no_band_lock">AT 端口 %1$s 不支持锁频段</string>
     <string name="mtk_current_bands_unreadable">无法从 %1$s 读取当前频段</string>

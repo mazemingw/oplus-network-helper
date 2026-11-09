@@ -3,6 +3,7 @@ package dev.ririxi.bunnylock.root
 import android.system.Os
 import android.telephony.SubscriptionManager
 import dev.ririxi.bunnylock.core.toIntList
+import dev.ririxi.bunnylock.modem.ImsFeature
 import dev.ririxi.bunnylock.modem.R
 import org.json.JSONArray
 import org.json.JSONObject
@@ -89,13 +90,17 @@ object RootServer {
 
     private fun JSONObject.intOrNull(key: String): Int? = if (isPresent(key)) getInt(key) else null
 
+    private fun JSONObject.dataSubId(): Int = optInt("dataSubId", SubscriptionManager.INVALID_SUBSCRIPTION_ID)
+
     private fun handle(request: JSONObject): Any? {
+        val command = request.getString("cmd")
+        if (command == "host.disconnectWifi") return JSONObject().put("accepted", Aosp.disconnectWifi())
         val sim = request.optInt("sim", 1)
         val simSlot = sim - 1
         val requestedSubId = request.optInt("subId", SubscriptionManager.INVALID_SUBSCRIPTION_ID)
         val subId = Aosp.resolveSubId(requestedSubId, simSlot)
         val persist = request.optBoolean("persist", true)
-        return when (val command = request.getString("cmd")) {
+        return when (command) {
             "ping" -> JSONObject().put("uid", Os.getuid()).put("version", VERSION)
 
             "detect" -> Sys.detect()
@@ -110,6 +115,17 @@ object RootServer {
             "aosp.reapplyAllowed" -> Aosp.reapplyAllowed(subId, request.getLong("mask"))
 
             "aosp.setNrDc" -> Aosp.setNrDc(subId, request.getInt("state"))
+
+            "aosp.ims" -> {
+                if (subId < 0) fail(R.string.server_unknown_subscription)
+                Aosp.ims(subId)
+            }
+
+            "aosp.setIms" -> {
+                if (subId < 0) fail(R.string.server_unknown_subscription)
+                val feature = ImsFeature.entries.first { it.key == request.getString("feature") }
+                Aosp.setIms(subId, feature, request.getBoolean("enabled"))
+            }
 
             "aosp.setChannels" -> Aosp.setChannels(subId, request.optJSONArray("specs") ?: JSONArray(), request.optBoolean("split", true))
 
@@ -192,6 +208,8 @@ object RootServer {
 
             "mtk.setRat" -> Mediatek.setRat(request.getString("node"), request.getLong("mask"))
 
+            "mtk.setCa" -> Mediatek.setCarrierAggregation(request.getString("node"), request.getBoolean("enabled"))
+
             "pixel.state" -> Pixel.state(sim)
 
             "pixel.setLte" -> Pixel.setLte(request.ints("bands"))
@@ -202,9 +220,9 @@ object RootServer {
 
             "samsung.menu" -> Sys.openSamsungMenu()
 
-            "samsung.nrMode" -> Samsung.nrMode(simSlot)
+            "samsung.nrMode" -> Samsung.nrMode(simSlot, subId, request.dataSubId())
 
-            "samsung.setNrMode" -> Samsung.setNrMode(simSlot, request.getInt("mode"))
+            "samsung.setNrMode" -> Samsung.setNrMode(simSlot, subId, request.dataSubId(), request.getInt("mode"))
 
             "at" -> {
                 val timeoutMs = request.optInt("timeout", DEFAULT_AT_TIMEOUT_MS)

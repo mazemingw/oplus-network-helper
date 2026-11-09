@@ -21,6 +21,8 @@
     <string name="aosp_nr_dc_refused">The radio didn\'t accept that EN-DC state.</string>
     <string name="aosp_nr_dc_code">The radio returned error %1$d.</string>
 
+    <string name="aosp_ims_kept">Android kept the previous setting. The carrier settings for this SIM may not allow this change.</string>
+
     <string name="aosp_no_subscription">Android has no active subscription for this SIM, so there is nothing to send the lock to. Check that the SIM is inserted and switched on, and that bunnylock has the Phone permission.</string>
     <string name="aosp_channels_rejected">Android\'s radio service rejected the channel lock.</string>
     <string name="aosp_channels_rejected_fewer">Android\'s radio service rejected the channel lock. Selecting %1$d or fewer bands may work on this phone.</string>
@@ -33,11 +35,12 @@
     <string name="aosp_radio_not_on">The radio refused to turn back on: %1$s.</string>
     <string name="aosp_radio_not_off">The radio refused to turn off: %1$s.</string>
 
-    <string name="sys_samsung_menu_denied">This phone only lets Samsung\'s own apps open its band menu, so it needs root.</string>
+    <string name="sys_samsung_menu_denied">Samsung only lets its own apps open the band menu.</string>
     <string name="sys_samsung_menu_missing">Couldn\'t find the Samsung band menu on this phone.</string>
 
     <string name="samsung_no_nr_mode">This phone doesn\'t have Samsung\'s 5G mode control.</string>
     <string name="samsung_nr_mode_refused">Samsung\'s telephony service didn\'t accept that 5G mode.</string>
+    <string name="samsung_nr_mode_data_sim_only">On this phone, Samsung\'s 5G mode can only be changed on the mobile data SIM. Switch mobile data to this SIM first.</string>
 
     <string name="server_unknown_subscription">This SIM\'s subscription isn\'t known.</string>
     <string name="server_unknown_command">Unknown command: %1$s.</string>

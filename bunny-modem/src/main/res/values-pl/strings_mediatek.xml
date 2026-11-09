@@ -4,8 +4,8 @@
     <string name="at_read_failed">Błąd odczytu z %1$s (%2$s).</string>
     <string name="at_no_reply">Brak odpowiedzi z %2$s na %1$s.</string>
 
-    <string name="mtk_no_network_mode">Modem nie podał trybu sieci.</string>
     <string name="mtk_erat_no_mode">AT+ERAT nie ma trybu dla takiego zestawu technologii.</string>
+    <string name="mtk_ca_kept">Modem zostawił poprzednie ustawienie.</string>
     <string name="mtk_epbse_unreadable">%1$s (odpowiedź na %2$s: %3$s).</string>
     <string name="mtk_no_band_lock">Port AT %1$s nie obsługuje blokady pasm</string>
     <string name="mtk_current_bands_unreadable">Nie da się odczytać bieżących pasm z %1$s</string>

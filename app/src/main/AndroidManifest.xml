@@ -26,6 +26,7 @@
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_DATA_SYNC" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_LOCATION" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_SPECIAL_USE" />
 
     <uses-permission
         android:name="android.permission.READ_EXTERNAL_STORAGE"
@@ -85,6 +86,15 @@
             android:exported="false"
             android:stopWithTask="true"
             android:foregroundServiceType="location" />
+
+        <service
+            android:name=".util.wifi.WifiCutoffService"
+            android:exported="false"
+            android:foregroundServiceType="specialUse">
+            <property
+                android:name="android.app.PROPERTY_SPECIAL_USE_FGS_SUBTYPE"
+                android:value="User-enabled background monitoring of connected Wi-Fi signal to cut off a weak connection" />
+        </service>
 
         <meta-data android:name="com.nvmex.networkhelper.FALCON_SERVICE_ID" android:value="${AMAP_FALCON_SID}" />
         <service android:name="com.amap.api.track.AMapTrackService" android:exported="false" android:foregroundServiceType="location" />
