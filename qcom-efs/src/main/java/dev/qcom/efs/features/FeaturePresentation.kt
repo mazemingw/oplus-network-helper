@@ -5,7 +5,7 @@ fun featureSwitchChecked(status: FeatureStatus?): Boolean = status !is FeatureSt
 
 fun featureEditBlockReason(connected: Boolean, backedUp: Boolean, readOnly: Boolean): String? = when {
     !connected -> "请先连接基带后再操作。"
-    !backedUp -> "请先完成本地与云端备份，再开启“允许修改”。"
+    !backedUp -> "请先完成本地分区备份并通过校验，再开启“允许修改”。"
     readOnly -> "尚未允许修改，请先开启上方的“允许修改”开关。"
     else -> null
 }

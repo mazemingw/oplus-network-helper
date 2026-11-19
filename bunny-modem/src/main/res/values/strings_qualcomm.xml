@@ -69,4 +69,6 @@
     <string name="qrtr_timeout">The modem didn\'t answer the QMI request in time</string>
     <string name="qrtr_wait">Couldn\'t wait for the QMI reply</string>
     <string name="qrtr_recv">Couldn\'t read the QMI reply</string>
+    <string name="cell_hint_qualcomm">Locks LTE and NR to a PCI (the SA PCell or the NSA SCG). Leave the NR PCI empty to lock only the frequency, and separate several PCIs with commas.</string>
+    <string name="cell_plmn_hint_qualcomm">Set over QMI first. If the modem refuses, Android network selection is used instead.</string>
 </resources>

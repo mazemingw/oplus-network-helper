@@ -1,0 +1,29 @@
+<resources>
+    <string name="at_open_failed">%1$s açılamadı (%2$s).</string>
+    <string name="at_not_accepted">Modem %1$s komutunu kabul etmedi. Yanıtı: %2$s</string>
+    <string name="at_read_failed">%1$s üzerinden veri okunamadı (%2$s).</string>
+    <string name="at_no_reply">%1$s komutuna %2$s üzerinden yanıt alınamadı.</string>
+
+    <string name="mtk_erat_no_mode">AT+ERAT, bu kombinasyon için uygun bir mod içermiyor.</string>
+    <string name="mtk_ca_kept">Modem önceki ayarı korudu.</string>
+    <string name="mtk_epbse_unreadable">%1$s (%2$s yanıtı: %3$s).</string>
+    <string name="mtk_no_band_lock">%1$s AT portu bant kilitlemeyi desteklemiyor</string>
+    <string name="mtk_current_bands_unreadable">%1$s üzerinden mevcut bantlar okunamadı</string>
+    <string name="mtk_no_epbseh">Bu modem AT+EPBSEH komutunu desteklemiyor. Bu nedenle 5G desteği bulunmayabilir.</string>
+    <string name="mtk_bands_left_off">Modem şu %1$s bantlarını etkinleştirmedi: %2$s.</string>
+    <string name="mtk_bands_off_when_unlocked">Bu şebekede %1$s %2$s, kilit kaldırıldıktan sonra bile kapalı kaldı ve Bantlar ekranında gizlenecek.</string>
+
+    <string name="oem_working_through">%1$s üzerinden işlem yapılıyor.</string>
+    <string name="oem_no_passthrough">Bu telefonda hiçbir OEM isteği iletimine yanıt alınamadı.</string>
+    <string name="oem_no_ril_passthrough">Bu telefonda RIL üzerinden doğrudan komut iletimi kullanılamıyor.</string>
+    <string name="oem_no_raw_route">Bu telefonda denenebilecek bir OEM istek yolu bulunmuyor.</string>
+    <string name="oem_no_callback_reply">%1$s için geri çağrı yanıtı alınamadı.</string>
+    <string name="oem_timeout">Modem, %1$s isteğine zamanında yanıt vermedi.</string>
+    <string name="oem_service_refused">Hizmet %1$s isteğini reddetti (%2$s).</string>
+
+    <string name="oem_probe_failed">%1$s başarısız oldu: %2$s</string>
+    <string name="oem_probe_replied">%1$s yanıt verdi: %2$s</string>
+    <string name="oem_probe_silent">%1$s yanıt vermedi.</string>
+    <string name="cell_hint_mtk_at">Tek seferde yalnızca bir kilit uygulayan AT+EMMCHLCK komutunu kullanır. PCI belirtmek isteğe bağlıdır ve kilidin uygulanması için radyo birimi yeniden başlatılır.</string>
+    <string name="cell_hint_mtk_hal">Bu modem AT+EMMCHLCK komutunu desteklemediğinden frekans (ARFCN) bunun yerine radyo HAL\'i üzerinden kilitlenir. Bu yöntem PCI kilitlemesi yapamaz ve bazı modemler bu kilidi yok sayar.</string>
+</resources>

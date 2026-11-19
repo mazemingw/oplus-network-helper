@@ -2,6 +2,7 @@
     <string name="backend_qualcomm">高通 QMI</string>
     <string name="backend_mediatek">联发科 AT</string>
     <string name="backend_pixel">Pixel（Tensor NV）</string>
+    <string name="backend_unisoc">紫光展锐 AT</string>
     <string name="backend_android">Android 射频 HAL</string>
 
     <string name="net_mode_auto">自动</string>

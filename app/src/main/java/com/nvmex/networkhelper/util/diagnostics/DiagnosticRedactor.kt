@@ -2,13 +2,13 @@ package com.nvmex.networkhelper.util.diagnostics
 
 /** Apply before persistence, upload and sharing. IMEI is sent only in its dedicated upload field. */
 object DiagnosticRedactor {
-    private val sensitiveKeys = Regex("(?i).*(?:imei|imsi|iccid|meid|serial|secret|token|password|passwd|authorization|cookie|apikey|accesskey|privatekey|androidid|subscriberid|phonenumber|msisdn|latitude|longitude|sessionid).*")
+    private val sensitiveKeys = Regex("(?i).*(?:imei|imsi|iccid|meid|serial|secret|token|password|passwd|passphrase|presharedkey|wepkey|authorization|cookie|apikey|accesskey|privatekey|androidid|subscriberid|phonenumber|msisdn|latitude|longitude|sessionid).*")
     fun isSensitiveKey(key: String): Boolean {
         val normalized = key.replace(Regex("[^A-Za-z0-9]"), "")
-        return sensitiveKeys.matches(normalized) || normalized.lowercase() in setOf("pwd", "phone", "lat", "lon", "lng", "ssid", "bssid", "mac", "macaddress", "ip", "ipaddress", "nci", "eci", "cellid")
+        return sensitiveKeys.matches(normalized) || normalized.lowercase() in setOf("pwd", "phone", "lat", "lon", "lng", "ssid", "bssid", "networkname", "mac", "macaddress", "ip", "ipaddress", "nci", "eci", "cellid")
     }
     private val assignments = Regex(
-        """(?i)(["']?(?:imei\d*|imsi|iccid|meid|android[_ -]?id|serial(?:no|number)?|hardware_serial|phone(?:number)?|msisdn|password|passwd|pwd|secret|vault_secret|token|api[_-]?key|access[_-]?key(?:[_-]?(?:id|secret))?|authorization|cookie|ssid|bssid|latitude|longitude|lat|lon|lng|nci|eci|cell[_-]?id)["']?\s*[:=]\s*)(?:"[^"\r\n]*"|'[^'\r\n]*'|[^\s,;，；}\]]+)"""
+        """(?i)(["']?(?:imei\d*|imsi|iccid|meid|android[_ -]?id|serial(?:no|number)?|hardware_serial|phone(?:number)?|msisdn|password|passwd|pwd|passphrase|pre[_ -]?shared[_ -]?key|wep[_ -]?key\d*|secret|vault_secret|token|api[_-]?key|access[_-]?key(?:[_-]?(?:id|secret))?|authorization|cookie|ssid|bssid|network[_ -]?name|latitude|longitude|lat|lon|lng|nci|eci|cell[_-]?id)["']?\s*[:=]\s*)(?:"[^"\r\n]*"|'[^'\r\n]*'|[^\s,;，；}\]]+)"""
     )
     private val patterns = listOf(
         Regex("(?i)Bearer\\s+[A-Za-z0-9._~+/=-]+"),

@@ -8,6 +8,7 @@ enum class ModemDriver(val title: String, val backend: Backend? = null) {
     BUNNY_QMI("高通 QMI · bunnylock", Backend.QUALCOMM),
     MEDIATEK("联发科 AT · bunnylock", Backend.MEDIATEK),
     PIXEL("Pixel · bunnylock", Backend.PIXEL),
+    UNISOC("展锐 AT · bunnylock", Backend.UNISOC),
     ANDROID("Android HAL · bunnylock", Backend.ANDROID);
 
     val isBunny get() = this != ORIGINAL_QMI

@@ -27,47 +27,51 @@ import androidx.lifecycle.compose.LocalLifecycleOwner
 import dev.qcom.efs.features.ALL_FEATURES
 import dev.qcom.efs.features.FeatureStatus
 
-@Composable private fun ModuleLifecycle(vm: MainViewModel) {
+@Composable private fun ModuleLifecycle(vm: MainViewModel, browse: Boolean) {
     val owner = LocalLifecycleOwner.current
-    DisposableEffect(owner, vm) {
-        val observer = LifecycleEventObserver { _, event -> if (event == Lifecycle.Event.ON_RESUME) vm.enterModule() }
+    DisposableEffect(owner, vm, browse) {
+        val observer = LifecycleEventObserver { _, event -> if (event == Lifecycle.Event.ON_RESUME) vm.enterModule(browse) }
         owner.lifecycle.addObserver(observer)
-        vm.enterModule()
+        vm.enterModule(browse)
         onDispose { owner.lifecycle.removeObserver(observer) }
     }
 }
 
 @Composable fun EfsExplorerScreen(vm: MainViewModel, onBack: () -> Unit, onFeatures: () -> Unit) {
     if (!rememberQualcommPlatform()) { UnsupportedPlatform(onBack); return }
-    ModuleLifecycle(vm)
+    ModuleLifecycle(vm, browse = true)
     App(vm, onBack, onFeatures)
     val state by vm.state.collectAsState()
     if (state.backupBypassDialog) BackupBypassDialog(state, vm)
+    if (state.askCloudBackup && !state.busy) CloudBackupChoiceDialog(vm)
 }
 
 @Composable internal fun BackupChainStatus(state: UiState, vm: MainViewModel) {
+    var manageBackups by remember { mutableStateOf(false) }
     Column(Modifier.fillMaxWidth().padding(12.dp), verticalArrangement = Arrangement.spacedBy(5.dp)) {
-        Text("完整分区备份：${if (state.initialBackupComplete) "本地已校验" else "本地未完成"} · ${if (state.cloudBackupComplete) "云端已校验" else "云端未完成"}",
-            color = if (state.initialBackupComplete && state.cloudBackupComplete) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.error)
+        Text("完整分区备份：${if (state.initialBackupComplete) "本地已校验" else "本地未完成"} · ${state.cloudBackupStatus}",
+            color = if (state.initialBackupComplete) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.error)
         state.initialBackupError?.let { Text(it, style = MaterialTheme.typography.bodySmall) }
         state.cloudBackupMessage?.let { Text(it, style = MaterialTheme.typography.bodySmall) }
         if (state.backupBypassed) Text(stringResource(R.string.efs_backup_bypassed), color = MaterialTheme.colorScheme.error)
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             TextButton(onClick = vm::requestRawBackup, enabled = !state.busy && state.phase == Phase.READY) { Text("分区备份") }
-            TextButton(onClick = vm::retryCloudBackup, enabled = !state.busy && state.initialBackupComplete) { Text("验证/重试云备份") }
+            TextButton(onClick = { manageBackups = true }, enabled = !state.busy) { Text("管理云备份") }
         }
         if (state.canOfferBackupBypass) TextButton(onClick = vm::requestBackupBypass,
             colors = ButtonDefaults.textButtonColors(contentColor = MaterialTheme.colorScheme.error)) { Text(stringResource(R.string.efs_backup_force_skip)) }
     }
+    if (manageBackups) CloudBackupManagementDialog(state, vm) { manageBackups = false }
 }
 
 @Composable fun ModemFeaturesScreen(vm: MainViewModel, onBack: () -> Unit, defaultDataSlot: Int? = null,
     defaultDataIcon: @Composable (Boolean) -> Unit = {}) {
     if (!rememberQualcommPlatform()) { UnsupportedPlatform(onBack); return }
-    ModuleLifecycle(vm)
+    ModuleLifecycle(vm, browse = false)
     CompactModemFeaturesScreen(vm, onBack, defaultDataSlot, defaultDataIcon)
     val state by vm.state.collectAsState()
     if (state.backupBypassDialog) BackupBypassDialog(state, vm)
+    if (state.askCloudBackup && !state.busy) CloudBackupChoiceDialog(vm)
 }
 
 @Composable private fun UnsupportedPlatform(onBack: () -> Unit) {

@@ -1,0 +1,5 @@
+<resources>
+    <string name="unisoc_reply_unreadable">基带对 %1$s 的回复中没有频段信息：%2$s</string>
+    <string name="unisoc_bands_unsettable">这个基带的频段锁定无法包含 %1$s。</string>
+    <string name="unisoc_bands_kept">基带接受了新频段，但重启移动网络后仍在使用原来的频段。</string>
+</resources>

@@ -23,8 +23,9 @@ private typealias OemRequest = (slot: Int, request: ByteArray, response: ByteArr
 /**
  * AT commands through a telephony service instead of the modem tty, so it works for the ADB shell user
  * (Shizuku) as well as root. Candidates: MediaTek's phoneEx (invokeOemRilRequestRaw*), Motorola's
- * motoexttelephony (vendorInvokeOemRilRequestRawSync), vendor services with an AT method
- * (e.g. Oplus' IOplusTelephonyInternalExt.sendAtCmd), and ITelephony's OEM request (Android 11 to 14). A candidate is only used after a plain "AT" gets a valid answer.
+ * motoexttelephony (vendorInvokeOemRilRequestRawSync), Unisoc's irit and vendor tool services,
+ * vendor services with an AT method (e.g. Oplus' IOplusTelephonyInternalExt.sendAtCmd), and ITelephony's
+ * OEM request (Android 11 to 14). A candidate is only used after a plain "AT" gets a valid answer.
  */
 object OemHook {
     const val PREFIX = "ril:"
@@ -70,7 +71,6 @@ object OemHook {
         var omitsFinalResult = false
     }
 
-    /** What the search looked at and what went wrong, for diagnostics. */
     private val probeLog = ArrayList<Text>()
 
     /** Candidates that didn't answer a plain "AT". They may still answer real commands. */
@@ -111,7 +111,6 @@ object OemHook {
 
     private fun Method.takes(vararg types: Class<*>?): Boolean = parameterTypes.contentEquals(types)
 
-    /** Whatever an AT method returned, as reply text. A bare success flag becomes the final result line. */
     private fun replyText(returned: Any?): String =
         when (returned) {
             is String -> returned
@@ -159,10 +158,6 @@ object OemHook {
         }
     }
 
-    /**
-     * Adapts an AT method shaped like (command) or (slot, command), with command as String or bytes.
-     * Methods that answer through a callback are left to [asyncAtAdapter].
-     */
     private fun atAdapter(
         service: Any,
         method: Method,
@@ -245,13 +240,11 @@ object OemHook {
         return targets
     }
 
-    /** A service whose interface can't be inspected just has no candidates. */
     private fun candidatesOrNone(
         name: String,
         binder: IBinder,
     ): List<Target> = runCatching { candidatesFor(name, binder) }.getOrDefault(emptyList())
 
-    /** True when the candidate gives a valid answer to a plain "AT" on the first SIM. */
     private fun tryTarget(candidate: Target): Boolean {
         val timeoutMs = if (candidate.isAtMethod) AT_METHOD_PROBE_TIMEOUT_MS else RAW_PROBE_TIMEOUT_MS
         val reply =
@@ -273,10 +266,20 @@ object OemHook {
         return false
     }
 
+    private fun unisocTargets(names: List<String>): List<Target> =
+        UNISOC_AT_SERVICES.filter { it.name in names }.mapNotNull { service ->
+            val binder = serviceBinder(service.name) ?: return@mapNotNull null
+            Target(service.label, isAtMethod = false) { slot, request, response ->
+                writeReply(service.send(binder, slot, commandText(request)), response)
+            }
+        }
+
     private fun findWorkingTarget(): Target {
+        val names = serviceNames()
+        unisocTargets(names).firstOrNull(::tryTarget)?.let { return it }
         val vendorServices =
             listOf(MEDIATEK_PHONE_SERVICE) +
-                serviceNames().filter { it != MEDIATEK_PHONE_SERVICE && it != PHONE_SERVICE && SERVICE_HINT.containsMatchIn(it) }
+                names.filter { it != MEDIATEK_PHONE_SERVICE && it != PHONE_SERVICE && SERVICE_HINT.containsMatchIn(it) }
         for (name in vendorServices) {
             val binder = serviceBinder(name) ?: continue
             val found = candidatesOrNone(name, binder).firstOrNull(::tryTarget)
@@ -301,10 +304,9 @@ object OemHook {
 
     fun status(): Text = probe.fold({ Text(R.string.oem_working_through, it.label) }, { it.toText() })
 
-    /** Every service and method looked at while searching, and what failed. Reading [probe] first makes sure the search has run. */
+    // Reading probe first makes sure the search has run.
     fun diagnostics(): List<Text> = probe.let { probeLog.distinctBy { it.toJson().toString() } }
 
-    /** The slot of a "ril:<sim>" node, where SIMs count from 1. Without a readable number it is the first SIM. */
     fun slotOf(node: String): Int = (node.substringAfter(':').toIntOrNull() ?: 1) - 1
 
     /** Sends through the OEM request route, for trying commands on it by hand. Nothing else uses a route the search passed over. */
@@ -347,7 +349,7 @@ object OemHook {
                 fail(R.string.oem_timeout, command)
             } catch (e: ExecutionException) {
                 val cause = (e.cause as? InvocationTargetException)?.targetException ?: e.cause
-                if (cause is HelperFailure) throw cause
+                if (cause is Failure) throw cause
                 fail(R.string.oem_service_refused, command, verbatim("${cause?.javaClass?.simpleName}: ${cause?.message}"))
             }
         // A negative length is minus a RIL error code. It is kept in the reply, because it says why the request failed.

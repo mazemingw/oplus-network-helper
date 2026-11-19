@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="mobile_lock_outage_title">锁定可能导致移动网络不可用</string>
+    <string name="mobile_lock_outage_text">SIM %1$d 暂时无法连接移动网络。如果附近没有之前锁定的频段或小区，手机可能搜不到信号。可以一键解除这两类锁定，让手机自动重新选网。</string>
+    <string name="mobile_lock_unlock_both">解除频段和小区锁定</string>
+    <string name="mobile_lock_later">暂不处理</string>
+    <string name="mobile_lock_unlocking_title">正在解除锁定</string>
+    <string name="mobile_lock_unlocking_text">正在解除 SIM %1$d 的频段和小区锁定，请稍候。</string>
+    <string name="mobile_lock_failed_title">未能确认解锁</string>
+    <string name="mobile_lock_failed_text">SIM %1$d 可能还有锁定未解除。可以重试，或到「频段与小区控制」查看状态。</string>
+    <string name="mobile_lock_retry">重试解锁</string>
+    <string name="mobile_lock_reconnecting">已解除锁定，手机正在重新搜网…</string>
+    <string name="mobile_lock_airplane_title">解锁后仍未连上移动网络</string>
+    <string name="mobile_lock_airplane_text">SIM %1$d 的频段和小区锁定已解除，但手机仍未连上移动网络。下拉打开控制中心，开启飞行模式，等几秒后再关闭，然后等待手机重新搜网。飞行模式会暂时中断通话和移动数据，请在通话结束后再操作。</string>
+    <string name="mobile_lock_got_it">知道了</string>
+</resources>

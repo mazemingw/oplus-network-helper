@@ -1,8 +1,12 @@
-package dev.ririxi.bunnylock.root
+package dev.ririxi.bunnylock.backend.qualcomm
 
 import androidx.annotation.StringRes
 import dev.ririxi.bunnylock.modem.R
 import dev.ririxi.bunnylock.modem.Text
+import dev.ririxi.bunnylock.root.Failure
+import dev.ririxi.bunnylock.root.LittleEndian
+import dev.ririxi.bunnylock.root.Reader
+import dev.ririxi.bunnylock.root.fail
 import java.io.ByteArrayOutputStream
 import java.io.Closeable
 import java.io.IOException
@@ -45,7 +49,7 @@ object Qrtr {
         val parts = e.message.orEmpty().split(':', limit = 4)
         val step = parts.getOrNull(1)?.let(STEPS::get)
         if (parts.size < 4 || parts[0] != "qrtr" || step === null) return e
-        return HelperFailure(Text(R.string.qrtr_failed, Text(step), "${parts[3]}, errno ${parts[2]}"))
+        return Failure(Text(R.string.qrtr_failed, Text(step), "${parts[3]}, errno ${parts[2]}"))
     }
 }
 
@@ -86,66 +90,11 @@ class Tlvs {
     fun bytes(): ByteArray = out.toByteArray()
 }
 
-/** Every integer in QMI is little-endian. */
-object LittleEndian {
-    fun u16(value: Int) = byteArrayOf(value.toByte(), (value shr 8).toByte())
-
-    fun u32(value: Long) = byteArrayOf(value.toByte(), (value shr 8).toByte(), (value shr 16).toByte(), (value shr 24).toByte())
-
-    fun u64(value: Long) = ByteArray(8) { (value shr (8 * it)).toByte() }
-}
-
-/** Reads little-endian fields one after another, and fails when the modem sent fewer bytes than the layout needs. */
-class Reader(
-    private val data: ByteArray,
-) {
-    private var offset = 0
-
-    val remaining get() = data.size - offset
-
-    private fun need(byteCount: Int) {
-        if (offset + byteCount > data.size) fail(R.string.qmi_reply_too_short)
-    }
-
-    private fun unsigned(byteCount: Int): Long {
-        need(byteCount)
-        var value = 0L
-        for (i in 0 until byteCount) value = value or ((data[offset + i].toLong() and 0xFF) shl (8 * i))
-        offset += byteCount
-        return value
-    }
-
-    fun u8(): Int = unsigned(1).toInt()
-
-    fun u16(): Int = unsigned(2).toInt()
-
-    fun i16(): Int = u16().toShort().toInt()
-
-    fun u32(): Long = unsigned(4)
-
-    fun i32(): Int = u32().toInt()
-
-    fun u64(): Long = unsigned(8)
-
-    fun bytes(byteCount: Int): ByteArray {
-        need(byteCount)
-        val result = data.copyOfRange(offset, offset + byteCount)
-        offset += byteCount
-        return result
-    }
-
-    fun skip(byteCount: Int) {
-        need(byteCount)
-        offset += byteCount
-    }
-}
-
 private fun u16At(
     bytes: ByteArray,
     offset: Int,
 ): Int = (bytes[offset].toInt() and 0xFF) or ((bytes[offset + 1].toInt() and 0xFF) shl 8)
 
-/** A TLV that claims to run past the end of the message ends the parse. The ones before it are kept. */
 private fun parseTlvs(message: ByteArray): Map<Int, ByteArray> {
     val end = minOf(message.size, QMI_HEADER_SIZE + u16At(message, QMI_BODY_LENGTH_OFFSET))
     val tlvs = LinkedHashMap<Int, ByteArray>()
@@ -248,12 +197,4 @@ class QmiClient(
     ) = send(msgId, tlvs.bytes())
 
     override fun close() = Qrtr.close(fd)
-}
-
-fun ByteArray.hex(): String = joinToString("") { "%02X".format(it) }
-
-fun String.unhex(): ByteArray {
-    val digits = filter { !it.isWhitespace() && it != ':' && it != ',' }
-    if (digits.length % 2 != 0) fail(R.string.qmi_hex_odd_digits)
-    return ByteArray(digits.length / 2) { digits.substring(it * 2, it * 2 + 2).toInt(16).toByte() }
 }

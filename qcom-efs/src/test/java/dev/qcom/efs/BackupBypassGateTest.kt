@@ -30,4 +30,11 @@ class BackupBypassGateTest {
         assertFalse(failed.copy(initialBackupError = null).canOfferBackupBypass)
         assertFalse(failed.copy(phase = Phase.DISCONNECTED).canOfferBackupBypass)
     }
+
+    @Test fun `local verification controls the write gate independently of the cloud copy`() {
+        val localOnly = UiState(initialBackupComplete = true, cloudBackupEnabled = false)
+        assertTrue(localOnly.backupWriteAuthorized)
+        assertTrue(localOnly.copy(cloudBackupEnabled = true, cloudBackupComplete = false).backupWriteAuthorized)
+        assertFalse(localOnly.copy(initialBackupComplete = false, cloudBackupComplete = true).backupWriteAuthorized)
+    }
 }

@@ -4,6 +4,7 @@ import android.content.Context
 import android.net.LocalSocket
 import android.net.LocalSocketAddress
 import android.os.Process
+import com.nvmex.networkhelper.util.diagnostics.DiagnosticReporter
 import com.nvmex.networkhelper.util.shell.SuShellRunner
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.sync.Mutex
@@ -45,6 +46,7 @@ class QmiModemClient(context: Context) {
     private var bindings: QmiSimBindings? = null
     private var bindingsAt = 0L
     private var socketRuleTried = false
+    private var loggedMonitorBinding: Pair<Int, Int>? = null
     private val nrModeReadOnly = mutableSetOf<Int>()
     init { owners[id] = java.lang.ref.WeakReference(this) }
 
@@ -137,6 +139,11 @@ class QmiModemClient(context: Context) {
 
     suspend fun monitor(sim: Int, includeRx: Boolean): QmiMonitoringSnapshot = transaction {
         val subscription = subscriptionFor(sim)
+        val binding = sim to subscription
+        if (loggedMonitorBinding != binding) {
+            loggedMonitorBinding = binding
+            DiagnosticReporter.info("qcom-band-menu/monitor", "slot=$sim NAS subscription=$subscription rx=$includeRx")
+        }
         val result = request(qmiCommand("nas_read").put("sim", subscription)
             .put("reads", JSONArray(qmiMonitoringReads(includeRx)))).getJSONObject("nas_read")
         check(result.getInt("sim") == subscription) { "SIM mismatch" }
@@ -168,7 +175,10 @@ class QmiModemClient(context: Context) {
                 if (socket == null) start()
                 block()
             } catch (e: IOException) {
-                if (e !is QmiCommandException && e !is QmiReadException) disconnect()
+                if (e !is QmiCommandException && e !is QmiReadException) {
+                    DiagnosticReporter.warning("qcom-band-menu/transport", e.message ?: e.javaClass.simpleName)
+                    disconnect()
+                }
                 throw e
             }
         }
@@ -199,7 +209,10 @@ class QmiModemClient(context: Context) {
         val launch = "setsid ${quote(binary.absolutePath)} -uid ${Process.myUid()} -name ${quote(socketName)} " +
             "-tokenfile ${quote(tokenFile.absolutePath)} </dev/null >/dev/null 2>${quote(stderrFile.absolutePath)} & echo \$! >${quote(pidFile.absolutePath)}"
         val result = SuShellRunner().execSu(launch, 30_000)
-        if (result.code != 0) throw IOException(result.err.ifBlank { "Root access required" })
+        if (result.code != 0) {
+            DiagnosticReporter.warning("qcom-band-menu/helper", "Launcher exited with code ${result.code}")
+            throw IOException(result.err.ifBlank { "Root access required" })
+        }
         var lastError: Exception? = null
         repeat(120) {
             try {
@@ -211,7 +224,13 @@ class QmiModemClient(context: Context) {
             }
             Thread.sleep(100)
         }
-        val detail = stderrFile.takeIf { it.isFile }?.readText()?.takeLast(1200).orEmpty()
+        val detail = runCatching {
+            stderrFile.inputStream().use { stream ->
+                val bytes = ByteArray(1200)
+                String(bytes, 0, stream.read(bytes).coerceAtLeast(0), Charsets.UTF_8).trim()
+            }
+        }.getOrDefault("")
+        if (detail.isNotBlank()) DiagnosticReporter.warning("qcom-band-menu/helper", detail)
         throw IOException(detail.ifBlank { lastError?.message ?: "Cannot connect to QMI helper" })
     }
 
@@ -257,10 +276,12 @@ class QmiModemClient(context: Context) {
         if (response.optInt("id", -1) != requestId || response.optString("cmd") != command.getString("cmd") || response.optString("version") != "5.0.0-nh3") {
             throw IOException("QMI protocol mismatch")
         }
-        if (!allowRejected && !response.optBoolean("ok")) {
+        if (!response.optBoolean("ok")) {
             val error = response.optJSONObject("error")
-            throw QmiCommandException(command.getString("cmd"), error?.optString("message") ?: "Modem rejected command",
+            val failure = QmiCommandException(command.getString("cmd"), error?.optString("message") ?: "Modem rejected command",
                 error?.optInt("code", -1) ?: -1, error?.optString("stage").orEmpty())
+            DiagnosticReporter.warning("qcom-band-menu/helper", failure.message.orEmpty())
+            if (!allowRejected) throw failure
         }
         return response
     }

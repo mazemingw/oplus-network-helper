@@ -39,18 +39,9 @@ android {
     }
     compileSdk = 36
     compileSdkMinor = 1
-//    defaultConfig {
-//        applicationId = "be.mygod.vpnhotspot"
-//        minSdk = 28
-//        targetSdk = 36
-//        versionCode = 1035
-//        versionName = "2.19.1"
-//        testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
-//        androidResources.localeFilters += listOf("es", "it", "ja", "pt-rBR", "ru", "zh-rCN", "zh-rTW")
-//        externalNativeBuild.cmake.arguments += listOf("-DANDROID_SUPPORT_FLEXIBLE_PAGE_SIZES=ON")
-//    }
     defaultConfig {
         minSdk = 28
+        buildConfigField("String", "UPSTREAM_VERSION", "\"2.19.2\"")
         // targetSdk 对 library 可留可删；留着也行
         targetSdk = 36
 
@@ -128,7 +119,6 @@ dependencies {
     implementation(vpnhs.preferencex.simplemenu)
     implementation(vpnhs.room.ktx)
     implementation(vpnhs.swiperefreshlayout)
-    implementation(vpnhs.taskerpluginlibrary)
     implementation(vpnhs.timber)
     implementation(vpnhs.zxing.core)
     testImplementation(vpnhs.junit)

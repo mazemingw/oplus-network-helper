@@ -1,197 +1,88 @@
 # 欧加网络助手（Oplus Network Helper）
 
-[English version](README.en.md)
+[English](README.en.md)
 
-面向 Android 高通/联发科设备的网络与信号分析工具。应用包名为
-`com.nvmex.networkhelper`，使用 Jetpack Compose 构建，并包含独立的 VPN/热点功能模块。
+欧加网络助手把双卡信号观察、路测记录、频段与小区控制，以及 Wi-Fi 和热点工具放在同一个应用里。你可以用它查看手机当前连接的网络，对比两张 SIM 卡的信号，也可以把沿途测量保存下来，再回到地图上查看。
 
-## 版本
+当前源码版本为 **1.6.7**（versionCode **67**），支持 Android 10 及以上的 **ARM64** 设备。应用包名为 `com.nvmex.networkhelper`。高级功能会调用不同芯片和厂商的接口，实际可用范围取决于手机、系统版本、基带和授权情况。
 
-- 当前源码版本：`v1.6.1`（versionCode `61`）。
-- 架构：`arm64-v8a`
+## 观察网络与信号
 
-## 主要功能
+首页按 SIM 卡展示运营商、网络制式、频段、频点、服务小区和链路信息，并用 RSRP、RSRQ、SINR 等读数帮助判断信号质量。你可以在双卡之间切换，也可以查看历史曲线和基站时域图，了解驻留小区随时间如何变化。
 
-- **双卡网络面板**：对比 SIM1/SIM2 的运营商、数据网/NR 模式、频段、频点、小区和链路信息；基站时域图显示频点和 RSRP，网络面板内提供默认折叠、跨卡记忆展开状态的多天线 RX 测量。
-- **信号质量**：显示 RSRP、RSRQ、SINR、RSSI、信号等级和评分，并支持历史信号曲线。
-- **路测地图**：同一采样时刻保存双卡数据，回读时用 TAB 切换数据组；支持隐藏基站三角标，回读默认全览，可选择起点视角。支持 1–10 km 附近基站查询，并独立筛选 4G/5G 制式及 Band。
-- **QoS 诊断**：查看高通 DATA/IMS 的 QCI、AMBR、NAS 等数据及按 SIM 保存的缓存；联发科 AT 读取通道为实验功能，尚未真机验证。
-- **工程模式工具**：访问网络工程模式能力，并提供工程模式文件清理工具。
-- **频段与小区控制**：Root 高通设备通过 QMI 读取硬件支持频段、设置网络制式和频段、锁定或解除小区；提供运营商频段过滤、当前驻留高亮及锁定确认提示，保留可选的旧式锁频。
-- **本地数据管理**：管理导入工参与本地随行随录数据；首页日志、路测记录提供独立管理页及兼容 Excel 的 CSV 导入导出，路测点同时保存原始坐标与 GCJ02 坐标。详见 [数据管理说明](docs/local-data-management.md)。
-- **网络工具**：集成 iPerf 测速、Wi-Fi 信息、Ping 和 VPN/热点管理；Wi-Fi 信道图支持空闲区间压缩和 80+80 MHz 占用展示。
-- **Wi‑Fi 弱信号切断**：从 Wi‑Fi 面板顶部进入设置，开启后可在后台断开低于阈值的当前接入点。默认 −80 dBm，采样间隔 7 秒，连续两次达到或低于阈值才触发。Wi‑Fi 保持开启，系统可自动重连。
-- **应用更新与插件共享**：更新下载显示下载、校验和安装阶段，检查 APK 包名、版本及签名；插件导入兼容独立插件包与包含 framework 的分享包。
-- **Xposed/厂商接口**：部分高级功能需要 root、Xposed/LSPosed 或特定厂商系统接口。
+高通设备还可以展开多天线 RX 测量，查看各接收链的读数。LTE CA 来自 QMI，NRCA 优先使用工程模式数据，数据不可用时再尝试 QMI 提供的载波频点；设备没有报告的内容会保留为空。读取遇到临时绑定失败时，应用最多重连两次，并记录失败原因和恢复结果。
 
-## 频段、小区与 RX 测量
+QoS 页面提供设备能够报告的 DATA/IMS、QCI、AMBR 和 NAS 信息。联发科 AT 读取仍属实验功能，需要对应设备验证。详细的数据来源和限制见 [QMI 控制说明](docs/qmi-controls.md)。
 
-QMI 集成已审查至 qcom-band-menu 的 `e924f38`。锁频时先写入变更的网络制式，再恢复已知的频段掩码，以适配切换制式会重置频段的基带。5G 模式被明确拒绝时以只读显示，并提示其他操作的执行结果。[qcom-band-menu](https://github.com/Fronsipswu/qcom-band-menu/commit/e924f388b8c69dfbe7f91e76a7721698d8099e5a)
+## 控制频段与小区
 
-- 频段草稿默认不勾选，按 NR SA、NR NSA、LTE、WCDMA、GSM 排列；制式决定相应卡片是否显示。频段按钮附频率或 SUL 标记，选中状态与当前驻留分别标识。“中国大陆模式”默认开启，按当前 SIM 注册运营商过滤可选频段。
-- 小区候选按邻区、近期驻留、LTE CA、当前服务排序，只保留有效 PCI 和完整参数；展开时冻结列表，显示 RSRP 短条及“当前”标记。NRCA 载波频点不作为小区锁定候选。
-- 首页与控制页共享各 SIM 的服务小区数据。锁定后核对基带读回及新的驻留采样，信息不足时提示未确认；解除小区锁定按实际活动锁定类型处理。锁小区时可选择同时限制制式，解除时恢复关联前设置。
-- 首页的锁形按钮会带入当前 SIM，控制页也用卡片图标标记默认数据卡。多天线 RX 测量仅在高通平台显示。
-- 点击首页基站时域图记录，可确认快速锁小区或锁频段，携带实际 SIM 卡槽与订阅信息进入控制页。校验硬件与运营商规则后预填参数或选中频段，仍需手动点击“锁定”；FDD/TDD 默认 SCS 分别为 15/30 kHz，可继续手动调整。控制页按钮统一为矩形，小区类型与 SCS 选中时显示实色和勾选图标，锁定读回面板采用紧凑布局。
-- 浮动“锁定 / 解锁”按钮上方显示自动消失的状态提示。“重置通道”提供有界的会话恢复；遇到确认的 QMI 5 绑定冲突时，可停止经过身份验证的原作者应用后台，释放其客户端，不清除频段或小区锁。
-- 首页“可锁频段”继续打开运营商频段说明，优先使用真实硬件能力，获取失败才回退到内置列表；N3、N8 标为“不常见”。设置中的“旧式锁频”默认关闭，MTK 用户可尝试开启。
-- LTE CA 仅由 QMI 提供；NRCA 优先使用现有工程模式链路，降级到 QMI SCELL 频点，再无信息则留空。RX 测量嵌入网络面板，每条接收链紧凑排列，信号参数使用彩色进度条，PHASE 使用平滑动画的 24dp 填充饼图。
-- NRCA 标签展示转换后的频段，原始频点留在详情。时域图优先展示带有效 PCI 的邻区，否则回退驻留历史；邻区快照至少保持 3 秒，方便点击锁定。RX 固定接收链位置，并在同一 SIM 本次展开期间保留出现过的制式分组，缺失读数显示“未报告”，避免 2/4 天线或 LTE/NR 组变化使面板反复缩放。RX、CA 和邻区共用只读采集会话，暂时绑定失败时最多重连两次。
+在“频段与小区控制”中，可以读取支持的频段、选择网络制式、设置频段或锁定小区。“驱动&设置”提供原有高通 QMI，以及 bunnylock 的自动识别、高通、联发科、Pixel、展锐和 Android HAL 后端。界面按当前后端的能力显示选项，各手机支持的锁定方式并不相同。
 
-详细数据来源、恢复边界、构建与真机验收要求见 [QMI 控制说明](docs/qmi-controls.md)；上游同步范围与许可证见 [同步记录](app/src/main/cpp/qmi/UPSTREAM.md) 和 [第三方声明](THIRD_PARTY_NOTICES.md)。
+首页的小区记录可以把目标 SIM、频点和 PCI 带入控制页，检查后再手动执行。锁定结果会结合基带读回和新的驻留信息判断，证据不足时显示未确认。如果应用记录到默认数据卡仍有锁定，并持续检测到移动网络中断，会提示你尝试解除锁定，再等待网络恢复。
 
-## 路测与附近基站
+直接访问高通 QMI 需要 Root。部分 Android HAL 或 RIL 透传功能可以通过已启动并授权的 Shizuku 使用，但 Shizuku 的 ADB 权限不会让所有设备都具备直接 QMI 或 PCI 锁定能力。切换驱动、清理通道和系统组件恢复的适用条件见 [多后端说明](docs/modem-backends.md) 与 [系统通道恢复说明](docs/qmi-system-recovery.md)。
 
-在路测地图 FAB 中打开 **地图绘制与探测参数**（原“扇区绘制参数”），可设置扇区角度/距离、采样间隔、附近基站探测开关、1–10 km 半径、制式和可选 Band。探测默认关闭，默认半径 3 km；也可点击“立即探测”。查询的是后台工参库中的基站。
+本版集成 bunnylock **2.1.0**。QCOM BAND MENU 的 Android NAS 代码已核对至本版记录的上游提交；最新一轮 OpenWrt 改动不属于手机端集成范围。来源版本和本地修改分别记录在 [bunnylock 同步说明](bunny-modem/UPSTREAM.md) 与 [QMI 同步说明](app/src/main/cpp/qmi/UPSTREAM.md)。
 
-制式可选全部、4G 或 5G，Band 留空表示不限频段。数字（如 `3`）筛选所选制式的同号频段；`B3` 限定 4G，`n78` 限定 5G。制式与前缀冲突时会提示修改。频段按工参频点范围匹配，NR 重叠频段可能同时命中。
+## 路测、地图和本地记录
 
-进入地图时保留当前位置。在“路测记录”管理页选择“回读”后，默认全览当前 SIM 和频段筛选后的轨迹；“更多 → 回读初始视角”可保存全览或起点偏好，也可即时选择“轨迹全览 / 回到起点”。路测及回读均可关闭基站三角标。双卡记录分别显示在 SIM TAB 中，旧单卡记录仍可读取。详见 [路测地图说明](docs/drive-test-map.md)。
+路测地图可以在同一采样时刻保存双卡测量，并在回读时按 SIM 和频段查看轨迹。记录保留服务基站及扇区快照，支持继续录制、搜索、预览和 CSV 导入导出。附近基站查询来自后台工参库，可以选择 1–10 km 半径、4G/5G 制式和频段；自动探测默认关闭。
 
-地图支持密集打点与完整连续轨迹、切换点/服务站天线面开关、服务站红线与距离、运营商滚动名称，以及独立的地图模式与 2D/3D 小按钮。Session 按起点城市命名并估算长度，支持退出自动保存和选中后继续录制。右侧显示 GPS 速度；打开地图后自动融合 GPS、加速度计与陀螺仪，在行驶中校准，失锁后可估算弯道与加减速，默认最长 10 分钟、可配置 1–30 分钟，估算点保留漂移指示，仍需实车验证。
+地图以高德定位为主，定位中断时可使用已就绪的惯导估算，并标记估算点。可选的“猎鹰轨迹纠偏”默认关闭，开启后随路测录制向高德上传轨迹并查询驾车道路匹配结果；仅浏览地图不会启动轨迹采集。它目前不提供铁路或地铁纠偏，惯导效果也仍需实车验证。操作方式见 [路测地图说明](docs/drive-test-map.md) 和 [轨迹纠偏说明](docs/map-matching-mvp.md)。
 
-高德定位及打点优先运行，惯导只在定位中断时辅助，不等待惯导就绪。速度面板仅显示速度和惯导“就绪／未就绪”。附近基站仅显示标记，扇区只显示当前服务基站的；回读时只展开当前打点对应的服务站。录制时连接过的基站及其扇区保存到 Session，支持按 SIM 离线回读；基站和打点信息窗追加 MHz 频率。双卡信号对比支持上下滑动并显示小区类型，NR 520830 标为“地铁专网”，原有高铁专网规则保留。
+本地工参、首页采样日志和路测记录有各自的管理入口。你可以保存和编辑本地工参，用 CSV 在应用和表格软件之间交换数据；云端缓存刷新不会覆盖用户管理的本地工参。坐标字段、旧数据兼容和导入规则见 [本地数据管理说明](docs/local-data-management.md)。后台服务单独维护在 [NetworkHelperBack](https://github.com/mazemingw/NetworkHelperBack)。
 
-后台单独维护于 [NetworkHelperBack](https://github.com/mazemingw/NetworkHelperBack)，采用 Apache 2.0；新增接口需要更新后台并重启服务。协议见 [附近基站接口文档](https://github.com/mazemingw/NetworkHelperBack/blob/main/nearby-api.md)。
+## Wi-Fi、热点和网络工具
 
-可选的“猎鹰轨迹纠偏”默认关闭，使用高德 Android 猎鹰 SDK 上报并查询驾车道路绑路结果，无须导入线路；采集随路测打点开始、停止，仅浏览地图不上传轨迹。原始定位、惯性估算及双卡路测记录独立保留；当前不提供铁路或地铁纠偏。地图采用半透明浮层，右上显示地图/视角/速度，右下 FAB 与 RSRP 图例对齐，底部中央提供缩放。服务基站显示绿色，选中标记高亮，信息气泡支持点按复制；打点弹窗及 CSV 支持 RSRQ、SINR 与 NR SS 指标。详见 [接入与真机验收说明](docs/map-matching-mvp.md)。
+应用提供 Wi-Fi 信息与信道占用图、Ping、iPerf 测速，以及 VPN 热点管理。Wi-Fi 弱信号切断可以在后台断开信号持续低于阈值的当前接入点；默认阈值为 −80 dBm，每 7 秒采样一次，连续两次达到条件才触发，Wi-Fi 本身保持开启。
 
-在“更多”FAB 的“频段筛选与覆盖率”中分别输入 4G/5G 频段，例如 `3,41` 和 `41,28`，统一筛选实时打点与历史回读。浮层显示具体筛选频段及其有效路测距离覆盖率；未匹配的路测路径用带深色描边的亮紫色线保留，完整原始数据继续保存。新机 NRCA 带宽解析按系统能力兼容，保留旧系统规则，详见 [分析记录](docs/nrca-pyb110-analysis.md)。
+VPN 热点集成的是 **VPN Hotspot 2.19.2**。这次更新包含热点接口状态回调及系统 IPsec VPN 上游转发支持，并保留当前应用的热点设置和入口。上游 3.x 更换了路由、Root 服务和客户端存储，尚未迁入本项目。具体同步范围见 [VPN 热点说明](vpnhotspot-mobile/UPSTREAM.md)。热点转发和部分配置需要 Root，效果受系统和 VPN 实现影响。
 
-## 截图
+## 高通 EFS 与备份
 
-截图按功能模块存放在 [`docs/images`](docs/images) 中，点击图片可查看原图。
+高通设备可以使用集成的 EFS 浏览和基带功能工具。授权后，应用会发现相关 EFS/NV 分区并保存、校验本地备份；首次备份时可以选择是否上传私有云。通过本地校验后才可继续启用修改，云备份可以在管理页面查看、下载或删除。
 
-### HOME：首页
+修改基带数据可能造成无信号或身份信息丢失，应先保留能够使用的备份。备份失败后提供的“强制跳过”需要阅读风险提示并等待确认，它只放行当前会话的备份门槛，不会生成备份，也不会自动开启修改。更多恢复边界和日志说明见 [诊断与备份说明](docs/diagnostics.md)。
+
+## 日志与问题反馈
+
+从设置页右上角进入“日志监控台”，可以筛选、复制、导出、分享或手动上传日志。本版把 bunnylock、QCOM BAND MENU 和 VPN 热点的组件日志接入同一监控台；多天线测量的绑定失败、SIM 映射、重连及最终结果也会保留。复现问题后导出日志，或上传并提供回执，有助于定位故障。
+
+“自动错误上报”默认开启，可以在监控台关闭；关闭后仍可主动上传。导出和分享的日志会进行脱敏。云端诊断上传包含设备及应用信息，并在能够读取时附带 IMEI1 作为独立字段；它不会出现在导出的分享文件中。具体采集范围、容量和上报规则见 [诊断说明](docs/diagnostics.md)。
+
+## 界面预览
+
+下图展示首页、Wi-Fi 和热点工具，更多图片见 [截图目录](docs/images)。部分截图来自旧版本，当前界面可能有所调整。
 
 <p>
-  <a href="docs/images/home/home.png"><img src="docs/images/home/home.png" alt="首页" width="260"></a>
-  <a href="docs/images/home/control-panel.png"><img src="docs/images/home/control-panel.png" alt="网络控制面板" width="260"></a>
-  <a href="docs/images/home/qos-data.png"><img src="docs/images/home/qos-data.png" alt="QOS 数据" width="260"></a>
+  <a href="docs/images/home/home.png"><img src="docs/images/home/home.png" alt="首页网络面板" width="240"></a>
+  <a href="docs/images/home/qos-data.png"><img src="docs/images/home/qos-data.png" alt="QoS 信息" width="240"></a>
+  <a href="docs/images/WIFI/Screenshot_2026-09-12-04-38-19-73_0b59cd5314832a..png"><img src="docs/images/WIFI/Screenshot_2026-09-12-04-38-19-73_0b59cd5314832a..png" alt="Wi-Fi 信息" width="240"></a>
+  <a href="docs/images/hotspot/Screenshot_2026-09-12-04-38-57-83_0b59cd5314832a..png"><img src="docs/images/hotspot/Screenshot_2026-09-12-04-38-57-83_0b59cd5314832a..png" alt="VPN 热点" width="240"></a>
 </p>
 
-### LOCKBAND：锁频
+## 从源码构建
 
-以下截图为旧式锁频界面，新版 QMI 界面与功能见上方说明。
+构建需要 JDK 17、Android SDK 36（热点模块还使用 36.1）、NDK `26.3.11579264` 和 CMake `3.22.1`。可以在 Android Studio 中打开项目根目录并等待 Gradle 同步。Gradle 8.13 不支持用 JDK 25 运行此项目。
 
-<p>
-  <a href="docs/images/LOCKBAND/Screenshot_2026-09-12-04-56-43-38_0b59cd5314832a..png"><img src="docs/images/LOCKBAND/Screenshot_2026-09-12-04-56-43-38_0b59cd5314832a..png" alt="锁频设置" width="260"></a>
-  <a href="docs/images/LOCKBAND/Screenshot_2026-09-12-04-56-54-70_0b59cd5314832a..png"><img src="docs/images/LOCKBAND/Screenshot_2026-09-12-04-56-54-70_0b59cd5314832a..png" alt="锁频详情" width="260"></a>
-</p>
-
-### RADAR：雷达
-
-<p>
-  <a href="docs/images/radar/Screenshot_2026-09-12-04-37-58-73_0b59cd5314832a..png"><img src="docs/images/radar/Screenshot_2026-09-12-04-37-58-73_0b59cd5314832a..png" alt="信号雷达" width="260"></a>
-</p>
-
-### WIFI：Wi-Fi
-
-<p>
-  <a href="docs/images/WIFI/Screenshot_2026-09-12-04-38-19-73_0b59cd5314832a..png"><img src="docs/images/WIFI/Screenshot_2026-09-12-04-38-19-73_0b59cd5314832a..png" alt="Wi-Fi 概览" width="260"></a>
-  <a href="docs/images/WIFI/Screenshot_2026-09-12-04-38-32-71_0b59cd5314832a..png"><img src="docs/images/WIFI/Screenshot_2026-09-12-04-38-32-71_0b59cd5314832a..png" alt="Wi-Fi 详情" width="260"></a>
-</p>
-
-### HOTSPOT：热点
-
-<p>
-  <a href="docs/images/hotspot/Screenshot_2026-09-12-04-38-57-83_0b59cd5314832a..png"><img src="docs/images/hotspot/Screenshot_2026-09-12-04-38-57-83_0b59cd5314832a..png" alt="VPN 热点" width="260"></a>
-</p>
-
-### MENU：菜单
-
-<p>
-  <a href="docs/images/menu/Screenshot_2026-09-12-04-39-08-14_0b59cd5314832a..png"><img src="docs/images/menu/Screenshot_2026-09-12-04-39-08-14_0b59cd5314832a..png" alt="菜单" width="260"></a>
-  <a href="docs/images/menu/Screenshot_2026-09-12-04-39-11-61_0b59cd5314832a..png"><img src="docs/images/menu/Screenshot_2026-09-12-04-39-11-61_0b59cd5314832a..png" alt="菜单工具" width="260"></a>
-</p>
-
-### SETTINGS：设置
-
-<p>
-  <a href="docs/images/settings/Screenshot_2026-09-12-04-39-27-05_0b59cd5314832a..png"><img src="docs/images/settings/Screenshot_2026-09-12-04-39-27-05_0b59cd5314832a..png" alt="设置" width="260"></a>
-  <a href="docs/images/settings/Screenshot_2026-09-12-04-39-31-15_0b59cd5314832a..png"><img src="docs/images/settings/Screenshot_2026-09-12-04-39-31-15_0b59cd5314832a..png" alt="设置详情" width="260"></a>
-</p>
-
-## 构建环境
-
-- Android Studio（建议使用稳定版）
-- JDK 17（Gradle 8.13 不支持 JDK 25）
-- Android SDK 36
-- Android NDK `26.3.11579264`
-- CMake `3.22.1`
-
-在 Android Studio 中打开项目根目录并等待 Gradle 同步：
-
-```bash
-./gradlew assembleDebug
-```
-
-Windows PowerShell：
-
-```powershell
-.\gradlew.bat assembleDebug
-```
-
-本地单元测试与 Debug 构建（无需连接设备）：
-
-```powershell
-.\gradlew.bat :app:testDebugUnitTest :app:assembleDebug
-```
-
-2026-10-26 验证：v1.6.0 Debug APK 构建成功；单元测试共 380 项，377 项通过、3 项因缺少本地真实样本跳过、0 失败。QMI 原生会话和恢复脚本另有独立模拟测试，命令见 [QMI 控制说明](docs/qmi-controls.md)。本轮仅保留本地测试包，未覆盖安装；快捷导航、双卡写入、锁定及实际驻留效果仍需真机验收。
-
-兼容修复的既有验证记录见 [2026-09-18 说明](docs/2026-09-18-compatibility-verification.md)；路测检查与手工测试步骤见 [路测地图说明](docs/drive-test-map.md)。
-
-## 配置说明
-
-本地配置文件 `local.properties`、签名文件、私钥和 Firebase 配置不会提交到仓库。
-将高德地图 Key 写入项目根目录的 `local.properties`，之后普通编译和 Release 编译都会自动读取：
+在项目根目录的 `local.properties` 中填写本地 SDK 路径和高德地图 Key：
 
 ```properties
-AMAP_API_KEY=你的高德Key
+sdk.dir=/path/to/Android/Sdk
+AMAP_API_KEY=your_amap_key
 ```
 
-也可以在 Gradle 命令行使用 `-PAMAP_API_KEY=...` 临时覆盖本地值。注意：Key 会被打包进 APK；请在高德开放平台限制 Key 的 Android 包名/签名 SHA-1，并避免提交 `local.properties`。部分功能需要 root、厂商接口或实体设备，在普通模拟器上可能不可用。
+地图 Key 会进入 APK，请在高德控制台限制包名及签名证书，并将本地配置和签名材料保存在仓库之外。Linux/macOS 使用 `./gradlew`，Windows PowerShell 使用：
 
-## 项目结构
-
-```text
-app/                  主应用模块
-bunny-modem/          bunnylock 后端与 Root/Shizuku 连接桥（GPL-3.0）
-vpnhotspot-mobile/    VPN/热点库模块
-gradle/               Gradle wrapper 与依赖版本
-docs/                 功能说明、验证记录与截图
+```powershell
+.\gradlew.bat :app:assembleDebug
+.\gradlew.bat :app:testDebugUnitTest :bunny-modem:testDebugUnitTest :vpnhotspot-mobile:testDebugUnitTest :qcom-efs:testDebugUnitTest
 ```
 
-## 多后端驱动与开源致谢
+主应用位于 `app/`，三个集成库分别位于 `bunny-modem/`、`vpnhotspot-mobile/` 和 `qcom-efs/`。功能文档和验证记录位于 `docs/`，原生助手构建及模拟测试脚本位于 `tools/`。本次发布的验证结果见 [1.6.7 发布说明](docs/releases/v1.6.7.md)；编译和模拟测试不能替代目标设备上的网络、锁定、备份恢复及覆盖安装验证。
 
-“频段与小区控制”增加 **驱动&设置** Tab，可选择原有高通 QMI，或 bunnylock
-提供的自动识别、高通 QMI、联发科 AT、Pixel、Android HAL 后端。页面包含重启移动
-网络、重启基带、清理通道、AT 控制台、设备信息和诊断日志，继续使用欧加助手自己的 UI。
+## 开源来源与许可证
 
-无 Root 路径需要安装、启动并授权 **Shizuku**。ADB 权限支持 Android HAL，以及设备
-实际提供的联发科 RIL AT 透传；并不代表所有手机都支持 PCI 锁定或直接访问高通 QMI。
-驱动切换会释放当前会话，保留已有锁定。“清理通道”会释放自己的服务；Root 可用时
-还会按包名及进程归属检查 qcom-band-menu 和 bunnylock 的后台，只清理确认身份的实例，
-不发送解锁命令、不重启系统 radio 服务。Root 下还会扫描实际 QRTR/QMUX 占用并校验
-第三方进程归属，不局限于这两个包名；清理后自动重连并刷新当前驱动。受内核或权限
-限制而无法检查的对象会单独提示。两类驱动复用同一个频段与小区控制 UI，按能力显示组件。
+感谢 [bunnylock](https://github.com/btsearch/bunnylock)、[QCOM BAND MENU](https://github.com/Fronsipswu/qcom-band-menu)、[VPN Hotspot](https://github.com/Mygod/VPNHotspot) 和 [qcom-efs-browser](https://github.com/catxeon/qcom-efs-browser) 的作者与贡献者。本项目保留这些组件的来源、版权和许可证，并使用自己的界面组织相关能力。
 
-诚挚感谢 [Fronsipswu/qcom-band-menu](https://github.com/Fronsipswu/qcom-band-menu)
-与 [btsearch/bunnylock](https://github.com/btsearch/bunnylock) 的作者及所有贡献者。
-感谢你们开放协议实现、后端和兼容经验，让欧加网络助手能够服务更多设备。
-页面和驱动列表使用两项目原图标标识来源，并提供 GitHub 链接。
-
-接入范围、来源版本和验证步骤见 [多后端驱动说明](docs/modem-backends.md)。
-
-清理后读回仍失败时，可在弹窗查看已知系统 NAS 使用组件的作用、状态与暂停影响，逐项暂停并验证，
-也可手动恢复。“驱动&设置”中的“替我决定”默认开启（预选后仍需确认），“自动恢复”默认关闭；
-开启后退出应用会恢复助手暂停前正在运行的组件，保留原先已停止的状态。
-详见 [系统通道恢复说明](docs/qmi-system-recovery.md)，组件身份与占用数量不能推广为所有固件的固定值。
-
-## 许可证
-
-本项目原创代码采用 **Apache License 2.0**，详见 [LICENSE](LICENSE)。仓库还包含采用其他许可证的第三方代码；请阅读 [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md)，并保留相应的版权和许可证声明。
-
-`bunny-modem` 保留 GPL-3.0 许可和完整源码。包含该模块的组合应用按 GPL-3.0 条件分发；
-这不会移除原创文件已有的 Apache-2.0 声明。对应许可证见 [bunny-modem/LICENSE](bunny-modem/LICENSE)。
+原创代码采用 [Apache License 2.0](LICENSE)。包含 GPL-3.0 组件的组合应用按 GPL-3.0 条件分发，原文件已有的兼容许可证声明继续保留。各组件的具体范围见 [第三方声明](THIRD_PARTY_NOTICES.md) 和 [bunny-modem/LICENSE](bunny-modem/LICENSE)。

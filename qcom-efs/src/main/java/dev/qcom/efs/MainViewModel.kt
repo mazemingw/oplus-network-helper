@@ -143,6 +143,8 @@ data class UiState(
     val storageGranted: Boolean = false,
     val initialBackupComplete: Boolean = false,
     val cloudBackupComplete: Boolean = false,
+    val cloudBackupEnabled: Boolean? = null,
+    val askCloudBackup: Boolean = false,
     val cloudBackupMessage: String? = null,
     val recoveryPackagePath: String? = null,
     val initialBackupError: String? = null,
@@ -205,12 +207,14 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
     private val featureRestorer = FeatureRestorer(featureAccess, { path ->
         try { repo.unlink(path) } catch (t: EfsException) { if (t.efsErrno != 2) throw t }
     }, { repo.sync() })
-    private var moduleEntryJob: Job? = null
+    private var backupVerificationJob: Job? = null
+    private var browserLoaded = false
+    private var captureAfterCloudChoice = false
     private var backupLogJob: Job? = null
     private val backupBypassGate = BackupBypassGate(android.os.SystemClock::elapsedRealtime)
     private var backupBypassCountdown: Job? = null
 
-    private val _state = MutableStateFlow(UiState(storageGranted = hasStorageAccess(app)))
+    private val _state = MutableStateFlow(UiState(storageGranted = hasStorageAccess(app), cloudBackupEnabled = cloudBackup.uploadEnabled))
     val state: StateFlow<UiState> = _state.asStateFlow()
 
     private val prefs by lazy {
@@ -266,7 +270,7 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
                 logger.record("操作完成：${label ?: "基带操作"}")
             } catch (t: Throwable) {
                 if (t is CancellationException) throw t
-                logger.record("操作失败：${label ?: "基带操作"}：${t.message}")
+                logger.error("操作失败：${label ?: "基带操作"}", t)
                 _state.update { it.copy(toast = describe(t)) }
             } finally {
                 withContext(Dispatchers.IO) { logger.captureNative() }
@@ -284,8 +288,8 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
 
     fun dismissToast() = _state.update { it.copy(toast = null) }
     fun configureCloud(endpoint: String) { cloudBackup.endpoint = endpoint }
-    fun enterModule() {
-        onStoragePermissionChanged(hasStorageAccess(getApplication()))
+    fun enterModule(browse: Boolean = true) {
+        onStoragePermissionChanged(hasStorageAccess(getApplication()), browse)
     }
     fun setVerbose(on: Boolean) = _state.update { it.copy(verbose = on) }
 
@@ -294,17 +298,7 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
 
     // ---- session -------------------------------------------------------
 
-    fun connect() {
-        if (_state.value.phase == Phase.CONNECTING || _state.value.busy || _state.value.backupRunning) return
-        _state.update { it.copy(phase = Phase.CONNECTING) }
-        viewModelScope.launch {
-            if (startSession()) {
-                ensureFirstBackup()
-                _state.update { it.copy(phase = Phase.READY) }
-                open("/")
-            }
-        }
-    }
+    fun connect() = connectSession(browse = true, restorePath = false)
 
     /**
      * Starts a fresh helper and session from inside the browser, and puts the
@@ -315,25 +309,35 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
      * to the modem that went away), and restarting a healthy helper costs two
      * seconds and puts the read-only lock back on, nothing more.
      */
-    fun reconnect() {
+    fun reconnect() = connectSession(browse = true, restorePath = true)
+
+    fun reconnectFeatures() = connectSession(browse = false, restorePath = false)
+
+    private fun connectSession(browse: Boolean, restorePath: Boolean) {
         if (_state.value.phase == Phase.CONNECTING || _state.value.busy || _state.value.backupRunning) return
-        val savedPath = _state.value.path
+        val savedPath = if (restorePath) _state.value.path else "/"
         val featureSlot = (_state.value.features as? FeaturesState.Ready)?.simSlot
         closeFeatures()
-        _state.update { it.copy(phase = Phase.CONNECTING) }
+        browserLoaded = false
+        _state.update { it.copy(phase = Phase.CONNECTING, initialBackupComplete = false, cloudBackupComplete = false) }
         viewModelScope.launch {
             if (!startSession()) return@launch
-            ensureFirstBackup()
             _state.update { it.copy(phase = Phase.READY) }
-            if (featureSlot != null) checkFeatures(featureSlot)
-            // Inline rather than open(): a failed read here must fall back to
-            // the root instead of leaving an error toast over an empty list.
-            val (path, entries) = runCatching { savedPath to repo.list(savedPath) }
-                .getOrElse { "/" to runCatching { repo.list("/") }.getOrDefault(emptyList()) }
-            _state.update {
-                val s = it.copy(path = path, entries = entries).withoutSheet()
-                if (path != savedPath) s.copy(searchActive = false, searchQuery = "") else s
-            }
+            if (featureSlot != null) openFeatures(featureSlot)
+            verifyFirstBackup(browse, savedPath)
+        }
+    }
+
+    private suspend fun loadBrowser(savedPath: String) {
+        val (path, entries) = try { savedPath to repo.list(savedPath) }
+        catch (t: Exception) {
+            if (t is CancellationException) throw t
+            "/" to runCatching { repo.list("/") }.getOrDefault(emptyList())
+        }
+        browserLoaded = true
+        _state.update {
+            val loaded = it.copy(path = path, entries = entries).withoutSheet()
+            if (path != savedPath) loaded.copy(searchActive = false, searchQuery = "") else loaded
         }
     }
 
@@ -344,14 +348,16 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
             return false
         }
         if (!hasStorageAccess(getApplication())) {
-            _state.update { it.copy(storageGranted = false, toast = "请先授予所有文件访问权限") }
+            _state.update { it.copy(phase = Phase.DISCONNECTED, storageGranted = false, toast = "请先授予所有文件访问权限") }
             return false
         }
         _state.update { it.copy(phase = Phase.CONNECTING, error = null) }
-        logger.record("开始连接基带，详细日志=${_state.value.verbose}")
         return try {
-            logger.beginNativeSession()
-            val (info, log) = repo.connect(_state.value.verbose)
+            val (info, log) = withContext(Dispatchers.IO) {
+                logger.record("开始连接基带，详细日志=${_state.value.verbose}")
+                logger.beginNativeSession()
+                repo.connect(_state.value.verbose)
+            }
             _state.update {
                 it.copy(
                     phase = Phase.CONNECTING,
@@ -361,11 +367,11 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
                     log = log,
                 )
             }
-            logger.record("基带连接成功：${info.transport}，后台版本 ${info.version}")
+            withContext(Dispatchers.IO) { logger.record("基带连接成功：${info.transport}，后台版本 ${info.version}") }
             true
         } catch (t: Throwable) {
             if (t is CancellationException) throw t
-            logger.record("基带连接失败：${t.message}")
+            logger.error("基带连接失败", t)
             logger.captureNative()
             _state.update {
                 it.copy(
@@ -388,6 +394,7 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
                 storageGranted = it.storageGranted,
                 initialBackupComplete = it.initialBackupComplete,
                 cloudBackupComplete = it.cloudBackupComplete,
+                cloudBackupEnabled = it.cloudBackupEnabled,
                 cloudBackupMessage = it.cloudBackupMessage,
                 initialBackupError = it.initialBackupError,
                 backupPartitionNames = it.backupPartitionNames,
@@ -415,6 +422,7 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
                 storageGranted = it.storageGranted,
                 initialBackupComplete = it.initialBackupComplete,
                 cloudBackupComplete = it.cloudBackupComplete,
+                cloudBackupEnabled = it.cloudBackupEnabled,
                 cloudBackupMessage = it.cloudBackupMessage,
                 initialBackupError = it.initialBackupError,
                 backupPartitionNames = it.backupPartitionNames,
@@ -607,12 +615,71 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
 
     fun requestRawBackup() {
         if (_state.value.busy || _state.value.backupRunning || featuresJob?.isActive == true || bulkRun?.isActive == true) return
+        if (_state.value.phase != Phase.READY) return
+        if (_state.value.cloudBackupEnabled == null) {
+            askAboutCloud(capture = true)
+            return
+        }
         viewModelScope.launch { performRawBackup() }
+    }
+
+    private fun askAboutCloud(capture: Boolean) {
+        captureAfterCloudChoice = capture
+        _state.update { it.copy(askCloudBackup = true) }
+    }
+
+    fun chooseCloudBackup(enabled: Boolean) {
+        if (!_state.value.askCloudBackup || _state.value.busy || _state.value.cloudBackupEnabled != null) return
+        if (!setCloudBackupEnabled(enabled)) return
+        val capture = captureAfterCloudChoice
+        _state.update { it.copy(askCloudBackup = false) }
+        if (capture) viewModelScope.launch { performRawBackup() }
+        else if (enabled && !_state.value.cloudBackupComplete) retryCloudBackup()
+    }
+
+    internal fun setCloudBackupEnabled(enabled: Boolean): Boolean {
+        if (_state.value.busy || _state.value.backupRunning) return false
+        return try {
+            cloudBackup.uploadEnabled = enabled
+            _state.update { it.copy(cloudBackupEnabled = enabled, cloudBackupMessage = null) }
+            true
+        } catch (t: Exception) {
+            logger.error("无法保存云备份设置", t)
+            _state.update { it.copy(toast = describe(t)) }
+            false
+        }
+    }
+
+    internal suspend fun listCloudBackups() = cloudBackup.listBackups()
+
+    internal suspend fun deleteCloudBackup(id: String) {
+        check(!_state.value.busy && !_state.value.backupRunning) { "请等待当前操作完成" }
+        _state.update { it.copy(busy = true) }
+        try {
+            cloudBackup.deleteBackup(id)
+            val uploaded = withContext(Dispatchers.IO) { backupStorage.recordedCoverage()?.let(cloudBackup::hasReceipt) == true }
+            _state.update { it.copy(cloudBackupComplete = uploaded, cloudBackupMessage = null) }
+        } catch (t: Exception) {
+            if (t is CancellationException) throw t
+            logger.error("删除云备份失败", t)
+            throw t
+        } finally { _state.update { it.copy(busy = false) } }
     }
 
     private fun startBackup(path: String, tar: Boolean) {
         if (_state.value.busy || _state.value.backupRunning || featuresJob?.isActive == true || bulkRun?.isActive == true) return
         viewModelScope.launch { performBackup(path, tar) }
+    }
+
+    private fun verifyFirstBackup(browse: Boolean, path: String = _state.value.path) {
+        if (backupVerificationJob?.isActive == true || _state.value.askCloudBackup) return
+        _state.update { it.copy(busy = true, busyLabel = "正在验证本地分区备份", initialBackupComplete = false) }
+        backupVerificationJob = viewModelScope.launch {
+            try {
+                if (browse && !browserLoaded) loadBrowser(path)
+                ensureFirstBackup()
+            } finally { _state.update { it.copy(busy = false, busyLabel = null) } }
+        }
     }
 
     private suspend fun ensureFirstBackup() {
@@ -629,18 +696,22 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
             }
         } } catch (t: Throwable) {
             if (t is CancellationException) throw t
+            logger.error("无法验证分区覆盖范围", t)
             if (repo.connected) runCatching { repo.setReadOnly(true) }
             _state.update { it.copy(initialBackupComplete = false, cloudBackupComplete = false, readOnly = true,
                 initialBackupError = describe(t), toast = "无法验证分区覆盖范围：${describe(t)}") }
             return
         }
-        _state.update { it.copy(initialBackupComplete = complete) }
-        if (!complete) { _state.update { it.copy(cloudBackupComplete = false) }; performRawBackup() }
-        else if (!_state.value.cloudBackupComplete) performCloudBackup()
+        val uploaded = complete && withContext(Dispatchers.IO) { backupStorage.recordedCoverage()?.let(cloudBackup::hasReceipt) == true }
+        _state.update { it.copy(initialBackupComplete = complete, cloudBackupComplete = uploaded, initialBackupError = null) }
+        when {
+            _state.value.cloudBackupEnabled == null -> askAboutCloud(capture = !complete)
+            !complete -> performRawBackup()
+        }
     }
 
     fun retryCloudBackup() {
-        if (_state.value.busy || _state.value.backupRunning) return
+        if (_state.value.busy || _state.value.backupRunning || _state.value.cloudBackupEnabled != true) return
         viewModelScope.launch { performCloudBackup() }
     }
 
@@ -650,19 +721,28 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
         startBackupLog()
         try {
             check(withContext(Dispatchers.IO) { backupStorage.hasInitialBackup() }) { "请先完成本地分区备份" }
-            if (repo.connected) repo.setReadOnly(true)
-            _state.update { it.copy(readOnly = true) }
-            val baseline = withContext(Dispatchers.IO) { backupStorage.recordedBaseline() } ?: error("没有本地基线清单")
-            cloudBackup.ensure(baseline, ::cloudProgress)
             val coverage = withContext(Dispatchers.IO) { backupStorage.recordedCoverage() } ?: error("没有分区覆盖清单")
-            if (coverage.manifest != baseline.manifest) cloudBackup.ensure(coverage, ::cloudProgress)
-            _state.update { it.copy(initialBackupComplete = true, cloudBackupComplete = true,
-                cloudBackupMessage = "云端完整校验成功", initialBackupError = null, backupBypassed = false) }
-        } catch (t: Throwable) {
+            uploadBackup(coverage)
+        } catch (t: Exception) {
             if (t is CancellationException) throw t
-            cloudProgress("云备份未完成：${describe(t)}；写入仍锁定")
-            _state.update { it.copy(cloudBackupComplete = false, initialBackupError = describe(t), toast = describe(t)) }
+            recordCloudFailure(t)
         } finally { finishBackup() }
+    }
+
+    private suspend fun uploadBackup(backup: RawBackup) {
+        try {
+            cloudBackup.ensure(backup, ::cloudProgress)
+            _state.update { it.copy(cloudBackupComplete = true, cloudBackupMessage = "云端备份已校验") }
+        } catch (t: Exception) {
+            if (t is CancellationException) throw t
+            recordCloudFailure(t)
+        }
+    }
+
+    private fun recordCloudFailure(error: Throwable) {
+        val message = "云备份未完成：${describe(error)}"
+        logger.error("云备份失败", error)
+        _state.update { it.copy(cloudBackupComplete = false, cloudBackupMessage = message, toast = message) }
     }
 
     private fun cloudProgress(message: String) {
@@ -689,14 +769,13 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
 
     private suspend fun performRawBackup() {
         if (_state.value.backupRunning) return
-        if (!withContext(Dispatchers.IO) { QualcommPlatform.isQualcomm() }) {
-            _state.update { it.copy(toast = "仅高通平台允许 EFS 备份") }; return
-        }
         _state.update { it.copy(backupRunning = true, backupIsRaw = true, busy = true,
-            backupMessage = "正在准备 EFS/NV 原始分区备份…", initialBackupError = null, backupBypassed = false) }
+            backupMessage = "正在准备 EFS/NV 原始分区备份…", initialBackupError = null, cloudBackupMessage = null, backupBypassed = false) }
         logger.record("原始分区备份开始；只读采集，全部校验通过后才满足首次备份门槛")
         startBackupLog()
         try {
+            check(withContext(Dispatchers.IO) { QualcommPlatform.isQualcomm() }) { "仅高通平台允许 EFS 备份" }
+            check(_state.value.cloudBackupEnabled != null) { "请先选择是否上云" }
             check(hasStorageAccess(getApplication())) { "请先授予所有文件访问权限" }
             check(repo.connected) { "请先连接基带" }
             // No app writes can occur during acquisition; also leave the helper read-only afterward.
@@ -712,23 +791,16 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
                 backupStorage.acceptRawBaseline(raw)
                 raw
             }
-            _state.update { it.copy(initialBackupComplete = true, cloudBackupComplete = false) }
-            val baseline = withContext(Dispatchers.IO) { backupStorage.recordedBaseline() }
-            check(baseline != null) { "首次分区基线清单不可用" }
-            cloudBackup.ensure(baseline, ::cloudProgress)
-            if (baseline.manifest != backup.manifest) cloudBackup.ensure(backup, ::cloudProgress)
-            check(withContext(Dispatchers.IO) { cloudBackup.hasReceipt(baseline) }) { "首次分区基线尚未完成云备份" }
             val message = "EFS/NV 分区备份已保存并通过校验：${backup.directory.absolutePath}"
             logger.record(message)
-            _state.update { it.copy(initialBackupComplete = true, cloudBackupComplete = true, initialBackupError = null,
+            _state.update { it.copy(initialBackupComplete = true, cloudBackupComplete = false, initialBackupError = null,
                 lastBackupPath = backup.directory.absolutePath, toast = message) }
+            if (_state.value.cloudBackupEnabled == true) uploadBackup(backup)
         } catch (t: Throwable) {
             if (t is CancellationException) throw t
-            logger.record("原始分区备份失败：${t.message}")
-            val stillValid = withContext(Dispatchers.IO) { backupStorage.hasInitialBackup() }
-            _state.update { it.copy(initialBackupComplete = stillValid,
-                cloudBackupComplete = false, cloudBackupMessage = if (stillValid) describe(t) else it.cloudBackupMessage,
-                initialBackupError = describe(t), toast = "备份链未完成：${describe(t)}") }
+            logger.error("原始分区备份失败", t)
+            _state.update { it.copy(initialBackupComplete = false, cloudBackupComplete = false,
+                initialBackupError = describe(t), toast = "本地备份未完成：${describe(t)}") }
         } finally {
             finishBackup()
         }
@@ -775,7 +847,7 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
             }
         } catch (t: Throwable) {
             if (t is CancellationException) throw t
-            logger.record("备份失败：${t.message}")
+            logger.error("文件备份失败", t)
             val message = describe(t)
             _state.update { it.copy(toast = "文件导出失败：$message") }
         } finally {
@@ -783,24 +855,19 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
         }
     }
 
-    fun onStoragePermissionChanged(granted: Boolean) {
+    fun onStoragePermissionChanged(granted: Boolean, browse: Boolean = true) {
         _state.update { it.copy(storageGranted = granted) }
         if (!granted) {
             _state.update { it.copy(readOnly = true) }
             viewModelScope.launch { if (repo.connected) runCatching { repo.setReadOnly(true) } }
             return
         }
-        if (moduleEntryJob?.isActive == true) return
-        moduleEntryJob = viewModelScope.launch {
-            val complete = withContext(Dispatchers.IO) { backupStorage.hasInitialBackup() }
-            _state.update { it.copy(initialBackupComplete = complete, readOnly = if (complete) it.readOnly else true) }
-            val state = _state.value
-            when (moduleEntryAction(state.phase, state.busy, state.backupRunning, repo.connected)) {
-                ModuleEntryAction.CONNECT -> connect()
-                ModuleEntryAction.RECONNECT -> reconnect()
-                ModuleEntryAction.VERIFY -> ensureFirstBackup()
-                ModuleEntryAction.WAIT -> Unit
-            }
+        val state = _state.value
+        when (moduleEntryAction(state.phase, state.busy, state.backupRunning, repo.connected)) {
+            ModuleEntryAction.CONNECT -> connectSession(browse, restorePath = false)
+            ModuleEntryAction.RECONNECT -> connectSession(browse, restorePath = true)
+            ModuleEntryAction.VERIFY -> verifyFirstBackup(browse)
+            ModuleEntryAction.WAIT -> Unit
         }
     }
 
@@ -809,7 +876,6 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
         check(!_state.value.backupRunning) { "备份进行中，暂不可修改" }
         if (_state.value.backupBypassed) return
         check(_state.value.initialBackupComplete && !_state.value.backupRunning) { "首次 EFS/NV 分区备份尚未通过校验，写入保持锁定，请先备份" }
-        check(_state.value.cloudBackupComplete) { "完整云备份尚未通过校验，写入保持锁定" }
     }
 
     fun requestBackupBypass() {
@@ -882,7 +948,7 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
                     toast = "离线恢复包已生成。请在 Recovery/救援环境操作，应用未写入分区") }
             } catch (t: Throwable) {
                 if (t is CancellationException) throw t
-                logger.record("恢复包准备失败：${t.message}")
+                logger.error("恢复包准备失败", t)
                 _state.update { it.copy(toast = "恢复校验失败：${describe(t)}，可手动选择云端备份包") }
             } finally { finishBackup() }
         }

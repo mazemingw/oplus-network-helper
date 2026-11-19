@@ -10,6 +10,8 @@
     <string name="mtk_no_band_lock">Порт AT %1$s не підтримує блокування діапазонів</string>
     <string name="mtk_current_bands_unreadable">Не вдалося прочитати поточні діапазони з %1$s</string>
     <string name="mtk_no_epbseh">Цей модем не підтримує AT+EPBSEH, тож у нього може не бути 5G.</string>
+    <string name="mtk_bands_left_off">Модем не ввімкнув діапазони %1$s: %2$s.</string>
+    <string name="mtk_bands_off_when_unlocked">Навіть після розблокування модем не вмикає в цій мережі діапазони %1$s: %2$s. Тому їх приховано на екрані «Діапазони».</string>
 
     <string name="oem_working_through">Робота через %1$s.</string>
     <string name="oem_no_passthrough">На цьому телефоні не відповів жоден канал передавання OEM-запитів.</string>
@@ -22,4 +24,6 @@
     <string name="oem_probe_failed">%1$s завершилося помилкою: %2$s</string>
     <string name="oem_probe_replied">%1$s відповів: %2$s</string>
     <string name="oem_probe_silent">%1$s не відповів.</string>
+    <string name="cell_hint_mtk_at">Використовує AT+EMMCHLCK, який підтримує лише одне блокування одночасно. PCI необов\'язковий, а для застосування блокування радіомодуль перезапускається.</string>
+    <string name="cell_hint_mtk_hal">Цей модем не приймає AT+EMMCHLCK, тому частота (ARFCN) блокується через Radio HAL. Так не можна заблокувати на PCI, а деякі модеми це ігнорують.</string>
 </resources>

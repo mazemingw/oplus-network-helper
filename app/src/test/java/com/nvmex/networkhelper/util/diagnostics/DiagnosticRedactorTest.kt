@@ -30,6 +30,12 @@ class DiagnosticRedactorTest {
         assertFalse(result.contains("01 02 03"))
     }
 
+    @Test fun hotspotCredentialsAreRemovedFromComponentLogs() {
+        val result = DiagnosticRedactor.redact("""networkName: "Guest Hotspot", passphrase=guest-secret, preSharedKey="old key" """)
+        for (value in listOf("Guest Hotspot", "guest-secret", "old key")) assertFalse(result.contains(value))
+        for (key in listOf("networkName", "passphrase", "pre_shared_key")) assertTrue(DiagnosticRedactor.isSensitiveKey(key))
+    }
+
     @Test fun structuredSecretsAreRecognizedWithoutDependingOnValueFormat() {
         listOf("password", "vault_secret", "OSSAccessKeyId", "phoneNumber", "SSID", "latitude", "hardware_serial", "IMEI1")
             .forEach { assertTrue(it, DiagnosticRedactor.isSensitiveKey(it)) }

@@ -433,9 +433,10 @@
  *   opened lazily and bound once with BIND_CLIENT_SIM (0x0045). The control
  *   client (s->fd / s->sim) is never used or rebound here, so monitoring
  *   SIM 2 cannot make a later band/cell-lock write target the wrong SIM,
- *   and s->diag / s->last_op are untouched. Per-read receive timeout is
- *   NAS_READ_TIMEOUT_MS; a send failure closes that SIM's monitoring
- *   socket so the next request reopens it.
+ *   and s->diag is untouched. A rejected bind supplies its own error code
+ *   in s->last_op for this response. Binding has its own receive timeout;
+ *   a send failure closes that SIM's monitoring socket so the next batch
+ *   reopens it.
  *   Also: build fix -- the two struct copies in nr_indep_probe_one() now
  *   use copy() instead of `*out_diag=s->diag`, which compilers lower to a
  *   memcpy call that a -nostdlib link cannot resolve. No behavior change.
@@ -944,6 +945,7 @@ static void set_stage(char*stage,u32 cap,const char*v);
 #define NAS_READ_PAYLOAD_MAX 32
 #define NAS_READ_RX_MAX 2048
 #define NAS_READ_TIMEOUT_MS 300
+#define NAS_BIND_TIMEOUT_MS 1200
 enum { NR_ST_OK=0, NR_ST_TIMEOUT=1, NR_ST_SEND_FAILED=2, NR_ST_BAD_FRAME=3, NR_ST_NOT_ALLOWED=4 };
 struct nas_read_result{u16 msg;int status;u32 ms;u32 rx_len;u8 rx[NAS_READ_RX_MAX];};
 static struct nas_read_result nas_read_results[NAS_READ_MAX];
@@ -1002,18 +1004,29 @@ static void mon_close(struct state*s,int idx){if(s->mon_fd[idx]>=0)sc1(SYS_close
 /* Opens and binds the monitoring client for one SIM, if not already open. */
 static int mon_open(struct state*s,int sim){
  int idx=sim-1;struct sockaddr_qrtr a;struct timeval64 tv;u32 node,port;s64 fd;
- u8 p[4]={1,1,0,0},r[128];u32 n;int st;
+ u8 p[4]={1,1,0,0},r[128];u32 n=0;int st=NR_ST_TIMEOUT;
+ u16 result=0,error=0;
  if(s->mon_fd[idx]>=0)return 1;
  if(!discover_service(NAS_SERVICE,&node,&port)){setstatus(s,"Monitoring: NAS discovery failed.");return 0;}
  fd=sc3(SYS_socket,AF_QIPCRTR,SOCK_DGRAM,0);if(fd<0){setstatus(s,"Monitoring: NAS socket failed.");return 0;}
- tv.sec=0;tv.usec=NAS_READ_TIMEOUT_MS*1000;
+ tv.sec=NAS_BIND_TIMEOUT_MS/1000;tv.usec=(NAS_BIND_TIMEOUT_MS%1000)*1000;
  if(sc5(SYS_setsockopt,fd,SOL_SOCKET,SO_RCVTIMEO,(s64)&tv,sizeof(tv))<0){sc1(SYS_close,fd);setstatus(s,"Monitoring: socket setup failed.");return 0;}
  a.family=AF_QIPCRTR;a.pad=0;a.node=node;a.port=port;
  if(sc3(SYS_connect,fd,(s64)&a,sizeof(a))<0){sc1(SYS_close,fd);setstatus(s,"Monitoring: NAS connect failed.");return 0;}
  p[3]=(u8)(sim-1);
- if(!mon_exchange(fd,MSG_BIND,p,4,r,sizeof(r),&n,&st)||st!=NR_ST_OK||!result_ok(r,n)){
-  sc1(SYS_close,fd);setstatus(s,sim==2?"Monitoring: SIM 2 bind failed.":"Monitoring: SIM 1 bind failed.");return 0;
+ if(!mon_exchange(fd,MSG_BIND,p,4,r,sizeof(r),&n,&st)||st!=NR_ST_OK||!parse_result(r,n,&result,&error)||result!=0){
+  sc1(SYS_close,fd);
+  if(st==NR_ST_SEND_FAILED)setstatus(s,"Monitoring: NAS bind send failed.");
+  else if(st==NR_ST_TIMEOUT)setstatus(s,"Monitoring: NAS bind timed out.");
+  else if(st!=NR_ST_OK||result==0)setstatus(s,"Monitoring: malformed NAS bind response.");
+  else{
+   s->last_op.have_reply=1;s->last_op.have_result=1;s->last_op.result=result;s->last_op.error=error;
+   setstatus(s,sim==2?"Monitoring: SIM 2 bind rejected.":"Monitoring: SIM 1 bind rejected.");
+  }
+  return 0;
  }
+ tv.sec=0;tv.usec=NAS_READ_TIMEOUT_MS*1000;
+ if(sc5(SYS_setsockopt,fd,SOL_SOCKET,SO_RCVTIMEO,(s64)&tv,sizeof(tv))<0){sc1(SYS_close,fd);setstatus(s,"Monitoring: read timeout setup failed.");return 0;}
  s->mon_fd[idx]=fd;return 1;
 }
 
@@ -1060,7 +1073,8 @@ static int cmd_nas_read(struct state*s,const char*req,char*stage,u32 stage_cap){
   r->msg=msg;r->rx_len=0;r->ms=0;
   allowed=nas_read_allowed(msg);
   if(allowed<0||plen>(u16)allowed){r->status=NR_ST_NOT_ALLOWED;continue;}
-  if(s->mon_fd[sim-1]<0&&!mon_open(s,sim)){r->status=NR_ST_SEND_FAILED;continue;}
+  /* A failed send releases the socket. The next batch will bind a fresh client. */
+  if(s->mon_fd[sim-1]<0){r->status=NR_ST_SEND_FAILED;continue;}
   t0=now_ms();
   {u32 n=0;int st=NR_ST_TIMEOUT;
    if(mon_exchange(s->mon_fd[sim-1],msg,pl,plen,r->rx,sizeof(r->rx),&n,&st))r->rx_len=n;

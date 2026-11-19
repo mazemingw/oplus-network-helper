@@ -1,11 +1,17 @@
-package dev.ririxi.bunnylock.root
+package dev.ririxi.bunnylock.backend.qualcomm
 
 import androidx.annotation.StringRes
 import dev.ririxi.bunnylock.core.Bands
 import dev.ririxi.bunnylock.core.toIntList
+import dev.ririxi.bunnylock.modem.Masks
 import dev.ririxi.bunnylock.modem.R
 import dev.ririxi.bunnylock.modem.Text
 import dev.ririxi.bunnylock.modem.toJson
+import dev.ririxi.bunnylock.root.Aosp
+import dev.ririxi.bunnylock.root.LittleEndian
+import dev.ririxi.bunnylock.root.Reader
+import dev.ririxi.bunnylock.root.fail
+import dev.ririxi.bunnylock.root.hex
 import org.json.JSONArray
 import org.json.JSONObject
 import java.io.ByteArrayOutputStream
@@ -182,14 +188,19 @@ object Qualcomm {
     private const val DMS_MODE_RESET = 4
 
     private const val NETWORK_SELECTION_AUTOMATIC = 0
-    private const val NETWORK_SELECTION_MANUAL = 1
+    const val NETWORK_SELECTION_MANUAL = 1
+
+    private const val MODE_PREFERENCE_GSM = 0x04
+    private const val MODE_PREFERENCE_UMTS = 0x08
+    private const val MODE_PREFERENCE_LTE = 0x10
+    private const val MODE_PREFERENCE_NR = 0x40
 
     private const val NR_MODE_SA_AND_NSA = 0L
 
-    private const val NR_LOCK_TYPE_PCI = 0
-    private const val NR_LOCK_TYPE_ARFCN = 1
+    const val NR_LOCK_TYPE_PCI = 0
+    const val NR_LOCK_TYPE_ARFCN = 1
     private const val NR_LOCK_TYPE_NONE = 2
-    private const val NR_LOCK_TYPE_MULTI_PCI = 3
+    const val NR_LOCK_TYPE_MULTI_PCI = 3
     private const val NR_LOCK_MAX_PCIS_PER_FREQUENCY = 8
 
     private const val PS_ATTACH = 1
@@ -471,7 +482,6 @@ object Qualcomm {
                 }
 
                 "nr" -> {
-                    // One accepted mask is enough. When all three are refused, the first refusal is reported.
                     val results = setAllNrMasks(client, Bands.toMask(bands, NR_MASK_BYTES), persist)
                     if (results.none { it.ok }) results.first().check(R.string.qc_op_nr_band_lock)
                 }
@@ -560,18 +570,27 @@ object Qualcomm {
         return JSONObject().put("restored", true)
     }
 
-    /** QMI mode preference bits: GSM 0x04, UMTS 0x08, LTE 0x10, NR5G 0x40. */
     fun setRat(
         sim: Int,
-        mask: Int,
+        mask: Long,
         persist: Boolean,
     ): JSONObject {
+        val modePreference = modePreferenceOf(mask)
         nas(sim) { client ->
             client
-                .send(NAS_SET_SSP, sspRequest(persist).add(TLV_SSP_MODE_PREFERENCE, LittleEndian.u16(mask)))
+                .send(NAS_SET_SSP, sspRequest(persist).add(TLV_SSP_MODE_PREFERENCE, LittleEndian.u16(modePreference)))
                 .check(R.string.qc_op_network_mode)
         }
-        return JSONObject().put("rat", mask)
+        return JSONObject().put("rat", modePreference)
+    }
+
+    private fun modePreferenceOf(mask: Long): Int {
+        var modePreference = 0
+        if (mask and Masks.G2 != 0L) modePreference = modePreference or MODE_PREFERENCE_GSM
+        if (mask and Masks.G3 != 0L) modePreference = modePreference or MODE_PREFERENCE_UMTS
+        if (mask and Masks.G4 != 0L) modePreference = modePreference or MODE_PREFERENCE_LTE
+        if (mask and Masks.G5 != 0L) modePreference = modePreference or MODE_PREFERENCE_NR
+        return modePreference
     }
 
     /** 0 = SA + NSA, 1 = NSA only, 2 = SA only. */

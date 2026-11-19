@@ -1,0 +1,5 @@
+<resources>
+    <string name="unisoc_reply_unreadable">Модем не повідомив діапазони на запит %1$s. Відповідь: %2$s</string>
+    <string name="unisoc_bands_unsettable">Блокування діапазонів цього модема не може охоплювати %1$s.</string>
+    <string name="unisoc_bands_kept">Модем прийняв нові діапазони, але після перезапуску радіомодуля використовує попередні.</string>
+</resources>

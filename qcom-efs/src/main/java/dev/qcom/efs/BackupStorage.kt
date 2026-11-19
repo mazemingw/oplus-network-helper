@@ -210,6 +210,15 @@ class EfsLogger(private val context: Context, private val publicRoot: File) {
 
     @Synchronized fun record(message: String) {
         DiagnosticEvents.record("efs", message)
+        write(message)
+    }
+
+    @Synchronized fun error(operation: String, cause: Throwable) {
+        if ((cause as? EfsException)?.efsErrno != 2) DiagnosticEvents.error("efs", cause, operation)
+        write("$operation：${cause.message}")
+    }
+
+    private fun write(message: String) {
         val now = System.currentTimeMillis()
         if (now - (lastMessages[message] ?: 0L) < 10_000) return
         lastMessages[message] = now

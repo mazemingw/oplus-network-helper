@@ -92,7 +92,6 @@ object DiagnosticReporter {
         }
         DiagnosticEvents.listener = { source, message, error ->
             if (error != null) report(source, error, mapOf("operation" to message))
-            else if (Regex("失败|错误|异常|未纳入|(?i:error|failed|exception)").containsMatchIn(message)) report(source, message)
             else info(source, message)
         }
         scope.launch {
@@ -152,6 +151,11 @@ object DiagnosticReporter {
     fun info(source: String, message: String) { recordConsole(DiagnosticLevel.INFO, source, message) }
     fun warning(source: String, message: String) { recordConsole(DiagnosticLevel.WARNING, source, message) }
 
+    /** Component logs go to the redacted console without becoming automatic error reports. */
+    fun component(level: DiagnosticLevel, source: String, message: String, detail: String = "") {
+        recordConsole(level, source, message, detail)
+    }
+
     private fun recordConsole(level: DiagnosticLevel, source: String, message: String, detail: String = ""): Boolean {
         if (!console.append(level, source, message, detail)) return false
         synchronized(lock) {
@@ -186,7 +190,10 @@ object DiagnosticReporter {
                 if (source == "efs") {
                     context["efsLog"] = efsLogTail()
                     context["nativeLog"] = tail(RootDaemon.logFile(application!!), 16000)
-                    if (message.contains("备份") || message.contains("存储")) context["storageTopology"] = DiagnosticDevice.storageTopology()
+                    val operation = context["operation"].orEmpty()
+                    if (listOf(message, operation).any { it.contains("备份") || it.contains("存储") }) {
+                        context["storageTopology"] = DiagnosticDevice.storageTopology()
+                    }
                 }
                 persist(source, message, stack, "error", context, epoch)
             }
@@ -197,6 +204,7 @@ object DiagnosticReporter {
         val id = UUID.randomUUID().toString()
         val report = JSONObject().put("schema", 1).put("id", id).put("occurredAt", System.currentTimeMillis())
             .put("source", source.take(100)).put("severity", severity).put("message", message.take(4000))
+            .put("explicitError", true)
             .put("stack", stack.orEmpty().take(16000)).put("device", JSONObject(device.toString()))
             .put("context", JSONObject(details.entries.take(12).associate { it.key.take(100) to it.value.take(12000) }))
         synchronized(lock) {
@@ -248,7 +256,8 @@ object DiagnosticReporter {
             if (!file.isFile) { marker.delete(); continue }
             try {
                 val report = JSONObject(file.readText())
-                if (storedLevel(report.optString("source"), report.optString("message")) != DiagnosticLevel.ERROR) {
+                if (!DiagnosticLogPolicy.canAutoUpload(report.optString("severity"), report.optString("source"),
+                        report.optString("message"), report.optString("stack"), report.optBoolean("explicitError"))) {
                     marker.delete(); continue
                 }
                 val uploadIdentity = identity ?: DiagnosticDevice.imei(app).also { identity = it }
@@ -467,7 +476,7 @@ object DiagnosticReporter {
                     process.inputStream.bufferedReader().useLines { lines -> lines.forEach { line ->
                         val match = linePattern.matchEntire(line) ?: return@forEach
                         val tag = match.groupValues[3].trim(); val message = match.groupValues[4]
-                        if (tag == "DiagnosticReporter" || tag == "QcomEfs") return@forEach
+                        if (tag in setOf("DiagnosticReporter", "QcomEfs", "VpnHotspot")) return@forEach
                         logcatCollector.accept(tag, match.groupValues[1], match.groupValues[2], message).forEach(::handleCapturedLog)
                     } }
                 } finally { process.destroyForcibly() }

@@ -122,5 +122,18 @@ int nh_test_run(void){
              &ok,&did_set,&shutdown_req,stage,sizeof(stage));
   if(ok||cell_request_len||!eq(stage,"bad_request"))return 17;
  }
+ /* Monitoring failures preserve the bind reason/code without borrowing or closing the control socket. */
+ reset_mock();setup(&s,1);reject_bind=1;reject_error=7;
+ {int ok,did_set,shutdown_req;char stage[16];s64 code=0;
+  const char*req="{\"cmd\":\"nas_read\",\"sim\":2,\"reads\":[\"005a:01010008\"]}";
+  do_command(&s,req,&ok,&did_set,&shutdown_req,stage,sizeof(stage));
+  build_response(&s,req,ok,stage,response,sizeof(response));
+  if(ok||did_set||closed_old||s.mon_fd[1]!=-1||last_subscription!=1||
+     !eq(s.status,"Monitoring: SIM 2 bind rejected.")||!json_get_int(response,"code",&code)||code!=7)return 18;
+ }
+ reset_mock();setup(&s,1);timeout_first_bind=1;
+ if(mon_open(&s,1)||s.mon_fd[0]!=-1||s.last_op.have_result||
+    !eq(s.status,"Monitoring: NAS bind timed out."))return 19;
+ if(!mon_open(&s,1)||s.mon_fd[0]<0||closed_old||bind_calls!=2)return 20;
  return 0;
 }

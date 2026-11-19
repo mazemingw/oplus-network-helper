@@ -1,0 +1,5 @@
+<resources>
+    <string name="unisoc_reply_unreadable">Modem nie zwrócił pasm dla %1$s. Odpowiedź: %2$s</string>
+    <string name="unisoc_bands_unsettable">Blokada pasm w tym modemie nie może objąć %1$s.</string>
+    <string name="unisoc_bands_kept">Modem przyjął nowe pasma, ale po restarcie radia nadal używa starych.</string>
+</resources>

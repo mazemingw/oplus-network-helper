@@ -44,4 +44,6 @@
 
     <string name="server_unknown_subscription">Эта SIM-карта не найдена среди активных.</string>
     <string name="server_unknown_command">Неизвестная команда: %1$s.</string>
+    <string name="cell_hint_hal">Блокирует частоту (ARFCN) через Radio HAL. Этот бэкенд не может заблокировать на PCI, а некоторые модемы (например, стоковый Qualcomm) применяют только диапазон и игнорируют канал.</string>
+    <string name="cell_plmn_hint_android">Используется ручной выбор сети Android, который сохраняется после перезагрузки.</string>
 </resources>

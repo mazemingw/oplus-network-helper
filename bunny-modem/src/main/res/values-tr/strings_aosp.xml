@@ -1,0 +1,49 @@
+<resources>
+    <string name="aosp_sentences">%1$s %2$s</string>
+    <string name="aosp_with_details">%1$s (%2$s)</string>
+    <string name="aosp_unknown_error">bilinmeyen hata</string>
+
+    <string name="aosp_no_method">Bu Android sürümü ITelephony.%1$s yöntemini sunmuyor.</string>
+
+    <string name="aosp_held_back">Android, %1$s özelliğini şimdilik etkinleştirmiyor: %2$s.</string>
+    <string name="aosp_held_back_power">güç tasarrufu (Pil Tasarrufu veya Uyarlanabilir Bağlantı) etkin</string>
+    <string name="aosp_held_back_carrier">operatör ayarlarında %1$s özelliğine yer verilmiyor</string>
+    <string name="aosp_held_back_2g">\"2G\'ye izin ver\" ayarı kapalı</string>
+
+    <string name="aosp_plmn_not_registered">%1$s %2$s şebekesine kayıt olunamadı. Şebeke kapsama alanı dışında olabilir veya bu SIM kartın bağlanmasına izin vermiyor olabilir.</string>
+
+    <string name="aosp_mode_refused">Radyo birimi bu şebeke modunu reddetti.</string>
+    <string name="aosp_mode_refused_restored">Radyo birimi bu şebeke modunu reddetti. Önceki şebeke modu geri yüklendi.</string>
+    <string name="aosp_mode_refused_radio_off">Radyo birimi, kapalı durumdayken bu şebeke modunu reddetti.</string>
+
+    <string name="aosp_nr_dc_unavailable">Radyo birimi şu anda kullanılamıyor.</string>
+    <string name="aosp_nr_dc_error">Radyo birimi bir hata döndürdü. EN-DC geçişini desteklemiyor olabilir.</string>
+    <string name="aosp_nr_dc_refused">Radyo birimi bu EN-DC durumunu kabul etmedi.</string>
+    <string name="aosp_nr_dc_code">Radyo birimi %1$d hata kodunu döndürdü.</string>
+
+    <string name="aosp_ims_kept">Android önceki ayarı korudu. Bu SIM\'in operatör ayarları söz konusu değişikliğe izin vermiyor olabilir.</string>
+
+    <string name="aosp_no_subscription">Android\'de bu SIM için etkin bir abonelik bulunmuyor. Bu nedenle kilit gönderilemiyor. SIM kartın takılı ve etkin olduğunu, ayrıca bunnylock uygulamasına Telefon izni verildiğini kontrol edin.</string>
+    <string name="aosp_channels_rejected">Android\'in radyo hizmeti kanal kilidini reddetti.</string>
+    <string name="aosp_channels_rejected_fewer">Android\'in radyo hizmeti kanal kilidini reddetti. Bu telefonda %1$d veya daha az bant seçmek işe yarayabilir.</string>
+    <string name="aosp_channels_rejected_split">Android\'in radyo hizmeti, bantlar %1$d bantlık gruplara bölündüğünde de kanal kilidini reddetti. Bu telefonda %1$d veya daha az bant seçmek işe yarayabilir.</string>
+    <string name="aosp_channels_not_started">Android\'in radyo hizmeti kanal kilidini başlatamadı.</string>
+
+    <string name="aosp_reboot_refused">Radyo HAL\'i modem yeniden başlatma isteğini reddetti.</string>
+    <string name="aosp_no_sim_radio_restart">Bu Android sürümü tek bir SIM\'in radyo birimini yeniden başlatamıyor.</string>
+    <string name="aosp_sim_radio_off">Bu SIM\'in radyo birimi kapalı.</string>
+    <string name="aosp_radio_not_on">Radyo birimi yeniden açılamadı; istek reddedildi: %1$s.</string>
+    <string name="aosp_radio_not_off">Radyo birimi kapatılamadı; istek reddedildi: %1$s.</string>
+
+    <string name="sys_samsung_menu_denied">Samsung, bant menüsünün yalnızca kendi uygulamaları tarafından açılmasına izin veriyor.</string>
+    <string name="sys_samsung_menu_missing">Bu telefonda Samsung bant menüsü bulunamadı.</string>
+
+    <string name="samsung_no_nr_mode">Bu telefonda Samsung\'un 5G mod kontrolü bulunmuyor.</string>
+    <string name="samsung_nr_mode_refused">Samsung\'un telefon hizmeti bu 5G modunu kabul etmedi.</string>
+    <string name="samsung_nr_mode_data_sim_only">Bu telefonda Samsung\'un 5G modu yalnızca mobil veri SIM\'i üzerinden değiştirilebilir. Önce mobil veri bağlantısını bu SIM\'e geçirin.</string>
+
+    <string name="server_unknown_subscription">Bu SIM\'in aboneliği tanınmıyor.</string>
+    <string name="server_unknown_command">Bilinmeyen komut: %1$s.</string>
+    <string name="cell_hint_hal">Radyo HAL\'i üzerinden frekansı (ARFCN) kilitler. Bu arka uç PCI kilitlemesi yapamaz ve bazı modemler (örneğin stok Qualcomm modemleri) yalnızca bandı uygulayıp kanalı yok sayar.</string>
+    <string name="cell_plmn_hint_android">Yeniden başlatma sonrasında da korunan Android\'in manuel şebeke seçimini kullanır.</string>
+</resources>

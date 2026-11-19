@@ -68,7 +68,7 @@
     <string name="modem_note_kept_lock_refused">解锁后手机仍保留旧的锁定，并拒绝了 bunnylock 尝试发送的所有全频段列表。</string>
     <string name="modem_note_kept_lock_renamed">解锁后手机仍保留旧的锁定，因此 bunnylock 重新下发了全部频段。</string>
     <string name="modem_note_nr_bands_limit">这台手机一次最多只接受 %1$d 个 5G 频段，因此现在启用的是：%2$s。</string>
-    <string name="modem_note_legacy_back">2G 和 3G 已恢复，但 GSM 1800 可能仍处于关闭状态：这台手机的射频软件不认识这个频段。</string>
+    <string name="modem_note_legacy_back">2G 和 3G 已恢复，但 GSM 1800 可能仍处于关闭状态：这台手机的 RIL 不认识这个频段。</string>
     <string name="modem_note_qc_lte_off">这个基带只能在关闭射频时更改 LTE 锁小区，因此短暂开启了飞行模式。</string>
 
     <string name="modem_lock_unconfirmed">%1$s（基带未确认）</string>
@@ -86,7 +86,8 @@
     <string name="modem_last_network">至少要保留一种网络。</string>
     <string name="modem_nr_list_too_long">这台手机一次最多只能锁定 %1$d 个 5G 频段，请选择不超过 %1$d 个。</string>
     <string name="modem_note_needs_channels">这台手机锁频段时还需要附带可见频点，因此 bunnylock 已把它们一并加入锁定。</string>
-    <string name="modem_no_gsm_1800">这台手机的射频软件不认识 GSM 1800，因此拒绝只锁定 1800 的 2G 锁。</string>
+    <string name="modem_note_bands_left_out">这台手机的 RIL 拒绝了包含 %1$s 的锁定，因此 bunnylock 只锁定了其余所选频段。</string>
+    <string name="modem_no_gsm_1800">这台手机的 RIL 不认识 GSM 1800，因此拒绝只锁定 1800 的 2G 锁。</string>
     <string name="modem_note_fell_back">只锁频段时这台手机回落到了 2G 或 3G，因此已连同可见频点重新锁定。以后 bunnylock 在这台手机上都会这样做。</string>
     <string name="modem_note_band_lock_ignored">Android 已接受 %1$s 锁定，但手机仍驻留在 %2$s。这个基带似乎不理会以这种方式下发的锁频段。</string>
     <string name="modem_note_samsung_menu_hint">可以试试“频段”页面里三星自带的频段菜单。</string>
@@ -111,7 +112,7 @@
     <string name="modem_note_mtk_one_pci">联发科只能锁定一个 PCI，因此只使用了 PCI %1$d。</string>
     <string name="modem_unknown_earfcn">EARFCN %1$d 不属于任何已知的 LTE 频段。</string>
     <string name="modem_unknown_nr_arfcn">ARFCN %1$d 不属于任何已知的 NR 频段。</string>
-    <string name="modem_note_band_only">这台手机的射频软件不接受频点锁定，因此只锁定了频段（%1$s）。</string>
+    <string name="modem_note_band_only">这台手机的 RIL 不接受频点锁定，因此只锁定了频段（%1$s）。</string>
     <string name="modem_note_cell_lock_ignored">Android 已接受锁小区，但手机仍驻留在 %1$s。这个基带似乎不理会以这种方式下发的锁频点。</string>
     <string name="modem_note_frequency_only">只锁定了频点。射频 HAL 无法锁定 PCI。</string>
 

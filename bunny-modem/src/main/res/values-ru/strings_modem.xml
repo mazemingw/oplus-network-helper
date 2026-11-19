@@ -68,7 +68,7 @@
     <string name="modem_note_kept_lock_refused">Этот телефон сохранил старую блокировку после разблокировки и отклонил все варианты полного списка диапазонов, которые пробовал bunnylock.</string>
     <string name="modem_note_kept_lock_renamed">Этот телефон сохранил старую блокировку после разблокировки, поэтому bunnylock явно перечислил все диапазоны заново.</string>
     <string name="modem_note_nr_bands_limit">Он принимает только %1$d диапазонов 5G за раз, поэтому сейчас включены: %2$s.</string>
-    <string name="modem_note_legacy_back">2G и 3G снова включены, хотя GSM 1800 может остаться выключенным: ПО радиомодуля этого телефона не умеет его указывать.</string>
+    <string name="modem_note_legacy_back">2G и 3G снова включены, хотя GSM 1800 может остаться выключенным: RIL этого телефона не умеет его указывать.</string>
     <string name="modem_note_qc_lte_off">Этот модем меняет блокировку соты LTE только при выключенном радиомодуле, поэтому режим полёта ненадолго включался.</string>
 
     <string name="modem_lock_unconfirmed">%1$s (не подтверждено модемом)</string>
@@ -86,7 +86,8 @@
     <string name="modem_last_network">Хотя бы одна сеть должна оставаться включённой.</string>
     <string name="modem_nr_list_too_long">Этот телефон принимает только %1$d диапазонов 5G в одной блокировке, поэтому выберите не более %1$d.</string>
     <string name="modem_note_needs_channels">Этому телефону нужны видимые частоты вместе с выбранными диапазонами, поэтому bunnylock включил их в блокировку.</string>
-    <string name="modem_no_gsm_1800">ПО радиомодуля этого телефона не знает GSM 1800, поэтому оно отказывается блокировать 2G только на 1800.</string>
+    <string name="modem_note_bands_left_out">RIL этого телефона отклонил блокировку, включающую %1$s, поэтому bunnylock заблокировал остальные выбранные диапазоны.</string>
+    <string name="modem_no_gsm_1800">RIL этого телефона не знает GSM 1800, поэтому он отказывается блокировать 2G только на 1800.</string>
     <string name="modem_note_fell_back">Этот телефон переключился на 2G или 3G с блокировкой только диапазонов, поэтому блокировка была выполнена заново с видимыми частотами. Теперь bunnylock будет делать так на этом телефоне.</string>
     <string name="modem_note_band_lock_ignored">Android принял блокировку %1$s, но телефон по-прежнему на %2$s. Похоже, этот модем не соблюдает блокировки диапазонов, отправленные таким способом.</string>
     <string name="modem_note_samsung_menu_hint">Вместо этого может сработать Samsung Band Menu на экране «Диапазоны».</string>
@@ -111,7 +112,7 @@
     <string name="modem_note_mtk_one_pci">MediaTek блокируется на одном PCI, поэтому использован только PCI %1$d.</string>
     <string name="modem_unknown_earfcn">EARFCN %1$d не входит ни в один известный диапазон LTE.</string>
     <string name="modem_unknown_nr_arfcn">ARFCN %1$d не входит ни в один известный диапазон NR.</string>
-    <string name="modem_note_band_only">ПО радиомодуля этого телефона не принимает блокировки каналов, поэтому был заблокирован только диапазон (%1$s).</string>
+    <string name="modem_note_band_only">RIL этого телефона не принимает блокировки каналов, поэтому был заблокирован только диапазон (%1$s).</string>
     <string name="modem_note_cell_lock_ignored">Android принял блокировку соты, но телефон по-прежнему на %1$s. Похоже, этот модем не соблюдает блокировки частот, отправленные таким способом.</string>
     <string name="modem_note_frequency_only">Заблокирована только частота. Radio HAL не умеет блокировать на PCI.</string>
 

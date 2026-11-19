@@ -102,6 +102,7 @@ fun QmiBandLockScreen(onBack: () -> Unit, legacyVm: QmiBandLockViewModel = viewM
     var consumedQuickId by rememberSaveable(driver) { mutableStateOf<String?>(null) }
     var pendingCell by remember(ui.sim) { mutableStateOf<QmiCellInput?>(null) }
     LaunchedEffect(Unit) {
+        if (quickRequest == null) legacyVm.resetQuickControl()
         com.nvmex.networkhelper.util.modem.SystemQmiServices.channelsBlocked.first { !it }
         if (drivers.selected.value.isBunny) drivers.connect(quickRequest?.sim ?: initialSim, releaseLegacy)
         else if (supported && quickRequest == null) {
@@ -118,8 +119,8 @@ fun QmiBandLockScreen(onBack: () -> Unit, legacyVm: QmiBandLockViewModel = viewM
         }
     }
     ObserveBandNetwork(ui.sim, vm, networkVm, legacyMonitoring && !driverBusy && ui.device?.controlReady == true)
-    LaunchedEffect(driver, bunnyState.supportsPciLock) {
-        if (bunny && !bunnyState.supportsPciLock) cell = cell.copy(
+    LaunchedEffect(driver, bunnyState.features.pciLock) {
+        if (bunny && !bunnyState.features.pciLock) cell = cell.copy(
             mode = if (cell.mode in setOf(QmiCellMode.NR_PCI, QmiCellMode.NR_MULTI_PCI)) QmiCellMode.NR_ARFCN else cell.mode, pcis = "")
     }
     pendingCell?.let { input ->
@@ -241,7 +242,7 @@ fun QmiBandLockScreen(onBack: () -> Unit, legacyVm: QmiBandLockViewModel = viewM
                             add(QmiCellMode.LTE)
                             if (bunnyState.supports5g) {
                                 add(QmiCellMode.NR_ARFCN)
-                                if (bunnyState.supportsPciLock) add(QmiCellMode.NR_PCI)
+                                if (bunnyState.features.pciLock) add(QmiCellMode.NR_PCI)
                                 if (bunnyState.backend == dev.ririxi.bunnylock.modem.Backend.QUALCOMM) add(QmiCellMode.NR_MULTI_PCI)
                             }
                             add(QmiCellMode.PLMN)
@@ -252,15 +253,15 @@ fun QmiBandLockScreen(onBack: () -> Unit, legacyVm: QmiBandLockViewModel = viewM
                                 onClick = { cell = qmiCellWithDefaultScs(cell.copy(mode = mode)) },
                                 colors = lockSelectionColors(),
                                 leadingIcon = if (cell.mode == mode) ({ Icon(Icons.Default.Check, null, Modifier.size(16.dp)) }) else null,
-                                label = { Text(if (bunny && mode == QmiCellMode.LTE && !bunnyState.supportsPciLock) "LTE 频点" else stringResource(cellModeLabel(mode))) })
+                                label = { Text(if (bunny && mode == QmiCellMode.LTE && !bunnyState.features.pciLock) "LTE 频点" else stringResource(cellModeLabel(mode))) })
                         }
                     }
                     ServingCellPrefill(ui.sim, enabled, networkVm, cell,
                         modem = if (bunny) bunnyState else null, refresh = if (bunny) drivers::refresh else null) {
-                        cell = if (bunny && !bunnyState.supportsPciLock) it.copy(
+                        cell = if (bunny && !bunnyState.features.pciLock) it.copy(
                             mode = if (it.mode == QmiCellMode.LTE) QmiCellMode.LTE else QmiCellMode.NR_ARFCN, pcis = "") else it
                     }
-                    if (bunny && !bunnyState.supportsPciLock) Text("此后端仅支持频点锁定，不支持 PCI 锁定。", style = MaterialTheme.typography.bodySmall)
+                    if (bunny && !bunnyState.features.pciLock) Text("此后端仅支持频点锁定，不支持 PCI 锁定。", style = MaterialTheme.typography.bodySmall)
                     when (cell.mode) {
                         QmiCellMode.PLMN -> Input(cell.plmn, stringResource(R.string.qmi_plmn_label), enabled) { cell = cell.copy(plmn = it) }
                         QmiCellMode.NR_GNB -> {
@@ -271,7 +272,7 @@ fun QmiBandLockScreen(onBack: () -> Unit, legacyVm: QmiBandLockViewModel = viewM
                             Input(cell.channel, if (cell.mode == QmiCellMode.LTE) "EARFCN" else "NR-ARFCN", enabled) {
                                 cell = qmiCellWithDefaultScs(cell.copy(channel = it))
                             }
-                            if (cell.mode != QmiCellMode.NR_ARFCN && (!bunny || bunnyState.supportsPciLock)) Input(cell.pcis, stringResource(R.string.qmi_pci_label), enabled) {
+                            if (cell.mode != QmiCellMode.NR_ARFCN && (!bunny || bunnyState.features.pciLock)) Input(cell.pcis, stringResource(R.string.qmi_pci_label), enabled) {
                                 val changed = qmiCellWithPciText(cell, it)
                                 cell = if (bunny && bunnyState.backend != dev.ririxi.bunnylock.modem.Backend.QUALCOMM && changed.mode == QmiCellMode.NR_MULTI_PCI)
                                     changed.copy(mode = QmiCellMode.NR_PCI) else changed

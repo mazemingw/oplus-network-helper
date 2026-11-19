@@ -10,6 +10,8 @@
     <string name="mtk_no_band_lock">Port AT %1$s nie obsługuje blokady pasm</string>
     <string name="mtk_current_bands_unreadable">Nie da się odczytać bieżących pasm z %1$s</string>
     <string name="mtk_no_epbseh">Ten modem nie obsługuje AT+EPBSEH, więc pewnie nie ma 5G.</string>
+    <string name="mtk_bands_left_off">Modem nie włączył pasm %1$s: %2$s.</string>
+    <string name="mtk_bands_off_when_unlocked">Nawet po odblokowaniu modem nie włącza w tej sieci pasm %1$s: %2$s. Dlatego są ukryte w zakładce „Pasma”.</string>
 
     <string name="oem_working_through">Działa przez %1$s.</string>
     <string name="oem_no_passthrough">Na tym telefonie nie odpowiedział żaden kanał żądań OEM.</string>
@@ -22,4 +24,6 @@
     <string name="oem_probe_failed">%1$s – błąd: %2$s</string>
     <string name="oem_probe_replied">%1$s odpowiada: %2$s</string>
     <string name="oem_probe_silent">%1$s nie odpowiada.</string>
+    <string name="cell_hint_mtk_at">Używa AT+EMMCHLCK, które trzyma tylko jedną blokadę naraz. PCI jest opcjonalne, a radio restartuje się, żeby zastosować blokadę.</string>
+    <string name="cell_hint_mtk_hal">Ten modem nie obsługuje AT+EMMCHLCK, więc częstotliwość (ARFCN) jest blokowana przez radio HAL. W ten sposób nie da się zablokować PCI, a niektóre modemy w ogóle to ignorują.</string>
 </resources>

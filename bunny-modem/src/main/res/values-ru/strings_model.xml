@@ -2,6 +2,7 @@
     <string name="backend_qualcomm">Qualcomm QMI</string>
     <string name="backend_mediatek">MediaTek AT</string>
     <string name="backend_pixel">Pixel (Tensor NV)</string>
+    <string name="backend_unisoc">Unisoc AT</string>
     <string name="backend_android">Android Radio HAL</string>
 
     <string name="net_mode_auto">Авто</string>

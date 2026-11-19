@@ -75,7 +75,7 @@ internal object DiagnosticLogPolicy {
     private val frameworkNoise = Regex("(?i)^(?:VRI\\[|HWUI|BLASTBufferQueue|BufferQueue|DynamicFramerate|OplusBracketLog|VibratorInfo|chromium|cr_|Gms|ServiceBindIntentUtils|SchedAssist|ashmem|OplusPredictiveBackController|SettingTrigger|MI-PreRender|XQos|LB$|FPS-BOOST|IJankManager|InterceptorProxy-Helper|FramePredict|TurboSchedMonitor|CheckBoxHook--)")
     private val runtimeNoise = Regex("(?i)\\[perfctl]|\\[ALTAIR]|Unsupported class loader:|Missing inline cache|Cleared Reference was only reachable|failed to read IDMAP|Failed to open file.*@idmap")
     fun level(tag: String, priority: String, message: String): DiagnosticLevel = when {
-        critical.containsMatchIn(message) -> DiagnosticLevel.ERROR
+        (priority == "E" || priority == "F") && critical.containsMatchIn(message) -> DiagnosticLevel.ERROR
         frameworkNoise.containsMatchIn(tag) || (tag == "ActivityThread" && message.contains("provider info")) -> DiagnosticLevel.INFO
         runtimeNoise.containsMatchIn(message) -> DiagnosticLevel.INFO
         priority == "E" || priority == "F" -> DiagnosticLevel.ERROR
@@ -84,5 +84,11 @@ internal object DiagnosticLogPolicy {
     }
     fun expectedModemRefusal(source: String, message: String) = source == "efs" &&
         Regex("(?i)target rejected|bad length|bad command|not supported|不支持|基带拒绝").containsMatchIn(message)
+    fun canAutoUpload(severity: String, source: String, message: String, stack: String, explicitError: Boolean): Boolean {
+        if (severity !in setOf("error", "fatal") || expectedModemRefusal(source, message)) return false
+        // Old EFS progress messages could be promoted by words like “失败=0”. They never had a stack trace.
+        if (source == "efs" && !explicitError && stack.isBlank()) return false
+        return !source.startsWith("logcat/") || level(source.removePrefix("logcat/"), "E", "$message\n$stack") == DiagnosticLevel.ERROR
+    }
     fun signature(message: String) = message.replace(Regex("(?i)@[0-9a-f]{4,}|0x[0-9a-f]{6,}"), "@*")
 }

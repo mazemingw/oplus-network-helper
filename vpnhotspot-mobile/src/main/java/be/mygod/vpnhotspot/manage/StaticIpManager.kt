@@ -17,7 +17,6 @@ import be.mygod.vpnhotspot.BR
 import be.mygod.vpnhotspot.R
 import be.mygod.vpnhotspot.StaticIpSetter
 import be.mygod.vpnhotspot.databinding.ListitemStaticIpBinding
-import be.mygod.vpnhotspot.util.formatAddresses
 import be.mygod.vpnhotspot.util.showAllowingStateLoss
 import kotlinx.parcelize.Parcelize
 
@@ -29,13 +28,11 @@ class StaticIpManager(private val parent: TetheringFragment) : Manager(), Defaul
     }
 
     inner class Data : BaseObservable() {
-        private var iface = StaticIpSetter.iface
-        val active: Boolean @Bindable get() = iface != null
-        val addresses: CharSequence @Bindable get() = iface?.formatAddresses() ?: ""
+        val active: Boolean @Bindable get() = StaticIpSetter.active
+        val addresses: CharSequence @Bindable get() = StaticIpSetter.addresses
 
         fun onChanged() {
-            iface = StaticIpSetter.iface
-            notifyPropertyChanged(BR.serviceStarted)
+            notifyPropertyChanged(BR.active)
             notifyPropertyChanged(BR.addresses)
         }
 

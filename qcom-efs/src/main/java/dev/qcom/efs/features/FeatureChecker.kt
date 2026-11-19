@@ -56,12 +56,20 @@ class FeatureChecker(private val access: FeatureItemAccess) {
 
     suspend fun check(features: List<FeatureDef>, slot: Int): FeatureCheck {
         val statuses = mutableMapOf<String, FeatureStatus>()
+        val reads = mutableMapOf<String, Result<List<Int>?>>()
         for (feature in features) {
             val perPath = mutableListOf<List<Int>?>()
             var readError: String? = null
             for (r in feature.reads) {
                 try {
-                    perPath += access.read(slotPath(r, slot))
+                    val path = slotPath(r, slot)
+                    perPath += reads.getOrPut(path) {
+                        try { Result.success(access.read(path)) }
+                        catch (t: Exception) {
+                            if (t is CancellationException) throw t
+                            Result.failure(t)
+                        }
+                    }.getOrThrow()
                 } catch (t: Throwable) {
                     if (t is CancellationException) throw t
                     readError = t.message ?: "read failed"

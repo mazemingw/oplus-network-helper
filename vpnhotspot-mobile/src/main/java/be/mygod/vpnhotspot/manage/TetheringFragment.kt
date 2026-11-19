@@ -2,7 +2,10 @@ package be.mygod.vpnhotspot.manage
 
 import android.annotation.TargetApi
 import android.bluetooth.BluetoothManager
-import android.content.*
+import android.content.ComponentName
+import android.content.DialogInterface
+import android.content.Intent
+import android.content.ServiceConnection
 import android.os.Build
 import android.os.Bundle
 import android.os.IBinder
@@ -21,13 +24,15 @@ import androidx.recyclerview.widget.DefaultItemAnimator
 import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.recyclerview.widget.ListAdapter
 import androidx.recyclerview.widget.RecyclerView
-import be.mygod.vpnhotspot.*
+import be.mygod.vpnhotspot.AlertDialogFragment
 import be.mygod.vpnhotspot.App.Companion.app
+import be.mygod.vpnhotspot.MainActivity
+import be.mygod.vpnhotspot.R
+import be.mygod.vpnhotspot.RepeaterService
+import be.mygod.vpnhotspot.TetheringService
 import be.mygod.vpnhotspot.databinding.FragmentTetheringBinding
+import be.mygod.vpnhotspot.net.TetherStates
 import be.mygod.vpnhotspot.net.TetherType
-import be.mygod.vpnhotspot.net.TetheringManagerCompat
-import be.mygod.vpnhotspot.net.TetheringManagerCompat.localOnlyTetheredIfaces
-import be.mygod.vpnhotspot.net.TetheringManagerCompat.tetheredIfaces
 import be.mygod.vpnhotspot.net.monitor.TetherTimeoutMonitor
 import be.mygod.vpnhotspot.net.wifi.SoftApConfigurationCompat
 import be.mygod.vpnhotspot.net.wifi.SoftApConfigurationCompat.Companion.toCompat
@@ -35,7 +40,11 @@ import be.mygod.vpnhotspot.net.wifi.WifiApDialogFragment
 import be.mygod.vpnhotspot.net.wifi.WifiApManager
 import be.mygod.vpnhotspot.root.RootManager
 import be.mygod.vpnhotspot.root.WifiApCommands
-import be.mygod.vpnhotspot.util.*
+import be.mygod.vpnhotspot.util.ServiceForegroundConnector
+import be.mygod.vpnhotspot.util.Services
+import be.mygod.vpnhotspot.util.getRootCause
+import be.mygod.vpnhotspot.util.isNotGone
+import be.mygod.vpnhotspot.util.showAllowingStateLoss
 import be.mygod.vpnhotspot.widget.SmartSnackbar
 import com.google.android.material.snackbar.Snackbar
 import kotlinx.coroutines.CancellationException
@@ -49,7 +58,7 @@ import java.net.SocketException
 
 class TetheringFragment : Fragment(), ServiceConnection, Toolbar.OnMenuItemClickListener {
     inner class ManagerAdapter : ListAdapter<Manager, RecyclerView.ViewHolder>(Manager),
-        TetheringManagerCompat.TetheringEventCallback {
+        TetherStates.Callback {
         internal val repeaterManager by lazy { RepeaterManager(this@TetheringFragment) }
         internal val localOnlyHotspotManager by lazy { LocalOnlyHotspotManager(this@TetheringFragment) }
         private val staticIpManager by lazy { StaticIpManager(this@TetheringFragment) }
@@ -68,22 +77,21 @@ class TetheringFragment : Fragment(), ServiceConnection, Toolbar.OnMenuItemClick
         @get:RequiresApi(30)
         private val ethernetManager by lazy @TargetApi(30) { TetherManager.Ethernet(this@TetheringFragment) }
 
-        var activeIfaces = emptyList<String>()
-        var localOnlyIfaces = emptyList<String>()
-        var erroredIfaces = emptyList<String>()
+        private var tetherStates = TetherStates()
         private var listDeferred = CompletableDeferred<List<Manager>>(emptyList())
-        fun updateEnabledTypes() {
-            this@TetheringFragment.enabledTypes =
-                (activeIfaces + localOnlyIfaces).map { TetherType.ofInterface(it) }.toSet()
+        fun updateTetheredTypes() {
+            this@TetheringFragment.tetheredTypes =
+                tetherStates.tethered.map { TetherType.ofInterface(it) }.toSet()
         }
 
-        val lastErrors = mutableMapOf<String, Int>()
-        override fun onError(ifName: String, error: Int) {
-            if (error == 0) lastErrors.remove(ifName) else lastErrors[ifName] = error
+        override fun onTetherStatesChanged(states: TetherStates) {
+            tetherStates = states
+            updateTetheredTypes()
+            update()
         }
 
         suspend fun notifyTetherTypeChanged() {
-            updateEnabledTypes()
+            updateTetheredTypes()
             val lastList = listDeferred.await()
             var first = lastList.indexOfFirst { it is InterfaceManager }
             withStarted {
@@ -110,15 +118,15 @@ class TetheringFragment : Fragment(), ServiceConnection, Toolbar.OnMenuItemClick
             list.add(localOnlyHotspotManager)
             list.add(staticIpManager)
             val monitoredIfaces = binder?.monitoredIfaces ?: emptyList()
-            updateMonitorList(activeIfaces - monitoredIfaces.toSet())
-            list.addAll((activeIfaces + monitoredIfaces).toSortedSet()
+            updateMonitorList(tetherStates.tethered - monitoredIfaces.toSet())
+            list.addAll((tetherStates.tethered + monitoredIfaces).toSortedSet()
                     .map { InterfaceManager(this@TetheringFragment, it) })
             list.add(ManageBar)
             list.addAll(tetherManagers)
-            tetherManagers.forEach { it.updateErrorMessage(erroredIfaces, lastErrors) }
+            tetherManagers.forEach { it.updateErrorMessage(tetherStates) }
             if (Build.VERSION.SDK_INT >= 30) {
                 list.add(ethernetManager)
-                ethernetManager.updateErrorMessage(erroredIfaces, lastErrors)
+                ethernetManager.updateErrorMessage(tetherStates)
             }
             submitList(list) { deferred.complete(list) }
         }
@@ -145,20 +153,12 @@ class TetheringFragment : Fragment(), ServiceConnection, Toolbar.OnMenuItemClick
     }
 
     var ifaceLookup: Map<String, NetworkInterface> = emptyMap()
-    var enabledTypes = emptySet<TetherType>()
+    var tetheredTypes = emptySet<TetherType>()
     private lateinit var binding: FragmentTetheringBinding
     var binder: TetheringService.Binder? = null
     private val adapter = ManagerAdapter()
-    private val receiver = broadcastReceiver { _, intent ->
-        adapter.activeIfaces = intent.tetheredIfaces ?: return@broadcastReceiver
-        adapter.localOnlyIfaces = intent.localOnlyTetheredIfaces ?: return@broadcastReceiver
-        adapter.erroredIfaces = intent.getStringArrayListExtra(TetheringManagerCompat.EXTRA_ERRORED_TETHER)
-            ?: return@broadcastReceiver
-        adapter.updateEnabledTypes()
-        adapter.update()
-    }
 
-    private fun updateMonitorList(canMonitor: List<String> = emptyList()) {
+    private fun updateMonitorList(canMonitor: Collection<String> = emptySet()) {
         val activity = activity as? MainActivity
         val item = activity?.binding?.toolbar?.menu?.findItem(R.id.monitor) ?: return   // assuming no longer foreground
         item.isNotGone = canMonitor.isNotEmpty()
@@ -211,7 +211,7 @@ class TetheringFragment : Fragment(), ServiceConnection, Toolbar.OnMenuItemClick
                             return@launch
                         } catch (eRoot: Exception) {
                             eRoot.addSuppressed(e)
-                            if (Build.VERSION.SDK_INT >= 29 || eRoot.getRootCause() !is SecurityException) {
+                            if (Build.VERSION.SDK_INT >= 30 || eRoot.getRootCause() !is SecurityException) {
                                 Timber.w(eRoot)
                             }
                             SmartSnackbar.make(eRoot).show()
@@ -320,13 +320,12 @@ class TetheringFragment : Fragment(), ServiceConnection, Toolbar.OnMenuItemClick
                 withStarted { adapter.update() }
             }
         }
-        requireContext().registerReceiver(receiver, IntentFilter(TetheringManagerCompat.ACTION_TETHER_STATE_CHANGED))
         if (Build.VERSION.SDK_INT >= 30) {
-            TetheringManagerCompat.registerTetheringEventCallback(adapter)
             TetherType.listener[this] = {
                 lifecycleScope.launch { adapter.notifyTetherTypeChanged() }
             }
         }
+        TetherStates.registerCallback(adapter)
     }
 
     override fun onServiceDisconnected(name: ComponentName?) {
@@ -334,9 +333,7 @@ class TetheringFragment : Fragment(), ServiceConnection, Toolbar.OnMenuItemClick
         binder = null
         if (Build.VERSION.SDK_INT >= 30) {
             TetherType.listener -= this
-            TetheringManagerCompat.unregisterTetheringEventCallback(adapter)
-            adapter.lastErrors.clear()
         }
-        requireContext().unregisterReceiver(receiver)
+        TetherStates.unregisterCallback(adapter)
     }
 }

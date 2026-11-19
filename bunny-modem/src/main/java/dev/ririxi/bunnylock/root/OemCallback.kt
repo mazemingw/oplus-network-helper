@@ -62,7 +62,6 @@ class OemCallback(
             }
         }
 
-    /** The text arguments joined by newlines. Numbers are only read past, and reading stops at a type whose size in the parcel isn't known. */
     private fun readText(
         parameterTypes: Array<Class<*>>,
         data: Parcel,
@@ -97,7 +96,6 @@ class OemCallback(
     fun await(timeoutMs: Long): Boolean = latch.await(timeoutMs, TimeUnit.MILLISECONDS)
 
     companion object {
-        /** An AIDL interface, as opposed to a plain IBinder parameter. */
         fun isCallback(type: Class<*>): Boolean =
             type.isInterface && !IBinder::class.java.isAssignableFrom(type) && IInterface::class.java.isAssignableFrom(type)
     }

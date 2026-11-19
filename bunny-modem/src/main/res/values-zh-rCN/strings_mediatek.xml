@@ -10,6 +10,8 @@
     <string name="mtk_no_band_lock">AT 端口 %1$s 不支持锁频段</string>
     <string name="mtk_current_bands_unreadable">无法从 %1$s 读取当前频段</string>
     <string name="mtk_no_epbseh">该基带不支持 AT+EPBSEH，可能不支持 5G。</string>
+    <string name="mtk_bands_left_off">基带未启用 %1$s 频段：%2$s。</string>
+    <string name="mtk_bands_off_when_unlocked">在此网络上，即使解锁后基带也不启用 %1$s 频段：%2$s。“频段”页面会将其隐藏。</string>
 
     <string name="oem_working_through">正在通过 %1$s 工作。</string>
     <string name="oem_no_passthrough">此手机上没有响应的 OEM 请求透传通道。</string>
@@ -22,4 +24,6 @@
     <string name="oem_probe_failed">%1$s 失败：%2$s</string>
     <string name="oem_probe_replied">%1$s 返回：%2$s</string>
     <string name="oem_probe_silent">%1$s 无响应。</string>
+    <string name="cell_hint_mtk_at">使用 AT+EMMCHLCK，同一时间只能保留一个锁定。PCI 可不填，射频会重启以应用锁定。</string>
+    <string name="cell_hint_mtk_hal">此基带不支持 AT+EMMCHLCK，改为通过射频 HAL 锁定频点（ARFCN）。这种方式无法锁 PCI，部分基带会直接忽略。</string>
 </resources>

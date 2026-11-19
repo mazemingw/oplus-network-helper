@@ -66,14 +66,13 @@ object Carriers {
 
     private fun carrierOf(json: JSONObject): Carrier? {
         val rat = Rat.entries.firstOrNull { it.name == json.optString("rat") } ?: return null
-        return Carrier(
-            rat,
-            json.optBoolean("primary"),
-            if (json.has("channel")) json.optLong("channel") else null,
-            json.intOrNull("pci"),
-            json.intOrNull("band"),
-            json.intOrNull("bandwidth")?.takeIf { it > 0 },
-        )
+        val arfcn = if (json.has("channel")) json.optLong("channel") else null
+        val band = json.intOrNull("band")
+        val bandwidthKhz = json.intOrNull("bandwidth")?.takeIf { it > 0 }
+        // Oplus radios leave every field of a 5G SA channel at 0, so PCI 0 next to nothing else isn't a real PCI.
+        val filledIn = arfcn !== null || band !== null || bandwidthKhz !== null
+        val pci = json.intOrNull("pci")?.takeIf { it != 0 || filledIn }
+        return Carrier(rat, json.optBoolean("primary"), arfcn, pci, band, bandwidthKhz)
     }
 
     // With NR-DC, some radios give the secondary cell group's primary cell the master group's channel.

@@ -1,6 +1,10 @@
-package dev.ririxi.bunnylock.root
+package dev.ririxi.bunnylock.backend.pixel
 
 import dev.ririxi.bunnylock.core.Bands
+import dev.ririxi.bunnylock.root.At
+import dev.ririxi.bunnylock.root.LittleEndian
+import dev.ririxi.bunnylock.root.Reader
+import dev.ririxi.bunnylock.root.unhex
 import org.json.JSONArray
 import org.json.JSONObject
 

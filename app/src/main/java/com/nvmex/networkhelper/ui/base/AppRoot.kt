@@ -77,6 +77,7 @@ import com.nvmex.networkhelper.model.network.NetworkPanelUiState
 import com.nvmex.networkhelper.ui.home.HomePlaybackBarState
 import com.nvmex.networkhelper.ui.cellparam.ImportCellParamsScreen
 import com.nvmex.networkhelper.ui.home.HomeScreen
+import com.nvmex.networkhelper.ui.home.MobileLockRecoveryPrompt
 import com.nvmex.networkhelper.ui.menu.CellQueryScreen
 import com.nvmex.networkhelper.ui.menu.BleScannerScreen
 import com.nvmex.networkhelper.ui.menu.EngineerBandLockDialog
@@ -95,12 +96,17 @@ import com.nvmex.networkhelper.ui.signalradar.SignalScanScreen
 import com.nvmex.networkhelper.ui.wifi.WifiScreen
 import com.nvmex.networkhelper.ui.wifi.WifiSettingsScreen
 import com.nvmex.networkhelper.util.home.detectOplusVendor
+import com.nvmex.networkhelper.util.modem.SystemQmiServices
+import com.nvmex.networkhelper.viewmodel.menu.ModemDriversViewModel
+import com.nvmex.networkhelper.viewmodel.menu.QmiBandLockViewModel
 import dev.chrisbanes.haze.hazeEffect
 import dev.chrisbanes.haze.hazeSource
 import dev.chrisbanes.haze.materials.ExperimentalHazeMaterialsApi
 import dev.chrisbanes.haze.materials.HazeMaterials
 import dev.chrisbanes.haze.rememberHazeState
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.withContext
 import java.io.File
 
@@ -113,6 +119,8 @@ fun AppRoot(
     navController: NavHostController = rememberNavController()
 ) {
     val sharedNetworkVm: com.nvmex.networkhelper.viewmodel.signal.NetworkPanelMultiSimViewModel = androidx.lifecycle.viewmodel.compose.viewModel()
+    val nativeLockVm: QmiBandLockViewModel = androidx.lifecycle.viewmodel.compose.viewModel()
+    val modemDriversVm: ModemDriversViewModel = androidx.lifecycle.viewmodel.compose.viewModel()
     // Capture the activity owner without creating the EFS session. Only the two opt-in routes instantiate it.
     val efsSessionOwner = androidx.lifecycle.viewmodel.compose.LocalViewModelStoreOwner.current!!
     var modemDataSlot by remember { mutableStateOf<Int?>(null) }
@@ -238,6 +246,8 @@ fun AppRoot(
                 QmiBandLockScreen(
                     onBack = { navController.popBackStack() },
                     networkVm = sharedNetworkVm,
+                    legacyVm = nativeLockVm,
+                    drivers = modemDriversVm,
                     contentBottomPadding = bottomBarHeight + bottomBarGap
                 )
             }
@@ -314,6 +324,7 @@ fun AppRoot(
                     EngineerBandLockScreen(onBack = { navController.popBackStack() })
                 } else {
                     QmiBandLockScreen(onBack = { navController.popBackStack() }, networkVm = sharedNetworkVm,
+                        legacyVm = nativeLockVm, drivers = modemDriversVm,
                         initialSim = entry.arguments?.getInt("sim")?.takeIf { it in 1..2 })
                 }
             }
@@ -326,6 +337,7 @@ fun AppRoot(
                     QmiQuickLockRequest.parse(entry.arguments?.getString("target").orEmpty())
                 }.getOrNull() }
                 QmiBandLockScreen(onBack = { navController.popBackStack() }, networkVm = sharedNetworkVm,
+                    legacyVm = nativeLockVm, drivers = modemDriversVm,
                     quickRequest = request)
             }
 
@@ -455,6 +467,29 @@ fun AppRoot(
                     showEngineerBandLockDialog = false
                     navController.navigate(Routes.ENGINEER_BAND_LOCK) {
                         launchSingleTop = true
+                    }
+                }
+            )
+
+            val nativeLockBusy by remember(nativeLockVm) {
+                nativeLockVm.state.map { it.busy }.distinctUntilChanged()
+            }.collectAsState(false)
+            val driversBusy by modemDriversVm.busy.collectAsState()
+            val channelsBlocked by SystemQmiServices.channelsBlocked.collectAsState()
+            MobileLockRecoveryPrompt(
+                enabled = currentRoute == Routes.HOME && !showEngineerBandLockDialog,
+                busy = nativeLockBusy || driversBusy || channelsBlocked,
+                unlock = { target, onComplete ->
+                    when {
+                        nativeLockVm.state.value.busy || modemDriversVm.busy.value || SystemQmiServices.channelsBlocked.value -> false
+                        modemDriversVm.selected.value.isBunny -> modemDriversVm.recoverLocks(target, releaseNative = {
+                            sharedNetworkVm.stopQmiMonitoring()
+                            nativeLockVm.releaseDriver()
+                        }) { success ->
+                            sharedNetworkVm.retryQmiMonitoring()
+                            onComplete(success)
+                        }
+                        else -> nativeLockVm.recoverLocks(target, onComplete)
                     }
                 }
             )

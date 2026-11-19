@@ -1,0 +1,44 @@
+<resources>
+    <string name="backend_qualcomm">Qualcomm QMI</string>
+    <string name="backend_mediatek">MediaTek AT</string>
+    <string name="backend_pixel">Pixel (Tensor NV)</string>
+    <string name="backend_unisoc">Unisoc AT</string>
+    <string name="backend_android">Android radyo HAL</string>
+
+    <string name="net_mode_auto">Otomatik</string>
+    <string name="net_mode_nr_lte">5G ve 4G</string>
+    <string name="net_mode_nr_only">Yalnızca 5G</string>
+    <string name="net_mode_lte_only">Yalnızca 4G</string>
+    <string name="net_mode_no_nr">5G kapalı</string>
+    <string name="net_mode_wcdma_only">Yalnızca 3G</string>
+    <string name="net_mode_gsm_only">Yalnızca 2G</string>
+
+    <string name="nr_mode_both">SA ve NSA</string>
+    <string name="nr_mode_nsa">Yalnızca NSA</string>
+    <string name="nr_mode_sa">Yalnızca SA</string>
+
+    <string name="lock_rat_lte">LTE</string>
+    <string name="lock_rat_nr">5G NR</string>
+    <string name="lock_rat_nsa">LTE ve NR</string>
+
+    <string name="vendor_qualcomm">Qualcomm Snapdragon</string>
+    <string name="vendor_mediatek">MediaTek</string>
+    <string name="vendor_tensor">Google Tensor (Shannon modemi)</string>
+    <string name="vendor_exynos">Samsung Exynos (Shannon modemi)</string>
+    <string name="vendor_unisoc">Unisoc</string>
+    <string name="vendor_unknown">Bilinmeyen modem</string>
+
+    <string name="plmn_home">Ana şebeke</string>
+    <string name="plmn_current">Mevcut</string>
+    <string name="plmn_visible">Görünür</string>
+
+    <string name="list_separator">", "</string>
+    <string name="list_and">%1$s ve %2$s</string>
+    <string name="list_or">%1$s veya %2$s</string>
+
+    <string name="helper_root">Root yardımcısı</string>
+    <string name="helper_shizuku">Shizuku yardımcısı</string>
+
+
+    <string name="something_went_wrong">Bir şeyler ters gitti.</string>
+</resources>

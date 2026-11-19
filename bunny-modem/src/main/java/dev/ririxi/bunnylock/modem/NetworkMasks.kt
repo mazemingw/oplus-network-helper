@@ -1,14 +1,17 @@
 package dev.ririxi.bunnylock.modem
 
-/** The network mode, or Auto when the phone doesn't report one. */
 internal val ModemState.netModeMask: Long
     get() = allowedMask ?: NetMode.AUTO.mask
 
-/** The network mode with only [locking] and the networks that have a band lock of their own left on. */
-internal fun ModemState.maskKeepingLocks(locking: Group): Long {
-    val kept = groups.filter { it.group == locking || it.locked }.map { it.group.generation }.toSet()
+/** The network mode with only [locking], [alsoKept] and the networks that have a band lock of their own left on. Only [locking] is turned on. */
+internal fun ModemState.maskKeepingLocks(
+    locking: Collection<Group>,
+    alsoKept: Collection<Group> = emptyList(),
+): Long {
+    val kept = groups.filter { it.group in locking || it.group in alsoKept || it.locked }.map { it.group.generation }.toSet()
     val dropped = groups.map { it.group.generation }.filter { it !in kept }
-    return dropped.fold(netModeMask or locking.generation) { mask, generation -> mask and generation.inv() }
+    val withLocking = locking.fold(netModeMask) { mask, group -> mask or group.generation }
+    return dropped.fold(withLocking) { mask, generation -> mask and generation.inv() }
 }
 
 /** One name per network in [mask], such as "5G NR". */

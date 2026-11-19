@@ -68,7 +68,7 @@
     <string name="modem_note_kept_lock_refused">This phone kept the old lock after the unlock, and it refused every list of all bands bunnylock tried.</string>
     <string name="modem_note_kept_lock_renamed">This phone kept the old lock after the unlock, so bunnylock named every band again.</string>
     <string name="modem_note_nr_bands_limit">It only takes %1$d 5G bands at a time, so these are on now: %2$s.</string>
-    <string name="modem_note_legacy_back">2G and 3G are back on, though GSM 1800 may stay off: this phone\'s radio software can\'t name it.</string>
+    <string name="modem_note_legacy_back">2G and 3G are back on, though GSM 1800 may stay off: this phone\'s RIL can\'t name it.</string>
     <string name="modem_note_qc_lte_off">This modem only changes the LTE cell lock with the radio off, so airplane mode came on for a moment.</string>
 
     <string name="modem_lock_unconfirmed">%1$s (not confirmed by the modem)</string>
@@ -86,7 +86,8 @@
     <string name="modem_last_network">At least one network has to stay on.</string>
     <string name="modem_nr_list_too_long">This phone only takes %1$d 5G bands in one lock, so pick %1$d or fewer.</string>
     <string name="modem_note_needs_channels">This phone needs visible frequencies together with the selected bands, so bunnylock included them in the lock.</string>
-    <string name="modem_no_gsm_1800">This phone\'s radio software doesn\'t know GSM 1800, so it refuses a 2G lock to 1800 alone.</string>
+    <string name="modem_note_bands_left_out">This phone\'s RIL refused the lock with %1$s in it, so bunnylock locked the other selected bands.</string>
+    <string name="modem_no_gsm_1800">This phone\'s RIL doesn\'t know GSM 1800, so it refuses a 2G lock to 1800 alone.</string>
     <string name="modem_note_fell_back">This phone fell back to 2G or 3G with a bands-only lock, so the lock was redone with the visible frequencies. bunnylock will do that on this phone from now on.</string>
     <string name="modem_note_band_lock_ignored">Android accepted the %1$s lock, but the phone is still on %2$s. This modem doesn\'t seem to follow band locks sent this way.</string>
     <string name="modem_note_samsung_menu_hint">Samsung\'s own band menu on the Bands screen may work instead.</string>
@@ -111,7 +112,7 @@
     <string name="modem_note_mtk_one_pci">MediaTek locks to one PCI, so only PCI %1$d was used.</string>
     <string name="modem_unknown_earfcn">EARFCN %1$d isn\'t in any known LTE band.</string>
     <string name="modem_unknown_nr_arfcn">ARFCN %1$d isn\'t in any known NR band.</string>
-    <string name="modem_note_band_only">This phone\'s radio software doesn\'t accept channel locks, so only the band (%1$s) was locked.</string>
+    <string name="modem_note_band_only">This phone\'s RIL doesn\'t accept channel locks, so only the band (%1$s) was locked.</string>
     <string name="modem_note_cell_lock_ignored">Android accepted the cell lock, but the phone is still on %1$s. This modem doesn\'t seem to follow frequency locks sent this way.</string>
     <string name="modem_note_frequency_only">Locked to the frequency only. The radio HAL can\'t lock to a PCI.</string>
 

@@ -16,7 +16,6 @@ import android.telephony.TelephonyManager
 import dev.ririxi.bunnylock.core.Bands
 import kotlinx.coroutines.suspendCancellableCoroutine
 import kotlinx.coroutines.withTimeoutOrNull
-import org.json.JSONObject
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.Executors
 import kotlin.coroutines.resume
@@ -144,7 +143,9 @@ object Cells {
     /** Android's cached list mixes the cells of every SIM, so it's only used when one modem is active. */
     @SuppressLint("MissingPermission")
     private fun cachedCellInfo(telephony: TelephonyManager): List<CellInfo> {
-        if (telephony.activeModemCount > 1) return emptyList()
+        val modems = if (android.os.Build.VERSION.SDK_INT >= 30) telephony.activeModemCount
+            else @Suppress("DEPRECATION") telephony.phoneCount
+        if (modems > 1) return emptyList()
         return runCatching { telephony.allCellInfo }.getOrNull() ?: emptyList()
     }
 
@@ -249,64 +250,6 @@ object Cells {
             rsrp = info.cellSignalStrength.dbm.availableOrNull(),
             source = "android",
         )
-    }
-
-    private fun JSONObject.rsrpOrNull(): Int? = optDouble("rsrp", Double.NaN).takeIf { !it.isNaN() }?.toInt()
-
-    /** The qc.serving report is the only source that exposes the NSA SCG. */
-    fun fromQualcomm(report: JSONObject): List<Cell> {
-        val cells = ArrayList<Cell>()
-        report.optJSONObject("lte")?.let { lte ->
-            val earfcn = lte.optLong("earfcn", -1)
-            if (earfcn >= 0) {
-                cells +=
-                    Cell(
-                        Rat.LTE,
-                        earfcn,
-                        lte.optInt("pci"),
-                        Bands.lteBandOf(earfcn.toInt()),
-                        registered = true,
-                        rsrp = lte.rsrpOrNull(),
-                        source = "modem",
-                        note = "LTE anchor (PCell)",
-                    )
-            }
-        }
-        report.optJSONObject("nr")?.let { nr ->
-            val arfcn = nr.optLong("arfcn", -1)
-            if (arfcn > 0) {
-                val reportedBands = if (nr.has("band")) intArrayOf(nr.getInt("band")) else IntArray(0)
-                cells +=
-                    Cell(
-                        Rat.NR,
-                        arfcn,
-                        nr.optInt("pci", -1),
-                        nrBand(reportedBands, arfcn.toInt()),
-                        registered = true,
-                        rsrp = nr.rsrpOrNull(),
-                        source = "modem",
-                        note = if (report.has("lte")) "NSA SCG" else "SA PCell",
-                    )
-            }
-        }
-        report.optJSONArray("lteNeighbors")?.let { neighbours ->
-            for (i in 0 until neighbours.length()) {
-                val neighbour = neighbours.getJSONObject(i)
-                val earfcn = neighbour.optLong("earfcn")
-                cells +=
-                    Cell(
-                        Rat.LTE,
-                        earfcn,
-                        neighbour.optInt("pci"),
-                        Bands.lteBandOf(earfcn.toInt()),
-                        registered = false,
-                        rsrp = neighbour.rsrpOrNull(),
-                        source = "modem",
-                        note = "neighbour",
-                    )
-            }
-        }
-        return cells
     }
 
     /**

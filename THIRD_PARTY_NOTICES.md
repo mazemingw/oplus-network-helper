@@ -16,6 +16,9 @@ precedence over the project-wide license for those components.
 `vpnhotspot-mobile/` integrates and modifies code from
 [Mygod/VPNHotspot](https://github.com/Mygod/VPNHotspot), which is licensed under
 the Apache License 2.0. See the [upstream license](https://github.com/Mygod/VPNHotspot/blob/master/LICENSE).
+The integrated revision is [v2.19.2](https://github.com/Mygod/VPNHotspot/tree/v2.19.2)
+(`aa5653ae64fb8994de5eabec33a470fb5da2faf1`); see
+`vpnhotspot-mobile/UPSTREAM.md` for migration scope and local changes.
 
 ## iPerf and bundled C sources
 
@@ -53,8 +56,8 @@ NDJSON interface; the UI remains native to Network Helper.
 message layouts and decoding from upstream `network/NasDecode.kt` at the same
 commit, under GPL-3.0. It retains only reported measurements and uses Network
 Helper's own models, validation, source selection and presentation.
-Upstream changes through `e924f388b8c69dfbe7f91e76a7721698d8099e5a` were reviewed
-on 2026-11-06. The app-side QMI integration includes NR-mode rejection,
+Upstream changes through `7e5b9c4272ac5c916e60c8159e91fb9b81c59863` were reviewed
+on 2026-11-17. The app-side QMI integration includes NR-mode rejection,
 partial success, and writing a changed RAT before restoring band masks.
 See `app/src/main/cpp/qmi/UPSTREAM.md` for scope.
 
@@ -62,7 +65,7 @@ See `app/src/main/cpp/qmi/UPSTREAM.md` for scope.
 
 `bunny-modem/` includes the modem library and the Root/Shizuku bridge from
 [btsearch/bunnylock](https://github.com/btsearch/bunnylock), revision
-`dd1d728ac2718df588fb63f517265e27e118d5d8` for the modem library. Copyright remains with the bunnylock
+`caf2cc7b18e447a0bbbdf851ea77278e4bc94196` for the modem library. Copyright remains with the bunnylock
 authors and contributors. Licensed under GPL-3.0; the complete license and
 modified source are included in `bunny-modem/`. The combined app containing this
 module is distributed under GPL-3.0 terms, retaining existing compatible license

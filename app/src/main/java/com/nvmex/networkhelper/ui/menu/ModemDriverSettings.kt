@@ -138,7 +138,7 @@ internal fun ModemDriverSettings(vm: ModemDriversViewModel, enabled: Boolean,
         Text("Android ${Build.VERSION.RELEASE} / API ${Build.VERSION.SDK_INT}", style = MaterialTheme.typography.bodySmall)
         if (device != null) {
             Text("SoC：${device.socModel} · ${device.platform}\n基带：${device.baseband}\nRIL：${device.ril}", style = MaterialTheme.typography.bodySmall)
-            Text("QRTR：${device.qrtr} · MTK RIL：${device.mtkOemHook} · Pixel：${device.pixelRouter} · HAL：${device.aospChannels}", style = MaterialTheme.typography.bodySmall)
+            Text("QRTR：${device.qrtr} · RIL 透传：${device.rilPassthrough} · Pixel：${device.pixelRouter} · HAL：${device.aospChannels}", style = MaterialTheme.typography.bodySmall)
         }
         OutlinedButton(onClick = { vm.serviceAction(releaseLegacy, nativeReady) { "设备信息已更新" } }, enabled = enabled, shape = driverShape) { Text("读取设备") }
     }

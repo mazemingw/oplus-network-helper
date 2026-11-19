@@ -26,9 +26,8 @@ import kotlinx.parcelize.Parcelize
 import timber.log.Timber
 
 object RootManager : RootSession(), Logger {
-    private var logThrowable = { priority: Int, t: Throwable ->
-        if (priority >= Log.WARN) t.printStackTrace(System.err)
-    }
+    @Volatile
+    private var relayLog: ((RemoteLog) -> Unit)? = null
     @Parcelize
     class RootInit : RootCommandNoResult {
         override suspend fun execute() = null.also {
@@ -36,16 +35,11 @@ object RootManager : RootSession(), Logger {
                 @SuppressLint("LogNotTimber")
                 override fun log(priority: Int, tag: String?, message: String, t: Throwable?) {
                     if (priority >= Log.WARN) {
-                        System.err.println("$priority/$tag: $message")
-                        t?.printStackTrace()
-                    }
-                    if (t == null) {
                         Log.println(priority, tag, message)
-                    } else {
-                        Log.println(priority, tag, message)
-                        Log.d(tag, message, t)
-                        logThrowable(priority, t)
                     }
+                    if (priority >= Log.INFO) relayLog?.invoke(RemoteLog(priority, tag,
+                        (if (t == null) message else message.substringBefore('\n')).take(1200),
+                        t?.let(::ParcelableThrowable)))
                 }
             })
             Logger.me = RootManager
@@ -54,19 +48,19 @@ object RootManager : RootSession(), Logger {
         }
     }
     @Parcelize
-    data class LoggedThrowable(val priority: Int, val t: ParcelableThrowable) : Parcelable
+    data class RemoteLog(val priority: Int, val tag: String?, val message: String, val error: ParcelableThrowable?) : Parcelable
     @Parcelize
-    class RootInitLogThrowable : RootCommandChannel<LoggedThrowable> {
-        override fun create(scope: CoroutineScope): ReceiveChannel<LoggedThrowable> {
-            val channel = Channel<Pair<Int, Throwable>>(Channel.CONFLATED) { (priority, t) ->
-                if (priority >= Log.WARN) t.printStackTrace(System.err)
-            }
+    class RootInitLog : RootCommandChannel<RemoteLog> {
+        override fun create(scope: CoroutineScope): ReceiveChannel<RemoteLog> {
+            val channel = Channel<RemoteLog>(32, onBufferOverflow = kotlinx.coroutines.channels.BufferOverflow.DROP_OLDEST)
             return scope.produce {
-                channel.consumeEach { (priority, t) -> send(LoggedThrowable(priority, ParcelableThrowable(t))) }
-            }.also {
-                logThrowable = { priority, t ->
-                    channel.trySend(priority to t).exceptionOrNull()?.printStackTrace(System.err)
+                try { channel.consumeEach { send(it) } }
+                finally {
+                    relayLog = null
+                    channel.cancel()
                 }
+            }.also {
+                relayLog = { channel.trySend(it) }
             }
         }
     }
@@ -84,10 +78,12 @@ object RootManager : RootSession(), Logger {
         }
 
         server.execute(RootInit())
-        val throwables = server.create(RootInitLogThrowable(), GlobalScope)
+        val logs = server.create(RootInitLog(), GlobalScope)
         GlobalScope.launch {
             try {
-                throwables.consumeEach { (priority, p) -> Timber.tag("RootRemote").log(priority, p.unwrap()) }
+                logs.consumeEach { (priority, tag, message, error) ->
+                    Timber.tag("root/${tag ?: "helper"}").log(priority, error?.unwrap(), message)
+                }
             } catch (_: CancellationException) {
             } catch (e: Exception) {
                 Timber.w(e)

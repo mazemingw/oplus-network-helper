@@ -17,6 +17,9 @@ import java.security.SecureRandom
 import java.util.UUID
 import java.util.concurrent.TimeUnit
 
+internal data class CloudBackupEntry(val id: String, val createdAt: String, val size: Long)
+private class CloudRequestFailure(val status: Int) : java.io.IOException("云备份服务请求失败（HTTP $status）")
+
 internal class EfsCloudBackup(private val context: Context, private val storage: BackupStorage,
     private val readNvImei: suspend () -> String? = { null }) {
     var endpoint: String = ""
@@ -25,6 +28,36 @@ internal class EfsCloudBackup(private val context: Context, private val storage:
     private val receipts = File(directory, "receipts").apply { mkdirs() }
     private val http = OkHttpClient.Builder().connectTimeout(30, TimeUnit.SECONDS)
         .readTimeout(10, TimeUnit.MINUTES).writeTimeout(10, TimeUnit.MINUTES).build()
+
+    var uploadEnabled: Boolean?
+        get() = if (prefs.contains("upload_enabled")) prefs.getBoolean("upload_enabled", false) else null
+        set(value) {
+            requireNotNull(value)
+            check(prefs.edit().putBoolean("upload_enabled", value).commit()) { "无法保存云备份设置" }
+        }
+
+    private fun hasVault() = prefs.contains("vault_id") && prefs.contains("vault_secret")
+
+    suspend fun listBackups(): List<CloudBackupEntry> = withContext(Dispatchers.IO) {
+        if (!hasVault()) return@withContext emptyList()
+        val items = request("list", identityJson(identity())).getJSONArray("backups")
+        List(items.length()) { i ->
+            val row = items.getJSONObject(i)
+            CloudBackupEntry(row.getString("backupId"), row.getString("createdAt"), row.getLong("size"))
+        }
+    }
+
+    suspend fun deleteBackup(id: String) = withContext(Dispatchers.IO) {
+        check(hasVault()) { "没有云备份访问凭据" }
+        val result = request("delete", identityJson(identity()).put("backupId", id))
+        check(result.getString("backupId") == id) { "云端未确认删除" }
+        receipts.listFiles().orEmpty().forEach { receipt ->
+            if (runCatching { JSONObject(receipt.readText()).optString("backupId") }.getOrNull() == id) {
+                receipt.delete()
+                File(storage.directory, "cloud/receipt-${receipt.name}").delete()
+            }
+        }
+    }
 
     private fun credentials(): Pair<String, String> {
         val existingId = prefs.getString("vault_id", null)
@@ -63,7 +96,7 @@ internal class EfsCloudBackup(private val context: Context, private val storage:
         if (!registration) request.header("Authorization", "Bearer $id.$secret")
         http.newCall(request.build()).execute().use { response ->
             val text = response.body?.string().orEmpty()
-            check(response.isSuccessful) { "云备份服务请求失败（HTTP ${response.code}），未解除写入门槛" }
+            if (!response.isSuccessful) throw CloudRequestFailure(response.code)
             return JSONObject(text).also { check(it.optBoolean("ok")) { "云备份服务没有确认成功" } }
         }
     }
@@ -77,6 +110,7 @@ internal class EfsCloudBackup(private val context: Context, private val storage:
     }.getOrDefault(false)
 
     suspend fun ensure(raw: RawBackup, progress: (String) -> Unit) = withContext(Dispatchers.IO) {
+        check(uploadEnabled == true) { "未开启云备份" }
         val device = identity().also { it.validate(true) }
         val (id, secret) = credentials()
         progress("正在验证设备云备份访问权限…")
@@ -86,10 +120,15 @@ internal class EfsCloudBackup(private val context: Context, private val storage:
         val receiptFile = receiptFile(raw)
         if (hasReceipt(raw)) {
             val cached = JSONObject(receiptFile.readText())
-            val confirmed = request("download", identityJson(device).put("backupId", cached.getString("backupId")))
-            check(confirmed.getString("sha256") == cached.getString("sha256") && confirmed.getBoolean("verified"))
-            progress("本地镜像及云端备份均已验证")
-            return@withContext
+            try {
+                val confirmed = request("download", identityJson(device).put("backupId", cached.getString("backupId")))
+                check(confirmed.getString("sha256") == cached.getString("sha256") && confirmed.getBoolean("verified"))
+                progress("本地镜像及云端备份均已验证")
+                return@withContext
+            } catch (e: CloudRequestFailure) {
+                if (e.status != 404) throw e
+                receiptFile.delete()
+            }
         }
         val rawHash = fileSha256(raw.manifest)
         val archive = File(directory, "$rawHash.zip")
@@ -145,6 +184,17 @@ internal class EfsCloudBackup(private val context: Context, private val storage:
             }
         }
         // Also use intact raw images when both compressed copies have been removed or damaged.
+        val recorded = storage.recordedCoverage()
+        if (recorded != null && preferredHash != null && runCatching {
+                fileSha256(recorded.manifest) == preferredHash &&
+                    isRawBackupValid(recorded.manifest, storage.directory, storage.deviceId) && coversCurrent(recorded)
+            }.getOrDefault(false)) {
+            val manifest = JSONObject(recorded.manifest.readText())
+            if (manifest.optString("model") == device.model && manifest.optString("firmware") == device.firmware) {
+                progress("找到通过完整校验的本机分区备份")
+                return@withContext ExtractedBackup(recorded, BackupBundle.metadata(recorded, manifest, device)) to device
+            }
+        }
         val preferredRaw = storage.recordedCoverage()?.directory
         for (folder in storage.directory.listFiles().orEmpty().filter { it.isDirectory && it.name.startsWith("raw-efs-") }
             .sortedWith(compareBy({ it != preferredRaw }, { it.name }))) {
@@ -158,6 +208,7 @@ internal class EfsCloudBackup(private val context: Context, private val storage:
             if (!coversCurrent(RawBackup(folder, manifest))) continue
             return@withContext ExtractedBackup(RawBackup(folder, manifest), metadata) to device
         }
+        check(hasVault()) { "找不到可用的本地备份，且没有云备份访问凭据" }
         progress("所有本地副本均不可用，正在从私有云下载完整备份…")
         device.validate(true)
         val baseline = receipts.listFiles().orEmpty().sortedWith(compareBy({ !preferred(it) }, { it.lastModified() }))

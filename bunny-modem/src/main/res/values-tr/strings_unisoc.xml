@@ -1,0 +1,5 @@
+<resources>
+    <string name="unisoc_reply_unreadable">Modem, %1$s için bant bilgilerini döndürmedi. Verdiği yanıt: %2$s</string>
+    <string name="unisoc_bands_unsettable">Bu modemin bant kilidine %1$s eklenemiyor.</string>
+    <string name="unisoc_bands_kept">Modem yeni bantları kabul etti ancak radyo birimi yeniden başlatıldıktan sonra da eski bantlarını kullanmaya devam ediyor.</string>
+</resources>

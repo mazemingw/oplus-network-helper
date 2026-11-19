@@ -2,6 +2,7 @@ package be.mygod.vpnhotspot.net
 
 import android.net.LinkProperties
 import android.net.MacAddress
+import android.os.Build
 import android.os.Process
 import android.system.Os
 import be.mygod.vpnhotspot.App.Companion.app
@@ -19,6 +20,7 @@ import be.mygod.vpnhotspot.util.RootSession
 import be.mygod.vpnhotspot.util.allInterfaceNames
 import be.mygod.vpnhotspot.widget.SmartSnackbar
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.runBlocking
 import timber.log.Timber
 import java.io.BufferedWriter
 import java.io.IOException
@@ -126,7 +128,10 @@ class Routing(private val caller: Any, private val downstream: String) : IpNeigh
         Netd,
     }
 
-    class InterfaceNotFoundException(override val cause: Throwable) : SocketException() {
+    class InterfaceNotFoundException(cause: Throwable) : SocketException() {
+        init {
+            initCause(cause)
+        }
         override val message: String get() = app.getString(R.string.exception_interface_not_found)
     }
 
@@ -161,11 +166,24 @@ class Routing(private val caller: Any, private val downstream: String) : IpNeigh
                         "vpnhotspot_masquerade -s $hostSubnet -o $upstream -j MASQUERADE", "nat")
                     /**
                      * 0 means that there are no interface addresses coming after, which is unused anyway.
+                     * Revert is intentionally omitted because netd tracks forwarding state globally by
+                     * interface pair without ownership, so disabling here may tear down system-owned state.
                      *
                      * https://android.googlesource.com/platform/frameworks/base/+/android-5.0.0_r1/services/core/java/com/android/server/NetworkManagementService.java#1251
                      * https://android.googlesource.com/platform/system/netd/+/android-5.0.0_r1/server/CommandListener.cpp#638
+                     * https://android.googlesource.com/platform/system/netd/+/e11b8688b1f99292ade06f89f957c1f7e76ceae9/server/TetherController.cpp#652
+                     * https://android.googlesource.com/platform/system/netd/+/e11b8688b1f99292ade06f89f957c1f7e76ceae9/server/TetherController.h#40
                      */
                     MasqueradeMode.Netd -> ndc("Nat", "ndc nat enable $downstream $upstream 0")
+                }
+            }
+            init {
+                if (Build.VERSION.SDK_INT >= 31) try {
+                    runBlocking { RootManager.use { it.execute(IpSecForwardPolicyCommand(upstream)) } }
+                } catch (e: Exception) {
+                    if (e is CancellationException) throw e
+                    SmartSnackbar.make(e).show()
+                    Timber.w(e)
                 }
             }
         }

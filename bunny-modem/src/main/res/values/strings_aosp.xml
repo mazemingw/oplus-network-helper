@@ -44,4 +44,6 @@
 
     <string name="server_unknown_subscription">This SIM\'s subscription isn\'t known.</string>
     <string name="server_unknown_command">Unknown command: %1$s.</string>
+    <string name="cell_hint_hal">Locks the frequency (ARFCN) through the radio HAL. This backend can\'t lock to a PCI, and some modems (stock Qualcomm, for example) only apply the band and ignore the channel.</string>
+    <string name="cell_plmn_hint_android">Uses Android\'s manual network selection, which stays after a reboot.</string>
 </resources>

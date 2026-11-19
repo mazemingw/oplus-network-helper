@@ -3,6 +3,10 @@ package com.nvmex.networkhelper.viewmodel.menu
 import android.app.Application
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
+import com.nvmex.networkhelper.R
+import com.nvmex.networkhelper.util.modem.MobileLock
+import com.nvmex.networkhelper.util.modem.MobileLockStatus
+import com.nvmex.networkhelper.util.modem.MobileLockTarget
 import com.nvmex.networkhelper.util.modem.ModemDriver
 import com.nvmex.networkhelper.util.modem.driverBackend
 import com.nvmex.networkhelper.util.network.SocVendorDetector
@@ -19,7 +23,8 @@ import kotlinx.coroutines.flow.*
 /** One action at a time, one backend owner. A driver change never changes modem locks. */
 class ModemDriversViewModel(app: Application) : AndroidViewModel(app) {
     private val prefs = app.getSharedPreferences("modem_drivers", 0)
-    private fun ratRestoreKey() = "cellRat.${_state.value.backend}.${_state.value.sim}"
+    private val lockStatus = MobileLockStatus(app)
+    private fun ratRestoreKey(modem: ModemState = _state.value) = "cellRat.${modem.backend}.${modem.sim}"
     fun saveCellRatRestore(mask: Long?, mode: NrMode?) {
         val key = ratRestoreKey()
         if (mask != null && !prefs.contains(key)) prefs.edit().putLong(key, mask).putString("$key.nr", mode?.name).apply()
@@ -29,7 +34,7 @@ class ModemDriversViewModel(app: Application) : AndroidViewModel(app) {
         if (!prefs.contains(key)) return null
         return prefs.getLong(key, 0) to NrMode.entries.firstOrNull { it.name == prefs.getString("$key.nr", null) }
     }
-    fun clearCellRatRestore() { val key = ratRestoreKey(); prefs.edit().remove(key).remove("$key.nr").apply() }
+    fun clearCellRatRestore(modem: ModemState = _state.value) { val key = ratRestoreKey(modem); prefs.edit().remove(key).remove("$key.nr").apply() }
     private val defaultDriver = if (SocVendorDetector.isQualcomm()) ModemDriver.ORIGINAL_QMI else ModemDriver.AUTO
     private val _selected = MutableStateFlow(ModemDriver.entries.firstOrNull { it.name == prefs.getString("driver", null) } ?: defaultDriver)
     val selected = _selected.asStateFlow()
@@ -86,7 +91,8 @@ class ModemDriversViewModel(app: Application) : AndroidViewModel(app) {
         val app = getApplication<Application>()
         val child = CoroutineScope(viewModelScope.coroutineContext + SupervisorJob(viewModelScope.coroutineContext[Job]))
         sessionScope = child
-        val next = ModemController(app, child, RootOrShizuku(app) { show("后端服务已断开，请重新连接", true) })
+        val next = ModemController(app, child, RootOrShizuku(app) { show("后端服务已断开，请重新连接", true) },
+            onRefreshed = ::recordLocks)
         controller = next
         child.launch { next.state.collect { _state.value = it; controls.observe(it) } }
         child.launch { next.events.collect { show(it, true) } }
@@ -100,18 +106,22 @@ class ModemDriversViewModel(app: Application) : AndroidViewModel(app) {
         return next
     }
 
-    private fun action(block: suspend () -> Unit) {
-        if (_busy.value) return
+    private fun action(block: suspend () -> Unit) { tryAction(null, block) }
+
+    private fun tryAction(onComplete: ((Boolean) -> Unit)?, block: suspend () -> Unit): Boolean {
+        if (_busy.value) return false
         _busy.value = true
         viewModelScope.launch {
-            try { block() }
+            var succeeded = false
+            try { block(); succeeded = true }
             catch (e: CancellationException) { throw e }
             catch (e: Exception) {
                 if (_systemDialog.value) _systemReason.value += "\n${e.message ?: "系统组件操作失败"}"
                 show(e.message ?: "后端操作失败", true)
             }
-            finally { _busy.value = false }
+            finally { _busy.value = false; onComplete?.invoke(succeeded) }
         }
+        return true
     }
 
     fun select(driver: ModemDriver, releaseLegacy: suspend () -> Unit, nativeReady: suspend () -> Unit) = action {
@@ -158,17 +168,94 @@ class ModemDriversViewModel(app: Application) : AndroidViewModel(app) {
         val modem = open()
         modem.setSimAndRefresh(sim)
     }
-    fun execute(resetSelection: Boolean = false, block: suspend ModemController.() -> String?) = action {
-        val modem = open()
-        var completed = false
-        val result = try { modem.block().also { completed = true } } finally {
-            modem.refreshNow()
-            controls.observe(modem.state.value)
-            controls.syncDraft(resetSelection && completed)
+    private fun ModemState.lockTarget() = sims.firstOrNull { it.slot == sim - 1 }
+        ?.let { MobileLockTarget(sim, it.subId) }?.takeIf { it.isActive(getApplication()) }
+
+    private fun recordLocks(modem: ModemState) {
+        val target = modem.lockTarget() ?: return
+        lockStatus.record(target, mapOf(
+            MobileLock.BANDS to modem.groups.takeIf { it.isNotEmpty() }?.any { it.locked },
+            MobileLock.LTE_CELL to (modem.lteLock != null), MobileLock.NR_CELL to (modem.nrLock != null),
+            MobileLock.LEGACY_CELL to (modem.legacyCellLock != null), MobileLock.PLMN to modem.anyPlmnLock,
+            MobileLock.MODE to false.takeIf { modem.netMode == NetMode.AUTO && modem.nrMode !in setOf(NrMode.SA, NrMode.NSA) }
+        ))
+    }
+
+    internal fun recordLockAttempt(modem: ModemState, lock: MobileLock) {
+        modem.lockTarget()?.let { lockStatus.record(it, mapOf(lock to true)) }
+    }
+
+    fun execute(resetSelection: Boolean = false, trackNetworkMode: Boolean = false,
+                block: suspend ModemController.() -> String?) {
+        action {
+            val modem = open()
+            val before = modem.state.value
+            val target = before.lockTarget()
+            var completed = false
+            val result = try { modem.block().also { completed = true } } finally {
+                modem.refreshNow()
+                controls.observe(modem.state.value)
+                controls.syncDraft(resetSelection && completed)
+                val after = modem.state.value
+                if (trackNetworkMode && modem.lastRefreshFailure == null && target != null && after.lockTarget() == target) {
+                    val restricted = if (after.nrMode in setOf(NrMode.SA, NrMode.NSA)) true
+                        else after.allowedMask?.let { after.netMode != NetMode.AUTO }
+                    if (after.allowedMask != before.allowedMask || after.nrMode != before.nrMode || completed) {
+                        lockStatus.record(target, mapOf(MobileLock.MODE to restricted))
+                    }
+                }
+            }
+            // A failed write is never replayed. Readback is separate from the returned acknowledgement.
+            modem.lastRefreshFailure?.let { error(it) }
+            if (!result.isNullOrBlank()) show(result)
         }
-        // A failed write is never replayed. Readback is separate from the returned acknowledgement.
-        modem.lastRefreshFailure?.let { error(it) }
-        if (!result.isNullOrBlank()) show(result)
+    }
+
+    internal fun recoverLocks(target: MobileLockTarget, releaseNative: suspend () -> Unit,
+                              onComplete: (Boolean) -> Unit): Boolean {
+        if (!_selected.value.isBunny || SystemQmiServices.channelsBlocked.value) return false
+        return tryAction(onComplete) {
+            val app = getApplication<Application>()
+            fun requireTarget() = check(target.isDefaultData(app)) { app.getString(R.string.qmi_quick_sim_changed) }
+            requireTarget()
+            releaseNative()
+            val saved = lockStatus.read(target)
+            val modem = open()
+            if (modem.state.value.sim != target.sim) modem.setSimAndRefresh(target.sim) else modem.refreshNow()
+            modem.lastRefreshFailure?.let { error(it) }
+            check(modem.helperRunning && modem.state.value.lockTarget() == target) { app.getString(R.string.qmi_quick_sim_changed) }
+            val current = modem.state.value
+            val restoreAutomatic = current.anyBandLock || MobileLock.MODE in saved || prefs.contains(ratRestoreKey(current))
+            try {
+                if (current.anyCellLock) { requireTarget(); modem.unlockCells() }
+                if (current.anyPlmnLock) { requireTarget(); modem.unlockPlmn() }
+                current.groups.filter { it.locked }.forEach { group ->
+                    requireTarget(); modem.unlockBands(group.group)
+                }
+                if (restoreAutomatic) {
+                    if (current.supportsNrMode && current.nrMode in setOf(NrMode.SA, NrMode.NSA)) {
+                        requireTarget(); modem.setNrMode(NrMode.BOTH)
+                    }
+                    requireTarget()
+                    modem.setNetMode(NetMode.AUTO)
+                }
+            } finally {
+                modem.refreshNow()
+                controls.observe(modem.state.value)
+            }
+            modem.lastRefreshFailure?.let { error(it) }
+            val actual = modem.state.value
+            check(modem.helperRunning && actual.lockTarget() == target && !actual.anyCellLock && !actual.anyPlmnLock &&
+                !actual.anyBandLock && (MobileLock.BANDS !in saved || actual.groups.isNotEmpty()) &&
+                (!restoreAutomatic || (actual.netMode in setOf(NetMode.AUTO, null) &&
+                    (!current.supportsNrMode || actual.nrMode !in setOf(NrMode.SA, NrMode.NSA))))) {
+                app.getString(R.string.qmi_unlock_readback_failed)
+            }
+            lockStatus.record(target, mapOf(MobileLock.MODE to false))
+            clearCellRatRestore(actual)
+            controls.clearTargets()
+            controls.syncDraft(clearSelection = true)
+        }
     }
 
     fun setNode(node: String) { controller?.setAtNode(node) }

@@ -1,0 +1,5 @@
+<resources>
+    <string name="unisoc_reply_unreadable">The modem didn\'t return its bands for %1$s. It replied: %2$s</string>
+    <string name="unisoc_bands_unsettable">This modem\'s band lock can\'t include %1$s.</string>
+    <string name="unisoc_bands_kept">The modem took the new bands but still uses its old ones after the radio restart.</string>
+</resources>

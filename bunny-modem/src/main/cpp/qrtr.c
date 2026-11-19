@@ -129,7 +129,7 @@ static ssize_t exchange(int fd, uint8_t *buf, size_t len, int timeout_ms, const 
 }
 
 JNIEXPORT jint JNICALL
-Java_dev_ririxi_bunnylock_root_Qrtr_open(JNIEnv *env, jclass clazz, jint service, jint timeoutMs) {
+Java_dev_ririxi_bunnylock_backend_qualcomm_Qrtr_open(JNIEnv *env, jclass clazz, jint service, jint timeoutMs) {
     (void)clazz;
     struct sockaddr_qrtr server;
     int rc = lookup((uint32_t)service, 1, &server);
@@ -157,7 +157,7 @@ Java_dev_ririxi_bunnylock_root_Qrtr_open(JNIEnv *env, jclass clazz, jint service
 }
 
 JNIEXPORT jbyteArray JNICALL
-Java_dev_ririxi_bunnylock_root_Qrtr_transact(JNIEnv *env, jclass clazz, jint fd, jbyteArray request, jint timeoutMs) {
+Java_dev_ririxi_bunnylock_backend_qualcomm_Qrtr_transact(JNIEnv *env, jclass clazz, jint fd, jbyteArray request, jint timeoutMs) {
     (void)clazz;
     jsize len = (*env)->GetArrayLength(env, request);
     if (len < QMI_HEADER || len >= QMI_MAX) {
@@ -179,7 +179,7 @@ Java_dev_ririxi_bunnylock_root_Qrtr_transact(JNIEnv *env, jclass clazz, jint fd,
 }
 
 JNIEXPORT void JNICALL
-Java_dev_ririxi_bunnylock_root_Qrtr_close(JNIEnv *env, jclass clazz, jint fd) {
+Java_dev_ririxi_bunnylock_backend_qualcomm_Qrtr_close(JNIEnv *env, jclass clazz, jint fd) {
     (void)env;
     (void)clazz;
     if (fd >= 0) close(fd);

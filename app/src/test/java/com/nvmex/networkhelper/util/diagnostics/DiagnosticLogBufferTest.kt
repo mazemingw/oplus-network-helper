@@ -25,6 +25,14 @@ class DiagnosticLogBufferTest {
         assertTrue(DiagnosticLogPolicy.expectedModemRefusal("efs", "target rejected: bad length (0x15)"))
         assertFalse(DiagnosticLogPolicy.expectedModemRefusal("efs", "helper closed the connection"))
     }
+    @Test fun automaticUploadSkipsWarningsAndLegacyProgressMessages() {
+        val policy = DiagnosticLogPolicy
+        assertEquals(DiagnosticLevel.WARNING, policy.level("Backup", "W", "Recovered from an earlier OutOfMemoryError"))
+        assertFalse(policy.canAutoUpload("info", "efs", "备份已完成", "", explicitError = true))
+        assertFalse(policy.canAutoUpload("error", "efs", "ZIP 汇总：失败=0", "", explicitError = false))
+        assertTrue(policy.canAutoUpload("error", "efs", "helper closed the connection", "EfsException", explicitError = false))
+        assertTrue(policy.canAutoUpload("fatal", "uncaught_exception", "Crash", "", explicitError = true))
+    }
     @Test fun restoreAndClearRespectLimitsAndPrivacy() {
         val buffer = DiagnosticLogBuffer(maxEntries = 2)
         buffer.restore((1..5).map { DiagnosticLogEntry(it.toLong(), it.toLong(), it.toLong(), DiagnosticLevel.WARNING,

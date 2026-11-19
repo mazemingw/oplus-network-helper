@@ -17,7 +17,7 @@ internal class BackupBypassGate(private val now: () -> Long) {
 }
 
 internal val UiState.backupWriteAuthorized: Boolean get() =
-    (initialBackupComplete && cloudBackupComplete) || backupBypassed
+    initialBackupComplete || backupBypassed
 
 internal val UiState.canOfferBackupBypass: Boolean get() = phase == Phase.READY && storageGranted &&
     !busy && !backupRunning && !backupWriteAuthorized && !initialBackupError.isNullOrBlank()

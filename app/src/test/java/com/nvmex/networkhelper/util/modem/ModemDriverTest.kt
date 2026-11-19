@@ -1,35 +1,14 @@
 package com.nvmex.networkhelper.util.modem
 
-import dev.ririxi.bunnylock.modem.*
+import dev.ririxi.bunnylock.modem.Backend
 import org.junit.Assert.*
 import org.junit.Test
 
 class ModemDriverTest {
-    private fun device(vendor: String = "unknown", qrtr: Boolean = false, mtk: Boolean = false,
-                       ports: List<String> = emptyList(), pixel: Boolean = false) = DeviceInfo(
-        vendor, qrtr, "", "", "", "", "", "", 36, ports, pixel, false, true, true,
-        mtk, null, emptyList(), false)
-
-    @Test fun qrtrWinsAutomaticDetection() { assertEquals(Backend.QUALCOMM, device("qualcomm", qrtr = true).suggested()) }
-    @Test fun mediatekRilAndAtPortsAreDetected() {
-        assertEquals(Backend.MEDIATEK, device("mediatek", mtk = true).suggested())
-        assertEquals(Backend.MEDIATEK, device("mediatek", ports = listOf("/dev/radio/pttycmd1")).suggested())
-    }
-    @Test fun pixelNeedsItsRouterOtherwiseHalIsUsed() {
-        assertEquals(Backend.PIXEL, device("tensor", pixel = true).suggested())
-        assertEquals(Backend.ANDROID, device("tensor").suggested())
-    }
-    @Test fun adbAccessOnlyAllowsHalOrAvailableMediatekRil() {
-        val plain = device("qualcomm", qrtr = true)
-        assertTrue(plain.allows(Backend.ANDROID, true))
-        assertFalse(plain.allows(Backend.QUALCOMM, true))
-        assertFalse(plain.allows(Backend.PIXEL, true))
-        assertFalse(plain.allows(Backend.MEDIATEK, true))
-        assertTrue(device("mediatek", mtk = true).allows(Backend.MEDIATEK, true))
-    }
     @Test fun autoUsesDetectionAndManualSelectionIsNeverSilentlyReplaced() {
         assertEquals(Backend.MEDIATEK, driverBackend(ModemDriver.AUTO, Backend.MEDIATEK))
         assertEquals(Backend.PIXEL, driverBackend(ModemDriver.PIXEL, Backend.QUALCOMM))
+        assertEquals(Backend.UNISOC, driverBackend(ModemDriver.UNISOC, Backend.ANDROID))
         assertNull(driverBackend(ModemDriver.ORIGINAL_QMI, Backend.ANDROID))
     }
     @Test fun nrPciAcceptsEndpointsAndSeparatorsWithoutDroppingZero() {

@@ -8,7 +8,11 @@ import org.json.JSONObject
 class Text(
     @StringRes val id: Int,
     vararg val args: Any,
-)
+) {
+    override fun equals(other: Any?): Boolean = other is Text && id == other.id && args.contentEquals(other.args)
+
+    override fun hashCode(): Int = 31 * id + args.contentHashCode()
+}
 
 fun Context.string(text: Text): String = getString(text.id, *text.args.map { resolve(it) }.toTypedArray())
 

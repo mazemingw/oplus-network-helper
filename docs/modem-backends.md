@@ -3,7 +3,7 @@
 ## 来源与范围
 
 - [qcom-band-menu](https://github.com/Fronsipswu/qcom-band-menu)：保留现有独立 QMI helper、原有控制流程与 RX/CA 首页链路。
-- [bunnylock](https://github.com/btsearch/bunnylock)：`55f47a87344fd7a42f5d903c660776b334664556`。导入完整 modem 库、QRTR JNI 和 Root/Shizuku 桥，未搬运其 Compose 页面。
+- [bunnylock](https://github.com/btsearch/bunnylock)：2.1.0（`caf2cc7b18e447a0bbbdf851ea77278e4bc94196`）。导入 modem 库、QRTR JNI 和 Root/Shizuku 桥，未搬运其 Compose 页面。
 - 原作者图标用于下拉菜单来源标记和页面底部致谢。源码、GPL-3.0 和修改记录保留在 `bunny-modem/`。
 - 对齐现有 AGP 8.13.2、API 36、NDK 26.3 和 ARM64；Android 10 的 CellIdentity.bands 调用已作 API 保护。没有提高主应用最低版本。
 
@@ -17,6 +17,7 @@
 | --- | --- | --- |
 | 原有高通 QMI | Root，现有独立 helper | ARM64 / Qualcomm QRTR |
 | bunnylock 高通 QMI | Root 或 Shizuku Root | Shizuku ADB 不可直接访问 QRTR |
+| bunnylock 展锐 AT | 由设备与后端探测决定 | 频段走展锐 AT，小区走 Android HAL |
 | 联发科 AT | Root AT 节点；或 Shizuku ADB 的 RIL 透传 | 取决于厂商实际暴露的服务 |
 | Pixel | Root / Shizuku Root | 依赖 Tensor / Pixel 调制解调器接口 |
 | Android HAL | Root / Shizuku | 通常只能锁频点，不能承诺 PCI 锁定 |

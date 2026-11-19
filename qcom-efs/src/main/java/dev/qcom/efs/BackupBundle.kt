@@ -25,10 +25,7 @@ internal object BackupBundle {
         val manifest = JSONObject(raw.manifest.readText())
         require(manifest.getString("model") == identity.model && manifest.getString("firmware") == identity.firmware) { "分区清单与当前设备或固件不一致" }
         check(isRawBackupValid(raw.manifest, raw.directory.parentFile!!, manifest.getString("device_id"))) { "镜像损坏，无法打包" }
-        val info = JSONObject().put("schema", 1).put("kind", "networkhelper-efs-backup")
-            .put("model", identity.model).put("imei", identity.imei).put("imei_slot", 0).put("hardware_serial", identity.serial)
-            .put("firmware", identity.firmware).put("device_id", manifest.getString("device_id"))
-            .put("manifest_sha256", fileSha256(raw.manifest))
+        val info = metadata(raw, manifest, identity)
         atomicWrite(File(raw.directory, "backup-info.json"), info.toString(2).toByteArray())
         check(target.createNewFile()) { "打包目标已经存在" }
         try {
@@ -43,6 +40,12 @@ internal object BackupBundle {
             return target
         } catch (t: Throwable) { target.delete(); throw t }
     }
+
+    fun metadata(raw: RawBackup, manifest: JSONObject, identity: BackupIdentity): JSONObject =
+        JSONObject().put("schema", 1).put("kind", "networkhelper-efs-backup")
+            .put("model", identity.model).put("imei", identity.imei).put("imei_slot", 0).put("hardware_serial", identity.serial)
+            .put("firmware", identity.firmware).put("device_id", manifest.getString("device_id"))
+            .put("manifest_sha256", fileSha256(raw.manifest))
 
     fun extract(archive: File, root: File, identity: BackupIdentity): ExtractedBackup {
         identity.validate(requireImei = false)

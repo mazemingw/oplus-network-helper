@@ -34,8 +34,8 @@ android {
         applicationId = "com.nvmex.networkhelper"
         minSdk = 29
         targetSdk = 35
-        versionCode = 65
-        versionName = "1.6.5"
+        versionCode = 67
+        versionName = "1.6.7"
 
         // Inject the AMap key locally; never commit API credentials.
         manifestPlaceholders["AMAP_API_KEY"] =

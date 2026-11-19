@@ -44,4 +44,6 @@
 
     <string name="server_unknown_subscription">无法识别这张 SIM 卡的订阅。</string>
     <string name="server_unknown_command">未知命令：%1$s。</string>
+    <string name="cell_hint_hal">通过射频 HAL 锁定频点（ARFCN）。此方式无法锁 PCI，部分基带（例如原厂固件的高通基带）只应用频段而忽略频点。</string>
+    <string name="cell_plmn_hint_android">使用 Android 手动选网，重启后仍会保留。</string>
 </resources>

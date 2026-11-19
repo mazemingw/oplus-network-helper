@@ -75,7 +75,6 @@
     <string name="tethering_manage_wifi">Wi\u2011Fi hotspot</string>
     <string name="tethering_manage_bluetooth">Bluetooth tethering</string>
     <string name="tethering_manage_ethernet">Ethernet tethering</string>
-    <string name="tethering_manage_ncm">USB tethering (NCM)</string>
     <string name="tethering_manage_wifi_info">%1$d MHz, channel %2$d, width %3$s</string>
     <string name="tethering_manage_wifi_info_timeout_enabled">%4$s: Wi\u2011Fi %5$d, %1$d MHz, channel %2$d,
         width %3$s, idle timeout in %6$s</string>
@@ -109,7 +108,7 @@
     <string name="clients_empty">No clients connected</string>
     <string name="clients_popup_nickname">Nickname…</string>
     <string name="clients_popup_block">Block</string>
-    <string name="clients_popup_block_service_inactive">Turn on service for this interface to block the client.</string>
+    <string name="clients_popup_block_service_inactive">This client will be blocked when service for this interface is turned on.</string>
     <string name="clients_popup_unblock">Unblock</string>
     <string name="clients_popup_stats">Stats…</string>
     <string name="clients_mac_lookup_unexpected_error">Server returned error for %1$s: %2$s</string>
@@ -248,6 +247,4 @@
     <string name="wifi_client_isolation">Client isolation</string>
     <string name="wifi_save">Save</string>
 
-    <string name="tasker_get_tethering_state">Get Tethering State</string>
-    <string name="tasker_tethering_state_update">Tethering State Update</string>
 </resources>

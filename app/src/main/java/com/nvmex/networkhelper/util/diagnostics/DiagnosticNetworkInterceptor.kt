@@ -14,7 +14,7 @@ class DiagnosticNetworkInterceptor : Interceptor {
                 if (response.code >= 500) DiagnosticReporter.report("http", "HTTP ${response.code}", context)
             }
         } catch (error: IOException) {
-            DiagnosticReporter.report("http", error, context)
+            if (!chain.call().isCanceled()) DiagnosticReporter.report("http", error, context)
             throw error
         }
     }

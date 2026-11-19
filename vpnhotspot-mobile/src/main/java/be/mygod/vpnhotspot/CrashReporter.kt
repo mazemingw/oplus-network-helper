@@ -13,6 +13,9 @@ import timber.log.Timber
  * - 保留接口，让上层代码不需要大改
  */
 object CrashReporter {
+    /** Receives both local Timber events and events relayed from the root process. */
+    @Volatile
+    var diagnosticSink: ((priority: Int, tag: String, message: String, error: Throwable?) -> Unit)? = null
 
     /** 是否启用（你以后想恢复 Firebase，只需把这里改成 true 并接回实现） */
     val enabled: Boolean = false
@@ -24,15 +27,13 @@ object CrashReporter {
         if (!enabled) {
             Timber.plant(object : Timber.DebugTree() {
                 override fun log(priority: Int, tag: String?, message: String, t: Throwable?) {
-                    // 保持 Logcat 输出
-                    if (t == null) {
-                        if (priority != Log.DEBUG || BuildConfig.DEBUG) Log.println(priority, tag, message)
-                    } else {
-                        if (priority >= Log.WARN || priority == Log.DEBUG) {
-                            Log.println(priority, tag, message)
-                            Log.w(tag, message, t)
-                        }
+                    if (priority >= Log.INFO) {
+                        // Timber appends the stack to message before invoking Tree.log.
+                        val summary = if (t != null) message.substringBefore('\n').takeIf { it.isNotBlank() }
+                            ?: t.javaClass.simpleName else message
+                        diagnosticSink?.invoke(priority, tag ?: "app", summary, t)
                     }
+                    if (priority >= Log.INFO || BuildConfig.DEBUG) Log.println(priority, "VpnHotspot", "$tag: $message")
                 }
             })
             return

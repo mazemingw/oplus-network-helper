@@ -8,14 +8,17 @@ import dev.ririxi.bunnylock.modem.R
 import java.io.File
 import java.io.FileDescriptor
 
+fun rilNode(sim: Int) = "${OemHook.PREFIX}$sim"
+
 object At {
+    const val DEFAULT_TIMEOUT_MS = 4000
+
     fun exists(node: String) = if (node.startsWith(OemHook.PREFIX)) OemHook.available() else File(node).exists()
 
-    /** [node] is a modem tty path, or "ril:<slot>" to go through MediaTek's RIL (see [OemHook]). */
     fun send(
         node: String,
         command: String,
-        timeoutMs: Int = 4000,
+        timeoutMs: Int = DEFAULT_TIMEOUT_MS,
     ): String {
         val throughRil = node.startsWith(OemHook.PREFIX)
         if (throughRil || node.startsWith(OemHook.RAW_PREFIX)) {
@@ -43,7 +46,7 @@ object At {
     fun ok(
         node: String,
         command: String,
-        timeoutMs: Int = 4000,
+        timeoutMs: Int = DEFAULT_TIMEOUT_MS,
     ): String {
         val reply = send(node, command, timeoutMs)
         val lines = reply.lines()
@@ -74,7 +77,6 @@ object At {
         while (written < bytes.size) written += Os.write(fd, bytes, written, bytes.size - written)
     }
 
-    /** Running out of time isn't an error here: whatever has arrived by then is returned. */
     private fun readUntilFinalResult(
         fd: FileDescriptor,
         node: String,
@@ -112,7 +114,6 @@ object At {
             line == "OK" || line == "ERROR" || line.startsWith("+CME ERROR") || line.startsWith("+CMS ERROR")
         }
 
-    /** One trimmed line per row, without blank lines or the modem's echo of [command]. */
     private fun cleanReply(
         raw: String,
         command: String,

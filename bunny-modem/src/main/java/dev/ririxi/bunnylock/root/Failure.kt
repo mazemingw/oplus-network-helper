@@ -5,7 +5,7 @@ import dev.ririxi.bunnylock.modem.Text
 import dev.ririxi.bunnylock.modem.toJson
 import dev.ririxi.bunnylock.modem.verbatim
 
-class HelperFailure(
+open class Failure(
     val text: Text,
 ) : Exception(debugTag(text))
 
@@ -15,8 +15,8 @@ private fun debugTag(text: Text): String =
 fun fail(
     @StringRes id: Int,
     vararg args: Any,
-): Nothing = throw HelperFailure(Text(id, *args))
+): Nothing = throw Failure(Text(id, *args))
 
-fun Throwable.toText(): Text = if (this is HelperFailure) text else verbatim(message ?: javaClass.simpleName)
+fun Throwable.toText(): Text = if (this is Failure) text else verbatim(message ?: javaClass.simpleName)
 
 fun Throwable.toTextJson() = toText().toJson()

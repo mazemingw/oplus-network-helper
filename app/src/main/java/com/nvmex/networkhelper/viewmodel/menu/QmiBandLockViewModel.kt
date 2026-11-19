@@ -1,11 +1,18 @@
 package com.nvmex.networkhelper.viewmodel.menu
 
 import android.app.Application
-import android.telephony.SubscriptionManager
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.nvmex.networkhelper.R
 import com.nvmex.networkhelper.model.network.NetworkPanelUiState
+import com.nvmex.networkhelper.util.modem.MobileLock
+import com.nvmex.networkhelper.util.modem.MobileLockStatus
+import com.nvmex.networkhelper.util.modem.MobileLockTarget
+import com.nvmex.networkhelper.util.modem.SystemQmiServices
+import com.nvmex.networkhelper.util.modem.automaticMode
+import com.nvmex.networkhelper.util.modem.bandMaskLocked
+import com.nvmex.networkhelper.util.modem.cellLocksToClear
+import com.nvmex.networkhelper.util.modem.qmiCellLockFamilies
 import com.nvmex.networkhelper.util.qmi.*
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
@@ -53,15 +60,22 @@ class QmiBandLockViewModel(app: Application) : AndroidViewModel(app) {
     private var cellVerificationJob: Job? = null
     private var pendingCell: PendingCellRegistration? = null
     private var recentCellTargets: Pair<Int, List<QmiCellTarget>>? = null
-    private var networkSubId = -1
     private var requestedQuickId: String? = null
     private var pendingQuick: QmiQuickLockRequest? = null
     private var quickSubscription: Pair<Int, Int>? = null
     private val cellRestore = app.getSharedPreferences("qmi_cell_rat_restore", Application.MODE_PRIVATE)
+    private val lockStatus = MobileLockStatus(app)
+
+    private fun recordLocks(target: MobileLockTarget?, device: QmiDeviceState) {
+        if (target == null || !target.isActive(getApplication()) || !device.controlReady) return
+        lockStatus.record(target, qmiCellLockFamilies.map { (family, lock) ->
+            lock to device.locks[family]?.isNotEmpty()
+        }.toMap() + mapOf(MobileLock.BANDS to device.bandMaskLocked(),
+            MobileLock.MODE to device.automaticMode()?.takeIf { it }?.let { false }))
+    }
 
     fun updateNetwork(sim: Int, network: NetworkPanelUiState?) {
         if (sim != state.value.sim) return
-        networkSubId = network?.subId ?: -1
         val observation = qmiObserveBands(network, sim - 1, System.currentTimeMillis())
         val serving = qmiServingCells(network, System.currentTimeMillis())
         mutable.update { ui ->
@@ -91,7 +105,6 @@ class QmiBandLockViewModel(app: Application) : AndroidViewModel(app) {
 
     fun refresh(sim: Int = state.value.sim) {
         if (state.value.busy) return
-        if (sim != state.value.sim) networkSubId = -1
         if (pendingQuick?.sim != sim) pendingQuick = null
         if (quickSubscription?.first != sim) quickSubscription = null
         cancelVerification()
@@ -109,7 +122,9 @@ class QmiBandLockViewModel(app: Application) : AndroidViewModel(app) {
         cancelVerification(); dismissStatus()
         mutable.update { it.copy(busy = true, error = null, message = null) }
         try {
+            val target = MobileLockTarget.forSim(getApplication(), state.value.sim)
             val device = client.read(state.value.sim)
+            recordLocks(target, device)
             // Control and foreground observation need two simultaneously usable NAS clients.
             val probe = QmiModemClient(getApplication())
             try { probe.monitor(state.value.sim, includeRx = false) }
@@ -137,10 +152,14 @@ class QmiBandLockViewModel(app: Application) : AndroidViewModel(app) {
         refresh(request.sim)
     }
 
-    private fun activeSubscription(sim: Int): Int? = runCatching {
-        getApplication<Application>().getSystemService(SubscriptionManager::class.java)
-            .getActiveSubscriptionInfoForSimSlotIndex(sim - 1)?.subscriptionId
-    }.getOrNull()
+    fun resetQuickControl() {
+        requestedQuickId = null
+        pendingQuick = null
+        quickSubscription = null
+        mutable.update { it.copy(quickPrefill = null) }
+    }
+
+    private fun activeSubscription(sim: Int): Int? = MobileLockTarget.forSim(getApplication(), sim)?.subId
 
     private fun requireQuickSubscription() {
         quickSubscription?.let { (sim, subId) ->
@@ -213,12 +232,27 @@ class QmiBandLockViewModel(app: Application) : AndroidViewModel(app) {
             return
         }
         var modeRejected = false
+        val target = MobileLockTarget.forSim(getApplication(), ui.sim)
         operation(ui.sim, true, verifySelection = selection, warningMessage = {
             if (modeRejected) getApplication<Application>().getString(R.string.qmi_nr_mode_rejected) else null
         }) {
+            if (target != null && target.isActive(getApplication())) {
+                val pending = buildMap {
+                    val modeCommands = setOf("rat_set", "mode_set")
+                    if (commands.any { it.getString("cmd") !in modeCommands })
+                        put(MobileLock.BANDS, true)
+                    if (commands.any { it.getString("cmd") in modeCommands } &&
+                        device.copy(profile = draft).automaticMode() == false) put(MobileLock.MODE, true)
+                }
+                lockStatus.record(target, pending)
+            }
             val result = client.executeBands(ui.sim, commands)
             modeRejected = result.nrModeRejected
             val actual = result.device
+            if (target != null && target.isActive(getApplication()) &&
+                (actual.profile.rats != device.profile.rats || actual.profile.nrMode != device.profile.nrMode)) {
+                lockStatus.record(target, mapOf(MobileLock.MODE to actual.automaticMode()?.not()))
+            }
             val mismatches = commands.mapNotNull { command ->
                 when (val name = command.getString("cmd")) {
                     "rat_set" -> name.takeIf { actual.profile.rats != draft.rats }
@@ -246,13 +280,18 @@ class QmiBandLockViewModel(app: Application) : AndroidViewModel(app) {
         val ui = state.value
         val modeCommands = try { if (lockRat) qmiCellRatCommands(input, ui.device!!.profile, ui.device.nrModeSettable) else emptyList() }
         catch (e: IllegalArgumentException) { invalid(e); return }
-        val restoreKey = "${ui.sim}:$networkSubId"
+        val target = MobileLockTarget.forSim(getApplication(), ui.sim)
+        val restoreKey = "${ui.sim}:${target?.subId ?: -1}"
         operation(ui.sim, true, verifyCell = input.takeUnless { it.mode == QmiCellMode.PLMN }) {
             val before = if (lockRat) client.read(ui.sim).profile else ui.device!!.profile
             val freshModeCommands = if (lockRat) qmiCellRatCommands(input, before, ui.device!!.nrModeSettable) else modeCommands
-            if (lockRat && networkSubId >= 0 && !cellRestore.contains(restoreKey)) {
+            if (lockRat && target != null && !cellRestore.contains(restoreKey)) {
                 cellRestore.edit().putString(restoreKey, org.json.JSONObject()
                     .put("rats", before.rats.sorted().joinToString(",")).put("nrMode", before.nrMode).toString()).apply()
+            }
+            val family = when (input.mode) { QmiCellMode.LTE -> "lte"; QmiCellMode.PLMN -> "plmn"; else -> "nr" }
+            if (target != null && target.isActive(getApplication())) {
+                lockStatus.record(target, mapOf(qmiCellLockFamilies.getValue(family) to true))
             }
             val actual = client.execute(ui.sim, listOf(command) + freshModeCommands)
             if (lockRat) check(actual.profile.rats == setOf(if (input.mode == QmiCellMode.LTE) "lte" else "nr") &&
@@ -263,7 +302,7 @@ class QmiBandLockViewModel(app: Application) : AndroidViewModel(app) {
 
     fun unlockCells() {
         val sim = state.value.sim
-        val restoreKey = "$sim:$networkSubId"
+        val restoreKey = "$sim:${activeSubscription(sim) ?: -1}"
         operation(sim, true) {
             val current = client.read(sim)
             val commands = qmiActiveCellClearCommands(current.locks).toMutableList()
@@ -301,6 +340,7 @@ class QmiBandLockViewModel(app: Application) : AndroidViewModel(app) {
         val device = ui.device ?: return
         if (!device.controlReady) return
         val hardware = device.hardware ?: return
+        val restoreKey = "${ui.sim}:${activeSubscription(ui.sim) ?: -1}"
         var modeRejected = false
         operation(ui.sim, true, clearSelection = true, warningMessage = {
             if (modeRejected) getApplication<Application>().getString(R.string.qmi_nr_mode_rejected) else null
@@ -315,7 +355,47 @@ class QmiBandLockViewModel(app: Application) : AndroidViewModel(app) {
                 (modeRejected || "nr" !in plan.target.rats || plan.target.nrMode == "unknown" || actual.profile.nrMode == plan.target.nrMode)) {
                 getApplication<Application>().getString(R.string.qmi_unlock_readback_failed)
             }
-            cellRestore.edit().remove("${ui.sim}:$networkSubId").apply()
+            cellRestore.edit().remove(restoreKey).apply()
+            actual
+        }
+    }
+
+    internal fun recoverLocks(target: MobileLockTarget, onComplete: (Boolean) -> Unit): Boolean {
+        if (state.value.busy || SystemQmiServices.channelsBlocked.value) return false
+        resetQuickControl()
+        if (state.value.sim != target.sim) mutable.value = QmiBandUiState(sim = target.sim, mainlandMode = state.value.mainlandMode)
+        return operation(target.sim, writing = true, clearSelection = true, onComplete = onComplete) {
+            val app = getApplication<Application>()
+            check(target.isDefaultData(app)) { app.getString(R.string.qmi_quick_sim_changed) }
+            val saved = lockStatus.read(target)
+            val current = client.read(target.sim)
+            val activeCells = current.cellLocksToClear(saved)
+            val cellCommands = qmiActiveCellClearCommands(activeCells.associateWith { "active" })
+            val restoreKey = "${target.sim}:${target.subId}"
+            val needsBandReset = current.bandMaskLocked() ?: (MobileLock.BANDS in saved)
+            val plan = if (needsBandReset || MobileLock.MODE in saved || cellRestore.contains(restoreKey)) {
+                qmiBandUnlockPlan(current.profile, checkNotNull(current.hardware), current.nrModeSettable)
+            } else null
+            check(target.isDefaultData(app)) { app.getString(R.string.qmi_quick_sim_changed) }
+            val actual = when {
+                plan != null -> client.executeBands(target.sim, cellCommands + plan.commands).device
+                cellCommands.isNotEmpty() -> client.execute(target.sim, cellCommands)
+                else -> current
+            }
+            check(target.isActive(app)) { app.getString(R.string.qmi_quick_sim_changed) }
+            recordLocks(target, actual)
+            check(activeCells.all { actual.locks[it] == "" } && actual.locks.values.none { !it.isNullOrEmpty() }) {
+                app.getString(R.string.qmi_cell_clear_unconfirmed)
+            }
+            check(actual.bandMaskLocked() != true &&
+                (MobileLock.BANDS !in saved || actual.bandMaskLocked() == false) &&
+                (plan == null || (actual.profile.rats == plan.target.rats &&
+                    ("nr" !in plan.target.rats || plan.target.nrMode == "unknown" || actual.profile.nrMode == plan.target.nrMode))) &&
+                (MobileLock.MODE !in saved || actual.automaticMode() == true)) {
+                app.getString(R.string.qmi_unlock_readback_failed)
+            }
+            cellRestore.edit().remove(restoreKey).apply()
+            recentCellTargets = null
             actual
         }
     }
@@ -396,14 +476,19 @@ class QmiBandLockViewModel(app: Application) : AndroidViewModel(app) {
     private fun operation(sim: Int, writing: Boolean = false, clearSelection: Boolean = !writing,
                           verifySelection: QmiProfile? = null, successMessage: (() -> String)? = null,
                           warningMessage: (() -> String?)? = null, verifyCell: QmiCellInput? = null,
-                          action: suspend () -> QmiDeviceState) {
-        if (state.value.busy) return
+                          onComplete: ((Boolean) -> Unit)? = null,
+                          action: suspend () -> QmiDeviceState): Boolean {
+        if (state.value.busy) return false
+        val target = MobileLockTarget.forSim(getApplication(), sim)
         cancelVerification(); dismissStatus()
         mutable.update { it.copy(busy = true, error = null, message = null) }
         viewModelScope.launch {
+            var succeeded = false
             try {
                 if (writing) requireQuickSubscription()
                 val device = action()
+                recordLocks(target, device)
+                succeeded = true
                 mutable.update { it.copy(device = device,
                     cellLockState = qmiCellLockState(device, it.servingCells, recentTargets(sim)),
                     draft = if (clearSelection) qmiEmptyBandSelection(device.profile) else
@@ -424,6 +509,7 @@ class QmiBandLockViewModel(app: Application) : AndroidViewModel(app) {
             catch (e: Exception) {
                 // A multi-command operation can partially succeed. Show fresh state, never claim rollback.
                 val actual = if (writing) runCatching { client.read(sim) }.getOrNull() else (e as? QmiReadException)?.hardware
+                if (actual != null) recordLocks(target, actual)
                 recentCellTargets = null
                 mutable.update { it.copy(device = actual,
                     cellLockState = qmiCellLockState(actual, it.servingCells),
@@ -433,8 +519,12 @@ class QmiBandLockViewModel(app: Application) : AndroidViewModel(app) {
                     getApplication<Application>().getString(R.string.qmi_clients_exhausted) + "\n" + e.message.orEmpty()
                 else e.message.orEmpty()
                 postStatus(error = getApplication<Application>().getString(if (writing) R.string.qmi_write_failed else R.string.qmi_read_failed, detail))
-            } finally { mutable.update { it.copy(busy = false) } }
+            } finally {
+                mutable.update { it.copy(busy = false) }
+                onComplete?.invoke(succeeded)
+            }
         }
+        return true
     }
 
     override fun onCleared() {

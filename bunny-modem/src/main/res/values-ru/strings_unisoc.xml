@@ -1,0 +1,5 @@
+<resources>
+    <string name="unisoc_reply_unreadable">Модем не сообщил диапазоны на запрос %1$s. Ответ: %2$s</string>
+    <string name="unisoc_bands_unsettable">Блокировка диапазонов этого модема не может включать %1$s.</string>
+    <string name="unisoc_bands_kept">Модем принял новые диапазоны, но после перезапуска радиомодуля использует прежние.</string>
+</resources>

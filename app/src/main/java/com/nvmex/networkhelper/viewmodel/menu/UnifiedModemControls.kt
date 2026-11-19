@@ -2,6 +2,7 @@ package com.nvmex.networkhelper.viewmodel.menu
 
 import com.nvmex.networkhelper.model.network.NetworkPanelUiState
 import com.nvmex.networkhelper.util.qmi.*
+import com.nvmex.networkhelper.util.modem.MobileLock
 import com.nvmex.networkhelper.util.modem.parseModemPcis
 import dev.ririxi.bunnylock.modem.*
 import dev.ririxi.bunnylock.data.Rat
@@ -116,18 +117,32 @@ class ModemControlActions(private val legacy: QmiBandLockViewModel, private val 
         if (!bunny) return legacy.apply()
         val ui = presentation.state.value
         val draft = ui.draft ?: return
-        drivers.execute {
+        drivers.execute(trackNetworkMode = true) {
             require(draft.rats.isNotEmpty()) { "请至少选择一种网络制式" }
             val messages = mutableListOf<String>()
+            val bandLocks = linkedMapOf<Group, Set<Int>>()
             state.value.groups.forEach { group ->
                 val domains = if (group.group == Group.NR) listOf(QmiBand.NR_SA, QmiBand.NR_NSA)
                     else QmiBand.entries.filter { it.group() == group.group }
                 val chosen = domains.filter { it.rat in draft.rats }.flatMap { draft.bands[it].orEmpty() }.toSet()
-                if (chosen.isNotEmpty()) messages += lockBands(group.group, chosen)
+                if (chosen.isNotEmpty()) {
+                    if (!chosen.containsAll(group.supported)) {
+                        drivers.recordLockAttempt(state.value, MobileLock.BANDS)
+                        bandLocks[group.group] = chosen
+                    } else {
+                        messages += lockBands(group.group, chosen)
+                    }
+                }
             }
-            if (state.value.supportsNrMode && "nr" in draft.rats) messages += setNrMode(when (draft.nrMode) {
-                "sa" -> NrMode.SA; "nsa" -> NrMode.NSA; else -> NrMode.BOTH
-            })
+            if (locksBandsTogether && bandLocks.size > 1) messages += lockBands(bandLocks)
+            else bandLocks.forEach { (group, bands) -> messages += lockBands(group, bands) }
+            if (state.value.supportsNrMode && "nr" in draft.rats) {
+                val mode = when (draft.nrMode) { "sa" -> NrMode.SA; "nsa" -> NrMode.NSA; else -> NrMode.BOTH }
+                if (mode != NrMode.BOTH && mode != state.value.nrMode) drivers.recordLockAttempt(state.value, MobileLock.MODE)
+                setNrMode(mode)?.let(messages::add)
+            }
+            if (state.value.allowedMask?.let { it and draft.mask().inv() and Masks.GENERATIONS != 0L } == true)
+                drivers.recordLockAttempt(state.value, MobileLock.MODE)
             messages += setNetMode(NetMode.AUTO, draft.mask(), verbatim(draft.rats.joinToString(" + ").uppercase()))
             messages.joinToString("\n")
         }
@@ -146,21 +161,23 @@ class ModemControlActions(private val legacy: QmiBandLockViewModel, private val 
             if (input.mode == QmiCellMode.PLMN) {
                 val numeric = input.plmn.trim()
                 require(numeric.matches(Regex("[0-9]{5,6}"))) { "PLMN 需为 MCC + MNC" }
+                drivers.recordLockAttempt(state.value, MobileLock.PLMN)
                 return@execute lockPlmn(numeric.take(3), numeric.drop(3))
             }
             require(input.mode != QmiCellMode.NR_GNB) { "此后端不支持 gNB 白名单" }
             val nr = input.mode != QmiCellMode.LTE
             val pcis = if (!nr || input.mode != QmiCellMode.NR_ARFCN) parseModemPcis(input.pcis, nr) else emptyList()
-            require(!state.value.mtkAtCellLock || pcis.size <= 1) { "当前 AT 后端仅支持单个 PCI" }
-            require(state.value.supportsPciLock || pcis.isEmpty()) { "此后端仅支持频点锁定" }
+            require(!(state.value.backend == Backend.MEDIATEK && state.value.features.pciLock) || pcis.size <= 1) { "当前 AT 后端仅支持单个 PCI" }
+            require(state.value.features.pciLock || pcis.isEmpty()) { "此后端仅支持频点锁定" }
             val channel = requireNotNull(input.channel.toLongOrNull()) { "请输入有效频点" }
             require(channel in (if (nr) 1L..3279165L else 0L..262143L)) { "频点超出范围" }
-            val targets = if (state.value.supportsPciLock || nr) qmiCellTargetsFromInput(input)
+            val targets = if (state.value.features.pciLock || nr) qmiCellTargetsFromInput(input)
                 else listOf(QmiCellTarget("LTE", channel.toInt()))
-            if (!state.value.supportsPciLock && nr) require(input.band.toIntOrNull() in 1..512) { "请输入 NR 频段" }
+            if (!state.value.features.pciLock && nr) require(input.band.toIntOrNull() in 1..512) { "请输入 NR 频段" }
             val request = CellLockRequest(if (nr) LockRat.NR else LockRat.LTE,
                 if (nr) null else channel, if (nr) emptyList() else pcis,
                 if (nr) channel else null, if (nr) pcis else emptyList(), input.band.toIntOrNull(), input.scs)
+            drivers.recordLockAttempt(state.value, if (nr) MobileLock.NR_CELL else MobileLock.LTE_CELL)
             val result = lockCells(request)
             // Frequency-only backends must never pretend to have locked a selected PCI.
             presentation.rememberTargets(targets)

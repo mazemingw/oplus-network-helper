@@ -1,6 +1,7 @@
 package dev.ririxi.bunnylock.data
 
 import android.content.Context
+import dev.ririxi.bunnylock.modem.BunnyDiagnostics
 import dev.ririxi.bunnylock.modem.ModemException
 import dev.ririxi.bunnylock.modem.R
 import dev.ririxi.bunnylock.modem.Text
@@ -53,9 +54,14 @@ abstract class HelperClient(
             val shell = openShell()
             val helperStdin = shell.outputStream.bufferedWriter()
             val helperStdout = shell.inputStream.bufferedReader()
-            // The helper's stderr is only drained: a pipe that nobody reads would block the helper once it fills up.
+            // Keep draining after the diagnostic budget is exhausted so the pipe cannot block the helper.
             thread(name = "bunny-helper-stderr", isDaemon = true) {
-                runCatching { shell.errorStream.bufferedReader().forEachLine { } }
+                runCatching {
+                    var captured = 0
+                    shell.errorStream.bufferedReader().forEachLine {
+                        if (it.isNotBlank() && captured++ < 24) BunnyDiagnostics.record("helper", true, it.take(600))
+                    }
+                }
             }
             // exec replaces the shell with the helper, so the shell's pipes become the helper's.
             helperStdin.write("export CLASSPATH='${appInfo.sourceDir}'\n")
@@ -82,6 +88,7 @@ abstract class HelperClient(
                 }
             process = shell
             writer = helperStdin
+            BunnyDiagnostics.record("helper", false, "Privileged helper connected")
             hello
         }
 
@@ -138,14 +145,20 @@ abstract class HelperClient(
                 }
                 withTimeout(timeout) { reply.await() }
             } catch (_: TimeoutCancellationException) {
+                BunnyDiagnostics.record("helper", true, "$cmd timed out")
                 throw RootException(context, Text(R.string.modem_helper_no_answer, name))
             } catch (_: IOException) {
+                BunnyDiagnostics.record("helper", true, "$cmd lost the helper connection")
                 // The pipe to a helper that has died breaks on the write.
                 throw RootException(context, Text(R.string.modem_helper_stopped, name))
             } finally {
                 pendingReplies.remove(id)
             }
-        if (!response.optBoolean("ok")) throw context.errorOf(response)
+        if (!response.optBoolean("ok")) {
+            val error = context.errorOf(response)
+            BunnyDiagnostics.record("helper", true, "$cmd: ${error.message.orEmpty()}")
+            throw error
+        }
         return response.optJSONObject("data") ?: JSONObject()
     }
 

@@ -52,12 +52,13 @@ object Aosp {
         )
     private val GENERATION_NAMES = listOf("2G", "3G", "4G", "5G")
 
-    // TelephonyManager.NR_DUAL_CONNECTIVITY_ENABLE and ENABLE_NR_DUAL_CONNECTIVITY_SUCCESS (system APIs, so not in the SDK).
+    // TelephonyManager.NR_DUAL_CONNECTIVITY_ENABLE, NR_DUAL_CONNECTIVITY_DISABLE and ENABLE_NR_DUAL_CONNECTIVITY_SUCCESS (system APIs, so not in the SDK).
     private const val NR_DC_ENABLE = 1
+    private const val NR_DC_DISABLE = 2
     private const val NR_DC_SUCCESS = 0
 
     /** ril.h's MAX_BANDS: what one specifier holds in RILs built on the legacy structs. */
-    private const val MAX_RIL_BANDS = 8
+    const val MAX_RIL_BANDS = 8
 
     private const val BOOLEAN_CONSUMER = "com.android.internal.telephony.IBooleanConsumer"
     private const val CHANNELS_CALLBACK_TIMEOUT_SECONDS = 8L
@@ -78,7 +79,6 @@ object Aosp {
     /** The per-SIM "is the radio on" query. Its name depends on the Android version. */
     private val SIM_RADIO_STATE_QUERIES = listOf("isRadioOnForSubscriber", "isRadioOnForSubscriberWithFeature")
 
-    /** Used when the app couldn't name a subscription: the one in [slot], else the default, else the only active one. Negative if none. */
     fun resolveSubId(
         subId: Int,
         slot: Int,
@@ -103,7 +103,6 @@ object Aosp {
             ?: subId
     }
 
-    /** The hidden AIDL client of a system service: `<aidlInterface>.Stub.asInterface(ServiceManager.getService(serviceName))`. */
     private fun systemInterface(
         serviceName: String,
         aidlInterface: String,
@@ -163,7 +162,6 @@ object Aosp {
             else -> arg
         }
 
-    /** Invokes ITelephony.[name]: [findMethod] picks the overload, and trailing parameters without an argument get [defaultFor] values. */
     private fun call(
         name: String,
         vararg args: Any?,
@@ -186,7 +184,6 @@ object Aosp {
         argumentCount: Int,
     ): Boolean = findMethod(name, argumentCount) !== null
 
-    /** The bitmask a getter returns, or null when the getter is missing, fails or reports a negative value. */
     private fun readMask(
         name: String,
         vararg args: Any?,
@@ -461,12 +458,11 @@ object Aosp {
         return false
     }
 
-    /** [state] is a TelephonyManager.NR_DUAL_CONNECTIVITY_* value: 1 = enable EN-DC, 2 = disable, 3 = disable immediately. */
     fun setNrDc(
         subId: Int,
-        state: Int,
+        enabled: Boolean,
     ): JSONObject {
-        val resultCode = call("setNrDualConnectivityState", subId, state) as Int
+        val resultCode = call("setNrDualConnectivityState", subId, if (enabled) NR_DC_ENABLE else NR_DC_DISABLE) as Int
         if (resultCode != NR_DC_SUCCESS) {
             // The other TelephonyManager.ENABLE_NR_DUAL_CONNECTIVITY_* results.
             when (resultCode) {
@@ -476,7 +472,7 @@ object Aosp {
                 else -> fail(R.string.aosp_nr_dc_code, resultCode)
             }
         }
-        return JSONObject().put("nrDc", state == NR_DC_ENABLE)
+        return JSONObject().put("nrDc", enabled)
     }
 
     /** An empty list removes the restriction. A radio that never answers gives answered=false. */
@@ -484,6 +480,7 @@ object Aosp {
         subId: Int,
         specs: JSONArray,
         splitRefused: Boolean = true,
+        userSpecCount: Int = specs.length(),
     ): JSONObject {
         if (subId < 0) fail(R.string.aosp_no_subscription)
         val whole = List(specs.length()) { specs.getJSONObject(it) }.map(::toSpecifier)
@@ -512,7 +509,7 @@ object Aosp {
         val failure =
             when {
                 split.size > whole.size -> Text(R.string.aosp_channels_rejected_split, MAX_RIL_BANDS)
-                whole.any { it.bands.size > MAX_RIL_BANDS } -> Text(R.string.aosp_channels_rejected_fewer, MAX_RIL_BANDS)
+                whole.take(userSpecCount).any { it.bands.size > MAX_RIL_BANDS } -> Text(R.string.aosp_channels_rejected_fewer, MAX_RIL_BANDS)
                 else -> Text(R.string.aosp_channels_rejected)
             }
         fail(R.string.aosp_with_details, failure, "$requestDiagnostic; ${outcomes.joinToString("; ")}; after=${channelState(subId)}")
@@ -607,7 +604,7 @@ object Aosp {
         val callError = runCatching { call("setSystemSelectionChannels", specifiers, subId, callback) }.exceptionOrNull()
         if (callError !== null) {
             val diagnostic = "$requestDiagnostic; error=${errorText(callError)}"
-            throw HelperFailure(Text(R.string.aosp_with_details, Text(R.string.aosp_channels_not_started), diagnostic)).apply { initCause(callError) }
+            throw Failure(Text(R.string.aosp_with_details, Text(R.string.aosp_channels_not_started), diagnostic)).apply { initCause(callError) }
         }
         val callbackReceived = latch.await(CHANNELS_CALLBACK_TIMEOUT_SECONDS, TimeUnit.SECONDS)
         val elapsedMs = (System.nanoTime() - started) / 1_000_000
@@ -806,7 +803,6 @@ object Aosp {
 
     /** For an unknown subscription. setRadioPower only reaches the default SIM. */
     private fun cycleDefaultRadio(): JSONObject {
-        // Switching on is attempted whatever switching off did. Only afterwards are the two results checked.
         val off = runCatching { call("setRadioPower", false) == true }
         Thread.sleep(RADIO_OFF_PAUSE_MS)
         val on = runCatching { call("setRadioPower", true) == true }
@@ -822,7 +818,6 @@ object Aosp {
         return JSONObject().put("cycled", true)
     }
 
-    /** Runs [block] with every radio off. Airplane mode goes off again even when [block] fails. */
     fun <T> inAirplaneMode(block: () -> T): T {
         Sys.sh("cmd connectivity airplane-mode enable")
         try {

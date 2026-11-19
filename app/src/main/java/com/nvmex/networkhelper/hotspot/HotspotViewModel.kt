@@ -1,10 +1,7 @@
 package com.nvmex.networkhelper.hotspot
 
 import android.app.Application
-import android.content.BroadcastReceiver
 import android.content.Context
-import android.content.Intent
-import android.content.IntentFilter
 import android.net.wifi.SoftApConfiguration
 import android.os.Build
 import android.os.Looper
@@ -14,6 +11,7 @@ import androidx.annotation.RequiresApi
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import be.mygod.vpnhotspot.net.TetheringManagerCompat
+import be.mygod.vpnhotspot.net.TetherStates
 import be.mygod.vpnhotspot.net.wifi.SoftApCapability
 import be.mygod.vpnhotspot.net.wifi.SoftApConfigurationCompat
 import be.mygod.vpnhotspot.net.wifi.SoftApInfo
@@ -70,12 +68,10 @@ class HotspotViewModel(app: Application) : AndroidViewModel(app) {
     //监听logcat
     private val hostapdCalibrator = HostapdWidthCalibrator(TAG)
 
-    // ====== Tether 粘性广播（是否 tethered、接口列表）======
-    private val tetherReceiver = object : BroadcastReceiver() {
-        override fun onReceive(context: Context, intent: Intent) {
-            if (intent.action != TetheringManagerCompat.ACTION_TETHER_STATE_CHANGED) return
-
-            val tethered = intent.getStringArrayListExtra("tetherArray")?.toList().orEmpty()
+    private val tetherCallback = object : TetherStates.Callback {
+        override fun onTetherStatesChanged(states: TetherStates) {
+            if (!observing) return
+            val tethered = states.tethered.toList()
 
             val hasWifi = tethered.any {
                 it.contains("wlan", ignoreCase = true) ||
@@ -105,12 +101,9 @@ class HotspotViewModel(app: Application) : AndroidViewModel(app) {
         observing = true
 
         runCatching {
-            ctx.registerReceiver(
-                tetherReceiver,
-                IntentFilter(TetheringManagerCompat.ACTION_TETHER_STATE_CHANGED)
-            )
+            TetherStates.registerCallback(tetherCallback)
         }.onFailure { e ->
-            Log.w(TAG, "registerReceiver tether failed", e)
+            Log.w(TAG, "register tether state callback failed", e)
         }
 
         registerSoftApCallback()
@@ -122,7 +115,7 @@ class HotspotViewModel(app: Application) : AndroidViewModel(app) {
         if (!observing) return
         observing = false
 
-        runCatching { ctx.unregisterReceiver(tetherReceiver) }.onFailure { /* ignore */ }
+        runCatching { TetherStates.unregisterCallback(tetherCallback) }
         unregisterSoftApCallback()
         hostapdCalibrator.stop()
     }

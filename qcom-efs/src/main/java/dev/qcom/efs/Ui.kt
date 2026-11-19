@@ -66,6 +66,7 @@ fun App(vm: MainViewModel, onBack: () -> Unit, onFeatures: () -> Unit) {
     var importAsItem by remember { mutableStateOf<Boolean?>(null) }
     var pendingImport by remember { mutableStateOf<Uri?>(null) }
     var ssrNeedsWrites by remember { mutableStateOf(false) }
+    var manageCloudBackups by remember { mutableStateOf(false) }
 
     val exporter = rememberLauncherForActivityResult(
         ActivityResultContracts.CreateDocument("application/octet-stream")
@@ -186,6 +187,11 @@ fun App(vm: MainViewModel, onBack: () -> Unit, onFeatures: () -> Unit) {
                                     text = { Text("备份 EFS/NV 原始分区") },
                                     enabled = !state.busy,
                                     onClick = { menu = false; vm.requestRawBackup() },
+                                )
+                                DropdownMenuItem(
+                                    text = { Text("管理云备份") },
+                                    enabled = !state.busy,
+                                    onClick = { menu = false; manageCloudBackups = true },
                                 )
                                 DropdownMenuItem(
                                     text = { Text("导出当前目录（基带 TAR）") },
@@ -361,6 +367,7 @@ fun App(vm: MainViewModel, onBack: () -> Unit, onFeatures: () -> Unit) {
     }
 
     if (state.backupRunning) BackupProgressDialog(state)
+    if (manageCloudBackups) CloudBackupManagementDialog(state, vm) { manageCloudBackups = false }
 
     if (showMkdir) {
         TextPromptDialog(
@@ -593,12 +600,8 @@ private fun BrowserScreen(state: UiState, vm: MainViewModel, onBack: () -> Unit)
     }
 
     Column(Modifier.fillMaxSize()) {
-        if (!state.initialBackupComplete || !state.cloudBackupComplete) {
-            Column(Modifier.fillMaxWidth().padding(12.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                Text(if (state.backupBypassed) stringResource(R.string.efs_backup_bypassed) else "本地与云端备份尚未全部通过校验，写入已锁定", color = MaterialTheme.colorScheme.error)
-                state.initialBackupError?.let { Text(it, style = MaterialTheme.typography.bodySmall) }
-                BackupChainStatus(state, vm)
-            }
+        if (!state.initialBackupComplete || (state.cloudBackupEnabled == true && !state.cloudBackupComplete)) {
+            BackupChainStatus(state, vm)
         }
         Row(
             Modifier

@@ -1,8 +1,12 @@
-package dev.ririxi.bunnylock.root
+package dev.ririxi.bunnylock.backend.samsung
 
+import android.os.Build
 import android.os.IBinder
 import android.os.Process
 import dev.ririxi.bunnylock.modem.R
+import dev.ririxi.bunnylock.modem.Text
+import dev.ririxi.bunnylock.root.Sys
+import dev.ririxi.bunnylock.root.fail
 import org.json.JSONObject
 import java.lang.reflect.InvocationTargetException
 import java.lang.reflect.Method
@@ -93,5 +97,51 @@ object Samsung {
         val callingPackage = if (Process.myUid() == 0) "root" else "com.android.shell"
         if (!requireSemTelephony(subId, dataSubId).setNrMode(slot, mode, callingPackage)) fail(R.string.samsung_nr_mode_refused)
         return JSONObject().put("mode", mode)
+    }
+
+    // The band selection page of Samsung's service mode app, which the dialer code *#2263# opens.
+    const val SERVICE_MODE_PACKAGE = "com.sec.android.RilServiceModeApp"
+    const val SERVICE_MODE_ACTIVITY = ".ServiceModeApp"
+    const val DIALER_CODE_EXTRA = "keyString"
+    const val BAND_SELECTION_DIALER_CODE = "2263"
+
+    // What `am start` prints first when Android refuses the launch.
+    const val PERMISSION_DENIAL = "Permission Denial"
+
+    // Older band menus, One UI 6+ first.
+    private val HIDDEN_NETWORK_SETTINGS =
+        listOf(
+            "com.samsung.android.app.telephonyui/.hiddennetworksetting.MainActivity",
+            "com.samsung.hiddennetworksetting/.MainActivity",
+        )
+
+    private val MENU_LAUNCHES =
+        listOf("$SERVICE_MODE_PACKAGE/$SERVICE_MODE_ACTIVITY" to "--es $DIALER_CODE_EXTRA $BAND_SELECTION_DIALER_CODE") +
+            HIDDEN_NETWORK_SETTINGS.map { it to "" }
+
+    // A refused launch prints a SecurityException, not an "Error" line.
+    private val AM_START_FAILURE_MARKERS = listOf("Error", "Exception", "does not exist")
+
+    fun hasMenu(): Boolean =
+        Build.MANUFACTURER.equals("samsung", ignoreCase = true) &&
+            MENU_LAUNCHES.any { (component, _) -> Sys.sh("pm path ${component.substringBefore('/')}").startsWith("package:") }
+
+    fun openMenu(): JSONObject {
+        val failures = ArrayList<String>()
+        for ((component, extras) in MENU_LAUNCHES) {
+            val output = Sys.sh("am start -n $component $extras")
+            if (AM_START_FAILURE_MARKERS.none { it in output }) return JSONObject().put("started", component)
+            failures += failureLine(output)
+        }
+        val denied = failures.firstOrNull { PERMISSION_DENIAL in it }
+        if (denied !== null) fail(R.string.aosp_with_details, Text(R.string.sys_samsung_menu_denied), denied)
+        val details = failures.filter { it.isNotEmpty() }.joinToString(" / ")
+        if (details.isEmpty()) fail(R.string.sys_samsung_menu_missing)
+        fail(R.string.aosp_with_details, Text(R.string.sys_samsung_menu_missing), details)
+    }
+
+    private fun failureLine(amStartOutput: String): String {
+        val lines = amStartOutput.lines().map { it.trim() }
+        return lines.firstOrNull { PERMISSION_DENIAL in it || it.startsWith("Error:") } ?: lines.lastOrNull { it.isNotEmpty() }.orEmpty()
     }
 }

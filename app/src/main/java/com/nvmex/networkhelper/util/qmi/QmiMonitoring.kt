@@ -37,13 +37,15 @@ internal fun qmiMonitoringCanRetry(error: Exception): Boolean = when (error) {
 
 /** Read-only recovery. Close the owned session and retry twice; never reset locks or other apps. */
 internal suspend fun <T> qmiRecoverMonitoring(read: suspend () -> T, reopen: suspend () -> Unit,
-                                             pause: suspend (Long) -> Unit): T {
+                                             pause: suspend (Long) -> Unit,
+                                             onRetry: (attempt: Int, error: Exception) -> Unit = { _, _ -> }): T {
     val backoff = longArrayOf(400, 1200)
     var attempt = 0
     while (true) {
         try { return read() }
         catch (e: Exception) {
             if (!qmiMonitoringCanRetry(e) || attempt >= backoff.size) throw e
+            onRetry(attempt + 1, e)
             reopen()
             pause(backoff[attempt++])
         }

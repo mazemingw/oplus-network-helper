@@ -1,5 +1,7 @@
 package dev.ririxi.bunnylock.shizuku
 
+import dev.ririxi.bunnylock.modem.BunnyDiagnostics
+
 import android.content.ComponentName
 import android.content.Context
 import android.content.ServiceConnection
@@ -209,11 +211,17 @@ class ShizukuClient(
             try {
                 JSONObject(withTimeout(timeout) { reply.await() })
             } catch (_: TimeoutCancellationException) {
+                BunnyDiagnostics.record("shizuku", true, "$cmd timed out")
                 throw RootException(context, Text(R.string.system_shizuku_service_timeout))
             } catch (_: RemoteException) {
+                BunnyDiagnostics.record("shizuku", true, "$cmd lost the Shizuku connection")
                 throw RootException(context, Text(R.string.system_shizuku_service_died))
             }
-        if (!response.optBoolean("ok")) throw context.errorOf(response)
+        if (!response.optBoolean("ok")) {
+            val error = context.errorOf(response)
+            BunnyDiagnostics.record("shizuku", true, "$cmd: ${error.message.orEmpty()}")
+            throw error
+        }
         return response.optJSONObject("data") ?: JSONObject()
     }
 

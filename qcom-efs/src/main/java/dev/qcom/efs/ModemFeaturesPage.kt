@@ -38,7 +38,7 @@ private val connectedGreen = Color(0xFF2E7D32)
     val context = LocalContext.current
     val export = rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument("application/zip"), vm::completeExport)
     val manual = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { it?.let(vm::prepareFullRecovery) }
-    val permission = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { vm.enterModule() }
+    val permission = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { vm.enterModule(browse = false) }
     val ready = state.features as? FeaturesState.Ready
     val acting = ready?.statuses?.values?.any { it is FeatureStatus.Writing } == true
     val busy = state.busy || acting || state.features is FeaturesState.Checking
@@ -54,8 +54,8 @@ private val connectedGreen = Color(0xFF2E7D32)
     var unsupportedOpen by rememberSaveable(ready?.simSlot) { mutableStateOf(false) }
     val groups = ALL_FEATURES.groupBy { featureSection(it, ready?.statuses?.get(it.id)) }
 
-    LaunchedEffect(state.phase, state.backupRunning, state.features) {
-        if (connected && !state.backupRunning && state.features == null) vm.openFeatures(defaultDataSlot?.takeIf { it in 0..1 } ?: 0)
+    LaunchedEffect(state.phase, state.features) {
+        if (connected && state.features == null) vm.openFeatures(defaultDataSlot?.takeIf { it in 0..1 } ?: 0)
     }
     LaunchedEffect(state.toast) { state.toast?.let { Toast.makeText(context, it, Toast.LENGTH_LONG).show(); vm.dismissToast() } }
     LaunchedEffect(ready?.note) { ready?.note?.let { Toast.makeText(context, it, Toast.LENGTH_LONG).show() } }
@@ -92,7 +92,7 @@ private val connectedGreen = Color(0xFF2E7D32)
             verticalArrangement = Arrangement.spacedBy(8.dp)) {
             item {
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    Button(onClick = vm::reconnect, modifier = Modifier.weight(1f), shape = actionShape,
+                    Button(onClick = vm::reconnectFeatures, modifier = Modifier.weight(1f), shape = actionShape,
                         contentPadding = PaddingValues(horizontal = 4.dp),
                         colors = if (connected) ButtonDefaults.buttonColors(containerColor = connectedGreen, contentColor = Color.White) else ButtonDefaults.buttonColors(),
                         enabled = !busy && state.phase != Phase.CONNECTING) {
@@ -108,16 +108,20 @@ private val connectedGreen = Color(0xFF2E7D32)
                         contentPadding = PaddingValues(horizontal = 4.dp),
                         enabled = !busy) { Text("保存应用") }
                 }
-                Surface(Modifier.fillMaxWidth().padding(vertical = 4.dp).clickable { showBackup = true },
+                Surface(Modifier.fillMaxWidth().padding(vertical = 4.dp).clickable(enabled = !busy) { showBackup = true },
                     color = MaterialTheme.colorScheme.surfaceContainerLow, shape = actionShape) {
                     Row(Modifier.padding(10.dp), verticalAlignment = Alignment.CenterVertically,
                         horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                         Text("备份", style = MaterialTheme.typography.labelLarge)
                         BackupBadge("本地", state.initialBackupComplete)
-                        BackupBadge("云端", state.cloudBackupComplete)
+                        BackupBadge(state.cloudBackupStatus, state.cloudBackupEnabled == true && state.cloudBackupComplete)
                         Spacer(Modifier.weight(1f))
                         Icon(Icons.Default.ChevronRight, "查看备份详情", Modifier.size(18.dp))
                     }
+                }
+                (state.backupMessage ?: state.busyLabel)?.let { message ->
+                    LinearProgressIndicator(Modifier.fillMaxWidth())
+                    Text(message, style = MaterialTheme.typography.bodySmall)
                 }
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     OutlinedButton(onClick = vm::requestRawBackup, Modifier.weight(1f), shape = actionShape,
@@ -197,15 +201,7 @@ private val connectedGreen = Color(0xFF2E7D32)
             }
         }
     }
-    if (state.backupRunning) BackupProgressDialog(state)
-    if (showBackup) AlertDialog(onDismissRequest = { showBackup = false }, title = { Text("备份状态") }, text = {
-        Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-            Text("本地：${if (state.initialBackupComplete) "已校验" else "未完成"}\n云端：${if (state.cloudBackupComplete) "已校验" else "未完成"}")
-            if (!protected) (state.initialBackupError ?: state.cloudBackupMessage)?.let { Text(chineseMessage(it), style = MaterialTheme.typography.bodySmall) }
-            Text("归档标识：机型 + IMEI1", style = MaterialTheme.typography.bodySmall)
-        }
-    }, confirmButton = { TextButton(onClick = { showBackup = false }) { Text("关闭") } },
-        dismissButton = { if (state.initialBackupComplete && !state.cloudBackupComplete) TextButton(onClick = { showBackup = false; vm.retryCloudBackup() }, enabled = !busy) { Text("重试云备份") } })
+    if (showBackup) CloudBackupManagementDialog(state, vm) { showBackup = false }
     details?.let { message -> AlertDialog(onDismissRequest = { details = null }, title = { Text("操作详情") },
         text = { Text(message) }, confirmButton = { TextButton(onClick = { details = null }) { Text("关闭") } }) }
     pending?.let { (id, restore) -> AlertDialog(onDismissRequest = { pending = null },

@@ -9,6 +9,7 @@ import androidx.lifecycle.viewModelScope
 import com.nvmex.networkhelper.model.network.CellTimelinePoint
 import com.nvmex.networkhelper.model.network.NetworkPanelUiState
 import com.nvmex.networkhelper.model.network.upsertCellTimeline
+import com.nvmex.networkhelper.util.diagnostics.DiagnosticReporter
 import com.nvmex.networkhelper.util.network.NetworkPanelRepositoryMultiSim
 import com.nvmex.networkhelper.util.network.TelephonySnapshotterMultiSim
 import com.nvmex.networkhelper.util.network.observeDefaultDataSubId
@@ -58,12 +59,16 @@ class NetworkPanelMultiSimViewModel(app: Application) : AndroidViewModel(app) {
     private var qmiGeneration = 0L
     private val qmiOwners = mutableMapOf<Int, Long>()
     private val qmiJobs = mutableMapOf<Long, Job>()
+    private val rxLogSource = "multi-antenna-rx"
 
     /** Driver handoff waits until foreground monitor sockets have really closed. */
     suspend fun stopQmiMonitoring() {
         qmiJobs.values.toList().forEach { it.cancelAndJoin() }
     }
-    fun retryQmiMonitoring() { _qmiRetry.value++ }
+    fun retryQmiMonitoring() {
+        DiagnosticReporter.info(rxLogSource, "Manual monitoring refresh")
+        _qmiRetry.value++
+    }
     private val _cellTimelineBySubId = MutableStateFlow<Map<Int, List<CellTimelinePoint>>>(emptyMap())
 
     /**
@@ -95,8 +100,10 @@ class NetworkPanelMultiSimViewModel(app: Application) : AndroidViewModel(app) {
             qmiMonitorMutex.withLock {
                 if (qmiOwners[sim - 1] != generation) return@withLock
                 var client = QmiModemClient(getApplication())
+                var previousRxErrors: Map<String, String> = emptyMap()
                 try {
                     while (currentCoroutineContext().isActive && qmiOwners[sim - 1] == generation) {
+                        var retried = false
                         val snapshot = qmiRecoverMonitoring(read = { client.monitor(sim, includeRx) }, reopen = {
                             if (qmiOwners[sim - 1] == generation) {
                                 _qmiLoading.value = _qmiLoading.value + (sim - 1 to true)
@@ -105,8 +112,21 @@ class NetworkPanelMultiSimViewModel(app: Application) : AndroidViewModel(app) {
                             }
                             client.close()
                             client = QmiModemClient(getApplication())
-                        }, pause = { delay(it) })
+                        }, pause = { delay(it) }, onRetry = { attempt, error ->
+                            retried = true
+                            DiagnosticReporter.warning(rxLogSource,
+                                "SIM $sim rx=$includeRx: reconnect $attempt/2 after ${error.message ?: error.javaClass.simpleName}")
+                        })
                         if (qmiOwners[sim - 1] == generation) {
+                            if (retried) DiagnosticReporter.info(rxLogSource, "SIM $sim rx=$includeRx: monitoring recovered")
+                            if (includeRx) {
+                                val errors = snapshot.rx.mapNotNull { group -> group.error?.let { group.rat to it } }.toMap()
+                                if (errors != previousRxErrors) {
+                                    if (errors.isEmpty()) DiagnosticReporter.info(rxLogSource, "SIM $sim: RX reads recovered")
+                                    else DiagnosticReporter.warning(rxLogSource, "SIM $sim: RX read status $errors")
+                                    previousRxErrors = errors
+                                }
+                            }
                             _qmiBySlot.value = _qmiBySlot.value + (snapshot.radio.slot to snapshot.radio)
                             _qmiRxBySlot.value = _qmiRxBySlot.value + (sim - 1 to snapshot.rx)
                             _qmiLoading.value = _qmiLoading.value + (sim - 1 to false)
@@ -118,6 +138,7 @@ class NetworkPanelMultiSimViewModel(app: Application) : AndroidViewModel(app) {
         } catch (e: CancellationException) { throw e }
         catch (e: Exception) {
             if (qmiOwners[sim - 1] == generation) {
+                DiagnosticReporter.warning(rxLogSource, "SIM $sim rx=$includeRx: monitoring stopped: ${e.message ?: e.javaClass.simpleName}")
                 _qmiBySlot.value = _qmiBySlot.value - (sim - 1)
                 _qmiRxBySlot.value = _qmiRxBySlot.value - (sim - 1)
                 _qmiErrors.value = _qmiErrors.value + (sim - 1 to e.message.orEmpty())

@@ -69,4 +69,6 @@
     <string name="qrtr_timeout">Modem nie odpowiedział na żądanie QMI na czas</string>
     <string name="qrtr_wait">Nie udało się doczekać odpowiedzi QMI</string>
     <string name="qrtr_recv">Nie udało się odczytać odpowiedzi QMI</string>
+    <string name="cell_hint_qualcomm">Blokuje LTE i NR na PCI (PCell w SA albo SCG w NSA). Zostaw PCI dla NR puste, żeby zablokować samą częstotliwość. Kilka PCI oddziel przecinkami.</string>
+    <string name="cell_plmn_hint_qualcomm">Najpierw próbuje przez QMI. Jeśli modem odmówi, używa ręcznego wyboru sieci z Androida.</string>
 </resources>

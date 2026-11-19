@@ -1,7 +1,6 @@
 package dev.ririxi.bunnylock.modem
 
 import android.content.Context
-import android.telephony.TelephonyManager
 import androidx.annotation.StringRes
 import dev.ririxi.bunnylock.core.Bands
 import dev.ririxi.bunnylock.data.Carrier
@@ -9,12 +8,14 @@ import dev.ririxi.bunnylock.data.Cell
 import dev.ririxi.bunnylock.data.Signal
 import org.json.JSONObject
 
+// Declared in the order bunnylock prefers them. ANDROID suits every phone, so it comes last.
 enum class Backend(
     @StringRes val label: Int,
 ) {
     QUALCOMM(R.string.backend_qualcomm),
     MEDIATEK(R.string.backend_mediatek),
     PIXEL(R.string.backend_pixel),
+    UNISOC(R.string.backend_unisoc),
     ANDROID(R.string.backend_android),
 }
 
@@ -73,6 +74,7 @@ data class BandGroupState(
     val current: Set<Int>?,
     /** A band the phone is camped on although the lock excludes it, so the modem isn't following the lock. */
     val stray: Int? = null,
+    val keptOff: List<Int> = emptyList(),
 ) {
     val locked get() = !current.isNullOrEmpty() && !current.containsAll(supported)
 
@@ -110,66 +112,6 @@ enum class NetMode(
     }
 }
 
-object Masks {
-    /** Network type n is bit n - 1 of an allowed-network-types bitmask. */
-    private fun maskOf(vararg networkTypes: Int) = networkTypes.fold(0L) { mask, type -> mask or (1L shl (type - 1)) }
-
-    val G2 = maskOf(
-        TelephonyManager.NETWORK_TYPE_GSM,
-        TelephonyManager.NETWORK_TYPE_GPRS,
-        TelephonyManager.NETWORK_TYPE_EDGE
-    )
-
-    // The framework deprecated the CDMA types, but the Auto and No 5G masks still carry them for phones that have CDMA.
-    @Suppress("DEPRECATION")
-    val CDMA =
-        maskOf(
-            TelephonyManager.NETWORK_TYPE_CDMA,
-            TelephonyManager.NETWORK_TYPE_1xRTT,
-            TelephonyManager.NETWORK_TYPE_EVDO_0,
-            TelephonyManager.NETWORK_TYPE_EVDO_A,
-            TelephonyManager.NETWORK_TYPE_EVDO_B,
-            TelephonyManager.NETWORK_TYPE_EHRPD,
-        )
-
-    val G3 =
-        maskOf(
-            TelephonyManager.NETWORK_TYPE_UMTS,
-            TelephonyManager.NETWORK_TYPE_HSDPA,
-            TelephonyManager.NETWORK_TYPE_HSUPA,
-            TelephonyManager.NETWORK_TYPE_HSPA,
-            TelephonyManager.NETWORK_TYPE_HSPAP,
-            TelephonyManager.NETWORK_TYPE_TD_SCDMA,
-        )
-    val G4 = maskOf(TelephonyManager.NETWORK_TYPE_LTE)
-    val G5 = maskOf(TelephonyManager.NETWORK_TYPE_NR)
-    val GENERATIONS = G2 or G3 or G4 or G5
-
-    // TelephonyManager.NETWORK_TYPE_LTE_CA, which the SDK hides.
-    private const val NETWORK_TYPE_LTE_CA = 19
-
-    /** LTE also fits a 5G mask, since it anchors 5G NSA. */
-    fun allows(
-        mask: Long,
-        networkType: Int,
-    ): Boolean {
-        val type = if (networkType == NETWORK_TYPE_LTE_CA) TelephonyManager.NETWORK_TYPE_LTE else networkType
-        val anchorsNr = type == TelephonyManager.NETWORK_TYPE_LTE && mask and G5 != 0L
-        return mask and maskOf(type) != 0L || anchorsNr
-    }
-
-    /** QMI NAS mode-preference bits. */
-    fun toQmi(mask: Long): Int {
-        var modePreference = 0
-        if (mask and G2 != 0L) modePreference = modePreference or 0x04
-        if (mask and G3 != 0L) modePreference = modePreference or 0x08
-        if (mask and G4 != 0L) modePreference = modePreference or 0x10
-        if (mask and G5 != 0L) modePreference = modePreference or 0x40
-        return modePreference
-    }
-}
-
-/** QMI and Samsung both take the ordinal as the 5G mode number, so the order matters. */
 enum class NrMode(
     @StringRes val label: Int,
 ) {
@@ -204,46 +146,6 @@ private fun Context.joinNatural(
         getString(last, items.dropLast(1).joinToString(getString(R.string.list_separator)), items.last())
     }
 
-enum class ImsFeature(
-    val key: String,
-    val label: String,
-) {
-    VOLTE("volte", "VoLTE"),
-    VOWIFI("vowifi", "VoWiFi"),
-}
-
-enum class ImsBlock {
-    NOT_OFFERED,
-    LOCKED,
-}
-
-sealed interface ImsSetting {
-    data class Readable(
-        val enabled: Boolean,
-        val blocked: ImsBlock?,
-    ) : ImsSetting
-
-    data class Unreadable(
-        val error: String,
-    ) : ImsSetting
-
-    companion object {
-        fun from(json: JSONObject): ImsSetting {
-            if (!json.has("enabled")) return Unreadable(json.optString("error"))
-            val blocked =
-                when (json.optString("blocked")) {
-                    "notOffered" -> ImsBlock.NOT_OFFERED
-                    "locked" -> ImsBlock.LOCKED
-                    else -> null
-                }
-            return Readable(json.getBoolean("enabled"), blocked)
-        }
-    }
-}
-
-fun imsSettingsFrom(json: JSONObject): Map<ImsFeature, ImsSetting> =
-    ImsFeature.entries.mapNotNull { feature -> json.optJSONObject(feature.key)?.let { feature to ImsSetting.from(it) } }.toMap()
-
 data class SimInfo(
     val slot: Int,
     val subId: Int,
@@ -251,7 +153,7 @@ data class SimInfo(
 )
 
 data class DeviceInfo(
-    val vendor: String,
+    val chipset: Chipset,
     val qrtr: Boolean,
     val socModel: String,
     val platform: String,
@@ -261,49 +163,22 @@ data class DeviceInfo(
     val ril: String,
     val sdk: Int,
     val atNodes: List<String>,
+    val defaultAtNode: String,
     val pixelRouter: Boolean,
     val samsungMenu: Boolean,
     val aospChannels: Boolean,
     val aospNrDc: Boolean,
-    /** MediaTek's phoneEx AT passthrough, usable without root. */
-    val mtkOemHook: Boolean,
-    val mtkOemHookStatus: Text?,
-    val mtkOemHookChecked: List<Text>,
+    // An AT passthrough in the phone's RIL (MediaTek, Motorola, Oplus and others), usable without root.
+    val rilPassthrough: Boolean,
+    val rilPassthroughStatus: Text?,
+    val rilPassthroughChecked: List<Text>,
     /** Samsung's ISemTelephony 5G mode control (works without root). */
     val samsungNrMode: Boolean,
 ) {
-    @get:StringRes
-    val vendorLabel
-        get() =
-            when (vendor) {
-                "qualcomm" -> R.string.vendor_qualcomm
-                "mediatek" -> R.string.vendor_mediatek
-                "tensor" -> R.string.vendor_tensor
-                "exynos" -> R.string.vendor_exynos
-                "unisoc" -> R.string.vendor_unisoc
-                else -> R.string.vendor_unknown
-            }
-
-    private val hasMediatekAtPort get() = atNodes.any { it.startsWith("/dev/radio") || it == "/dev/ttyC0" }
-
-    fun suggested(): Backend =
-        when {
-            qrtr -> Backend.QUALCOMM
-            vendor == "mediatek" && (mtkOemHook || hasMediatekAtPort) -> Backend.MEDIATEK
-            vendor == "tensor" && pixelRouter -> Backend.PIXEL
-            else -> Backend.ANDROID
-        }
-
-    /** [shellOnly] is Shizuku with ADB access, which reaches telephony services but not the modem. */
-    fun allows(
-        backend: Backend,
-        shellOnly: Boolean,
-    ): Boolean = !shellOnly || backend == Backend.ANDROID || (backend == Backend.MEDIATEK && mtkOemHook)
-
     companion object {
-        fun from(json: JSONObject) =
+        internal fun from(json: JSONObject) =
             DeviceInfo(
-                vendor = json.optString("vendor"),
+                chipset = Chipset.named(json.optString("chipset")),
                 qrtr = json.optBoolean("qrtr"),
                 socModel = json.optString("socModel"),
                 platform = json.optString("platform"),
@@ -313,13 +188,14 @@ data class DeviceInfo(
                 ril = json.optString("ril"),
                 sdk = json.optInt("sdk"),
                 atNodes = json.stringList("atNodes"),
+                defaultAtNode = json.optString("defaultAtNode"),
                 pixelRouter = json.optBoolean("pixelRouter"),
                 samsungMenu = json.optBoolean("samsungMenu"),
                 aospChannels = json.optBoolean("aospChannels"),
                 aospNrDc = json.optBoolean("aospNrDc"),
-                mtkOemHook = json.optBoolean("mtkOemHook"),
-                mtkOemHookStatus = json.optText("mtkOemHookStatus"),
-                mtkOemHookChecked = json.optTexts("mtkOemHookChecked"),
+                rilPassthrough = json.optBoolean("rilPassthrough"),
+                rilPassthroughStatus = json.optText("rilPassthroughStatus"),
+                rilPassthroughChecked = json.optTexts("rilPassthroughChecked"),
                 samsungNrMode = json.optBoolean("samsungNrMode"),
             )
 
@@ -327,6 +203,18 @@ data class DeviceInfo(
             optJSONArray(key)?.let { array -> List(array.length()) { array.getString(it) } } ?: emptyList()
     }
 }
+
+data class BackendFeatures(
+    val cellHint: Text? = null,
+    val plmnHint: Text? = null,
+    val nrMode: Boolean = false,
+    val pciLock: Boolean = false,
+    val nrSubcarrierSpacing: Boolean = false,
+    val persistSwitch: Boolean = false,
+    val reattach: Boolean = false,
+    val qmiConsole: Boolean = false,
+    val forgetNeedsChannels: Boolean = false,
+)
 
 enum class Access(
     val label: String,
@@ -354,6 +242,9 @@ data class ModemState(
     val device: DeviceInfo? = null,
     val backend: Backend? = null,
     val autoBackend: Backend? = null,
+    val offeredBackends: List<Backend> = Backend.entries,
+    val availableBackends: Set<Backend> = emptySet(),
+    val features: BackendFeatures = BackendFeatures(),
     val sims: List<SimInfo> = emptyList(),
     /** Counted from 1 as users see it, so one more than the SIM's slot index. */
     val sim: Int = 1,
@@ -377,8 +268,8 @@ data class ModemState(
     val legacyCellLock: String? = null,
     /** e.g. "EARFCN 75": the channel the phone is camped on although a frequency lock excludes it. */
     val strayChannel: String? = null,
-    /** The MediaTek modem doesn't take AT+EMMCHLCK, so a cell lock has to go through the radio HAL. */
-    val mtkCellLockRefused: Boolean = false,
+    val bandLocksThroughHal: Boolean = false,
+    val cellLocksThroughHal: Boolean = false,
     /** e.g. "262 01". Null when selection is automatic. */
     val plmnLock: String? = null,
     val registeredPlmn: String? = null,
@@ -408,10 +299,9 @@ data class ModemState(
     /** ADB-level access only reaches the framework's telephony APIs, not the modem directly. */
     val limited get() = access == Access.SHIZUKU_ADB
 
-    /** With ADB-level access only the HAL backend works, plus MediaTek when its RIL passthrough exists. */
-    fun allows(candidate: Backend): Boolean = device?.allows(candidate, limited) == true
+    fun allows(candidate: Backend): Boolean = candidate in availableBackends
 
-    /** The networks worth offering for a lock, as PLMN to operator name: home first, then the current one, then every visible one. */
+    /** The networks worth offering for a lock, as PLMN to operator name. */
     fun plmnPicks(context: Context): List<Pair<String, String>> {
         val picks = LinkedHashMap<String, String>()
         homePlmn?.let { picks[it] = homeName ?: context.getString(R.string.plmn_home) }
@@ -446,20 +336,14 @@ data class ModemState(
 
     fun isOff(group: Group) = allowedMask?.let { it and group.generation == 0L } == true
 
-    val supportsNrMode
-        get() =
-            supports5g &&
-                    when (backend) {
-                        Backend.QUALCOMM, Backend.PIXEL -> true
-                        Backend.ANDROID -> device?.samsungNrMode == true
-                        else -> false
-                    }
+    val supportsNrMode get() = supports5g && features.nrMode
     val supportsNrDc get() = supports5g && device?.aospNrDc == true
-    val mtkAtCellLock get() = backend == Backend.MEDIATEK && !mtkCellLockRefused
-
-    /** Every other cell lock goes through the radio HAL, which locks a frequency but never a PCI. */
-    val supportsPciLock get() = backend == Backend.QUALCOMM || mtkAtCellLock
 }
+
+class QmiReply(
+    val output: String,
+    val error: Text?,
+)
 
 data class CellLockRequest(
     val rat: LockRat,

@@ -44,4 +44,6 @@
 
     <string name="server_unknown_subscription">Subskrypcja tej karty SIM jest nieznana.</string>
     <string name="server_unknown_command">Nieznane polecenie: %1$s.</string>
+    <string name="cell_hint_hal">Blokuje częstotliwość (ARFCN) przez radio HAL. Ten sposób nie blokuje PCI, a niektóre modemy (np. Qualcomm na fabrycznym oprogramowaniu) stosują tylko pasmo i ignorują kanał.</string>
+    <string name="cell_plmn_hint_android">Używa ręcznego wyboru sieci z Androida, który zostaje po restarcie.</string>
 </resources>

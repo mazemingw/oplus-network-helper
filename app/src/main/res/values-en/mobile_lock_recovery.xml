@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="mobile_lock_outage_title">A lock may be blocking mobile service</string>
+    <string name="mobile_lock_outage_text">SIM %1$d cannot connect to the mobile network right now. The band or cell you locked may be out of range. Clear both locks to let your phone find a network automatically.</string>
+    <string name="mobile_lock_unlock_both">Clear band and cell locks</string>
+    <string name="mobile_lock_later">Not now</string>
+    <string name="mobile_lock_unlocking_title">Clearing locks</string>
+    <string name="mobile_lock_unlocking_text">Please wait while the band and cell locks on SIM %1$d are cleared.</string>
+    <string name="mobile_lock_failed_title">Could not confirm unlock</string>
+    <string name="mobile_lock_failed_text">SIM %1$d may still have active locks. Try again or check the status in Band and Cell Control.</string>
+    <string name="mobile_lock_retry">Try again</string>
+    <string name="mobile_lock_reconnecting">Locks cleared. Your phone is looking for a network…</string>
+    <string name="mobile_lock_airplane_title">Mobile service has not returned</string>
+    <string name="mobile_lock_airplane_text">Band and cell locks on SIM %1$d are cleared, but your phone still cannot connect. Swipe down to open Quick Settings, turn on Airplane mode, wait a few seconds, then turn it off and let your phone search again. Wait until any call ends first, since Airplane mode briefly interrupts calls and mobile data.</string>
+    <string name="mobile_lock_got_it">Got it</string>
+</resources>

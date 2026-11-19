@@ -44,4 +44,6 @@
 
     <string name="server_unknown_subscription">Підписка цієї SIM невідома.</string>
     <string name="server_unknown_command">Невідома команда: %1$s.</string>
+    <string name="cell_hint_hal">Блокує частоту (ARFCN) через Radio HAL. Цей бекенд не може блокувати на PCI, а деякі модеми (наприклад, стоковий Qualcomm) застосовують лише діапазон і ігнорують канал.</string>
+    <string name="cell_plmn_hint_android">Використовує ручний вибір мережі Android, який зберігається після перезавантаження.</string>
 </resources>

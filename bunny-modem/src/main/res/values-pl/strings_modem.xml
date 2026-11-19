@@ -68,7 +68,7 @@
     <string name="modem_note_kept_lock_refused">Telefon zachował starą blokadę po odblokowaniu i odrzucił każdą listę wszystkich pasm, jaką wysłała aplikacja.</string>
     <string name="modem_note_kept_lock_renamed">Telefon zachował starą blokadę po odblokowaniu, więc aplikacja jeszcze raz wysłała mu listę wszystkich pasm.</string>
     <string name="modem_note_nr_bands_limit">Przyjmuje naraz najwyżej %1$d pasm 5G, więc teraz włączone są: %2$s.</string>
-    <string name="modem_note_legacy_back">2G i 3G znowu działają, ale GSM 1800 może pozostać wyłączone: oprogramowanie radiowe tego telefonu nie zna tego pasma.</string>
+    <string name="modem_note_legacy_back">2G i 3G znowu działają, ale GSM 1800 może pozostać wyłączone: RIL tego telefonu nie zna tego pasma.</string>
     <string name="modem_note_qc_lte_off">Ten modem zmienia blokadę komórki LTE tylko przy wyłączonym radiu, więc na chwilę włączył się tryb samolotowy.</string>
 
     <string name="modem_lock_unconfirmed">%1$s (modem tego nie potwierdził)</string>
@@ -86,7 +86,8 @@
     <string name="modem_last_network">Co najmniej jedna sieć musi zostać włączona.</string>
     <string name="modem_nr_list_too_long">Ten telefon przyjmuje w jednej blokadzie najwyżej %1$d pasm 5G, więc wybierz %1$d lub mniej.</string>
     <string name="modem_note_needs_channels">Ten telefon potrzebuje widocznych częstotliwości razem z wybranymi pasmami, więc aplikacja dodała je do blokady.</string>
-    <string name="modem_no_gsm_1800">Oprogramowanie radiowe tego telefonu nie zna GSM 1800, więc odrzuca blokadę 2G na samo 1800.</string>
+    <string name="modem_note_bands_left_out">RIL tego telefonu odrzucił blokadę zawierającą %1$s, więc aplikacja zablokowała pozostałe wybrane pasma.</string>
+    <string name="modem_no_gsm_1800">RIL tego telefonu nie zna GSM 1800, więc odrzuca blokadę 2G na samo 1800.</string>
     <string name="modem_note_fell_back">Przy blokadzie samych pasm telefon spadł do 2G lub 3G, więc blokadę ponowiono razem z widocznymi częstotliwościami. Od teraz aplikacja będzie tak robić na tym telefonie.</string>
     <string name="modem_note_band_lock_ignored">Android przyjął blokadę %1$s, ale telefon nadal siedzi na %2$s. Wygląda na to, że ten modem ignoruje blokady pasm wysłane w ten sposób.</string>
     <string name="modem_note_samsung_menu_hint">Zamiast tego może zadziałać menu pasm Samsunga w zakładce „Pasma”.</string>
@@ -111,7 +112,7 @@
     <string name="modem_note_mtk_one_pci">MediaTek blokuje tylko jedno PCI, więc użyto PCI %1$d.</string>
     <string name="modem_unknown_earfcn">EARFCN %1$d nie należy do żadnego znanego pasma LTE.</string>
     <string name="modem_unknown_nr_arfcn">ARFCN %1$d nie należy do żadnego znanego pasma NR.</string>
-    <string name="modem_note_band_only">Oprogramowanie radiowe tego telefonu nie przyjmuje blokad kanałów, więc zablokowano tylko pasmo (%1$s).</string>
+    <string name="modem_note_band_only">RIL tego telefonu nie przyjmuje blokad kanałów, więc zablokowano tylko pasmo (%1$s).</string>
     <string name="modem_note_cell_lock_ignored">Android przyjął blokadę komórki, ale telefon nadal siedzi na %1$s. Wygląda na to, że ten modem ignoruje blokady częstotliwości wysłane w ten sposób.</string>
     <string name="modem_note_frequency_only">Zablokowano tylko częstotliwość. radio HAL nie potrafi zablokować PCI.</string>
 

@@ -69,4 +69,6 @@
     <string name="qrtr_timeout">基带未及时响应 QMI 请求</string>
     <string name="qrtr_wait">等待 QMI 响应失败</string>
     <string name="qrtr_recv">读取 QMI 响应失败</string>
+    <string name="cell_hint_qualcomm">将 LTE 和 NR 锁定到 PCI（SA 的 PCell 或 NSA 的 SCG）。NR PCI 留空则只锁频点，多个 PCI 用逗号分隔。</string>
+    <string name="cell_plmn_hint_qualcomm">优先通过 QMI 设置，基带拒绝时改用 Android 手动选网。</string>
 </resources>
